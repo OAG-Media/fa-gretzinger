@@ -163,7 +163,8 @@ function App() {
     y += linePad + 1;
     FREIGABE_OPTIONS.forEach(opt => {
       const checked = freigabe === opt;
-      doc.text(`${checked ? '[x]' : '[ ]'} ${opt}`, leftX + 2, y);
+      drawCheckbox(doc, leftX + 2, y - 3.5, checked);
+      doc.text(opt, leftX + 8, y);
       y += linePad;
     });
     y += sectionPad;
@@ -175,7 +176,8 @@ function App() {
     y += linePad + 1;
     FEHLERANGABEN.forEach(f => {
       const checked = !!fehler[f];
-      doc.text(`${checked ? '[x]' : '[ ]'} ${f}`, leftX + 2, y);
+      drawCheckbox(doc, leftX + 2, y - 3.5, checked);
+      doc.text(f, leftX + 8, y);
       y += linePad - 1;
     });
     y += sectionPad;
@@ -197,12 +199,16 @@ function App() {
       if (opt.value === 'reklamation' && bottom === 'reklamation' && reklamationDate) {
         label += ` ${reklamationDate}`;
       }
-      doc.text(`${checked ? '[x]' : '[ ]'} ${label}`, leftX + 2, y);
+      drawCheckbox(doc, leftX + 2, y - 3.5, checked);
+      doc.text(label, leftX + 8, y);
       y += linePad;
     });
     if (bottom === 'kulanz') {
       y += 1;
-      doc.text(`Porto: ${kulanzPorto === 'ja' ? '[x] ja' : '[ ] ja'}   ${kulanzPorto === 'nein' ? '[x] nein' : '[ ] nein'}`, leftX + 8, y);
+      drawCheckbox(doc, leftX + 10, y - 3.5, kulanzPorto === 'ja');
+      doc.text('Porto ja', leftX + 16, y);
+      drawCheckbox(doc, leftX + 38, y - 3.5, kulanzPorto === 'nein');
+      doc.text('Porto nein', leftX + 44, y);
       y += linePad;
     }
 
@@ -218,8 +224,8 @@ function App() {
       if (a.price && a.price !== 'country') value = `${a.price.toFixed(2).replace('.', ',')} €`;
       else if (a.price === 'country') value = `${arbeitszeit.toFixed(2).replace('.', ',')} €`;
       else if (arbeitenManual[a.key]) value = `${arbeitenManual[a.key]} €`;
-      // Align price column
-      doc.text(`${checked ? '[x]' : '[ ]'} ${a.label}`, rightX + 2, yRight);
+      drawCheckbox(doc, rightX + 2, yRight - 3.5, checked);
+      doc.text(a.label, rightX + 8, yRight);
       if (checked && value) doc.text(value, rightX + 70, yRight, { align: 'right' });
       yRight += linePad;
     });
@@ -236,6 +242,17 @@ function App() {
     doc.line(85, 50, 85, Math.max(y, yRight) + 5);
 
     doc.save('reparaturauftrag.pdf');
+  };
+
+  const drawCheckbox = (doc, x, y, checked) => {
+    doc.setDrawColor(50);
+    doc.rect(x, y, 4, 4);
+    if (checked) {
+      doc.setLineWidth(0.6);
+      doc.line(x + 0.7, y + 0.7, x + 3.3, y + 3.3);
+      doc.line(x + 3.3, y + 0.7, x + 0.7, y + 3.3);
+      doc.setLineWidth(0.2);
+    }
   };
 
   // UI
