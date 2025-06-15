@@ -137,56 +137,63 @@ function App() {
     doc.setFont('helvetica', '');
     doc.setFontSize(10);
     doc.text('HG Gretzinger UG, Hörgeräteservice', 10, 12);
-    doc.text('Gibitzenhofstr. 86        90443 Nürnberg', 10, 17);
-    doc.text('Homepage: www.Fa-Gretzinger.de', 10, 22);
-    doc.text('E-Mail: Fa.Gretzinger@t-online.de', 10, 27);
-    doc.text('Tel. +49 (0)911 / 540 49 44, Fax.: 540 49 46', 10, 32);
+    doc.text('Gibitzenhofstr. 86', 10, 17);
+    doc.text('90443 Nürnberg', 10, 22);
+    doc.text('Homepage: www.Fa-Gretzinger.de', 10, 27);
+    doc.text('E-Mail: Fa.Gretzinger@t-online.de', 10, 32);
+    doc.text('Tel. +49 (0)911 / 540 49 44, Fax.: 540 49 46', 10, 37);
     doc.addImage('https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png', 'PNG', 155, 8, 35, 16);
     doc.setLineWidth(0.3);
-    doc.line(10, 35, 200, 35);
-    doc.setFontSize(16);
-    doc.text('Reparaturauftrag', 80, 45);
-    doc.setFontSize(12);
+    doc.line(10, 40, 200, 40);
 
-    // --- Form layout ---
+    // Title
+    doc.setFontSize(22);
+    doc.setFont(undefined, 'bold');
+    doc.text('Reparaturauftrag', 105, 52, { align: 'center' });
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'normal');
+    // More padding below title
+    let y = 68;
+
     // Column positions
     const leftX = 14;
-    const rightX = 90;
-    let y = 55;
-    const sectionPad = 6;
-    const linePad = 5;
+    const separatorX = 100; // move separator further right
+    const rightX = separatorX + 4; // right column starts just after separator
+    const priceColX = 190; // fixed X for right-aligned prices
+    const sectionPad = 8;
+    const linePad = 6;
+    const labelPad = 8;
 
-    // Box: Freigabe
+    // Left column: Freigabe, Fehlerangaben, Verfahren
+    let yLeft = y;
     doc.setFont(undefined, 'bold');
-    doc.text('Bei Freigabe bitte ankreuzen:', leftX, y);
+    doc.text('Bei Freigabe bitte ankreuzen:', leftX, yLeft);
     doc.setFont(undefined, 'normal');
-    y += linePad + 1;
+    yLeft += linePad + 1;
     FREIGABE_OPTIONS.forEach(opt => {
       const checked = freigabe === opt;
-      drawCheckbox(doc, leftX + 2, y - 3.5, checked);
-      doc.text(opt, leftX + 8, y);
-      y += linePad;
+      drawCheckbox(doc, leftX + 2, yLeft - 3.5, checked);
+      doc.text(opt, leftX + 8, yLeft);
+      yLeft += linePad;
     });
-    y += sectionPad;
-
-    // Box: Fehlerangaben
+    yLeft += sectionPad;
     doc.setFont(undefined, 'bold');
-    doc.text('Fehlerangaben:', leftX, y);
+    doc.text('Fehlerangaben:', leftX, yLeft);
     doc.setFont(undefined, 'normal');
-    y += linePad + 1;
-    FEHLERANGABEN.forEach(f => {
+    yLeft += linePad + 1;
+    FEHLERANGABEN.forEach((f, idx) => {
       const checked = !!fehler[f];
-      drawCheckbox(doc, leftX + 2, y - 3.5, checked);
-      doc.text(f, leftX + 8, y);
-      y += linePad - 1;
+      drawCheckbox(doc, leftX + 2, yLeft - 3.5, checked);
+      doc.text(f, leftX + 8, yLeft);
+      yLeft += linePad - 1;
+      if (idx === FEHLERANGABEN.length - 1) {
+        yLeft += sectionPad;
+      }
     });
-    y += sectionPad;
-
-    // Box: Verfahren
     doc.setFont(undefined, 'bold');
-    doc.text('Verfahren:', leftX, y);
+    doc.text('Verfahren:', leftX, yLeft);
     doc.setFont(undefined, 'normal');
-    y += linePad + 1;
+    yLeft += linePad + 1;
     const verfahrenOptions = [
       { label: 'Kostenpflichtige Reparatur', value: 'kostenpflichtig' },
       { label: 'Garantie', value: 'garantie' },
@@ -197,49 +204,91 @@ function App() {
       const checked = bottom === opt.value;
       let label = opt.label;
       if (opt.value === 'reklamation' && bottom === 'reklamation' && reklamationDate) {
-        label += ` ${reklamationDate}`;
+        // Format date as DD.MM.YYYY
+        const [yyyy, mm, dd] = reklamationDate.split('-');
+        label += ' ';
+        doc.setFont(undefined, checked ? 'bold' : 'normal');
+        drawCheckbox(doc, leftX + 2, yLeft - 3.5, checked);
+        doc.text(label, leftX + 8, yLeft);
+        if (reklamationDate) {
+          doc.text(`${dd}.${mm}.${yyyy}`, leftX + 8 + doc.getTextWidth(label) + 2, yLeft, { font: 'helvetica', fontStyle: 'bold' });
+        }
+        doc.setFont(undefined, 'normal');
+      } else {
+        drawCheckbox(doc, leftX + 2, yLeft - 3.5, checked);
+        doc.text(label, leftX + 8, yLeft);
       }
-      drawCheckbox(doc, leftX + 2, y - 3.5, checked);
-      doc.text(label, leftX + 8, y);
-      y += linePad;
+      yLeft += linePad;
     });
     if (bottom === 'kulanz') {
-      y += 1;
-      drawCheckbox(doc, leftX + 10, y - 3.5, kulanzPorto === 'ja');
-      doc.text('Porto ja', leftX + 16, y);
-      drawCheckbox(doc, leftX + 38, y - 3.5, kulanzPorto === 'nein');
-      doc.text('Porto nein', leftX + 44, y);
-      y += linePad;
+      yLeft += 1;
+      drawCheckbox(doc, leftX + 10, yLeft - 3.5, kulanzPorto === 'ja');
+      doc.text('Porto ja', leftX + 16, yLeft);
+      drawCheckbox(doc, leftX + 38, yLeft - 3.5, kulanzPorto === 'nein');
+      doc.text('Porto nein', leftX + 44, yLeft);
+      yLeft += linePad;
     }
 
-    // --- Right column: Ausgeführte Arbeiten ---
-    let yRight = 55;
+    // Right column: Ausgeführte Arbeiten (true 3-column grid)
+    let yRight = y;
     doc.setFont(undefined, 'bold');
     doc.text('Ausgeführte Arbeiten:', rightX, yRight);
     doc.setFont(undefined, 'normal');
     yRight += linePad + 1;
+
+    // Find max label width for price alignment (calculate before the loop)
+    let maxLabelWidth = 0;
+    ARBEITEN.forEach(a => {
+      const labelWidth = doc.getTextWidth(a.label);
+      if (labelWidth > maxLabelWidth) maxLabelWidth = labelWidth;
+    });
     ARBEITEN.forEach(a => {
       const checked = !!arbeiten[a.key];
       let value = '';
-      if (a.price && a.price !== 'country') value = `${a.price.toFixed(2).replace('.', ',')} €`;
-      else if (a.price === 'country') value = `${arbeitszeit.toFixed(2).replace('.', ',')} €`;
-      else if (arbeitenManual[a.key]) value = `${arbeitenManual[a.key]} €`;
+      if (checked) {
+        if (bottom === 'kostenpflichtig') {
+          if (a.price && a.price !== 'country') value = `${a.price.toFixed(2).replace('.', ',')} €`;
+          else if (a.price === 'country') value = `${arbeitszeit.toFixed(2).replace('.', ',')} €`;
+          else if (arbeitenManual[a.key]) value = `${arbeitenManual[a.key]} €`;
+        } else {
+          value = '0,00 €';
+        }
+      }
+      // Checkbox
       drawCheckbox(doc, rightX + 2, yRight - 3.5, checked);
-      doc.text(a.label, rightX + 8, yRight);
-      if (checked && value) doc.text(value, rightX + 70, yRight, { align: 'right' });
+      // Label: fill space between checkbox and price, truncate if needed
+      let labelMaxWidth = priceColX - (rightX + 2 + labelPad) - 8; // 8mm gap before price
+      let labelText = a.label;
+      let labelWidth = doc.getTextWidth(labelText);
+      if (labelWidth > labelMaxWidth) {
+        while (labelText.length > 2 && doc.getTextWidth(labelText + '…') > labelMaxWidth) {
+          labelText = labelText.slice(0, -1);
+        }
+        labelText += '…';
+      }
+      doc.text(labelText, rightX + 2 + labelPad, yRight);
+      // Price (only if checked)
+      if (value) doc.text(value, priceColX, yRight, { align: 'right' });
       yRight += linePad;
     });
     yRight += sectionPad;
-    // Nettopreis & Porto
-    doc.setFont(undefined, 'bold');
-    doc.text(`Nettopreis: ${net.toFixed(2).replace('.', ',')} €`, rightX + 2, yRight);
-    yRight += linePad;
-    doc.text(`+ Porto & Verpackung: ${porto.toFixed(2).replace('.', ',')} €`, rightX + 2, yRight);
 
-    // Draw vertical line between columns
+    // Draw vertical line between columns (only after left grid finishes)
     doc.setDrawColor(180);
     doc.setLineWidth(0.2);
-    doc.line(85, 50, 85, Math.max(y, yRight) + 5);
+    doc.line(separatorX, y, separatorX, Math.max(yLeft, yRight) + 5);
+
+    // Draw horizontal separator line below the grid
+    const sepY = Math.max(yLeft, yRight) + 10;
+    doc.line(10, sepY, 200, sepY);
+
+    // Nettopreis & Porto below the new separator, right-aligned
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(14);
+    doc.text(`Nettopreis: ${net.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 10, sepY + 10, { align: 'right' });
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(10);
+    doc.text(`+ Porto & Verpackung: ${porto.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 10, sepY + 16, { align: 'right' });
 
     doc.save('reparaturauftrag.pdf');
   };
