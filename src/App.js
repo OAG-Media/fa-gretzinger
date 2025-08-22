@@ -457,18 +457,21 @@ function App() {
             </div>
             <div style={{ ...boxStyle, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginTop: 20 }}>
               <div style={{ width: '100%', display: 'grid', gridTemplateColumns: 'max-content max-content', gridTemplateRows: 'max-content max-content', justifyContent: 'end', alignItems: 'center', gap: '0 32px' }}>
+                
+              <div style={{ fontSize: 16, fontWeight: 500, color: '#222', textAlign: 'right', gridColumn: 1, gridRow: 2 }}>
+                  + Porto & Verpackung:
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 500, color: '#222', textAlign: 'right', gridColumn: 2, gridRow: 2 }}>
+                  {porto.toFixed(2).replace('.', ',')} €
+                </div>
+                
                 <div style={{ fontSize: 20, fontWeight: 700, color: '#1d426a', textAlign: 'right', gridColumn: 1, gridRow: 1 }}>
                   Nettopreis:
                 </div>
                 <div style={{ fontSize: 20, fontWeight: 700, color: '#1d426a', textAlign: 'right', gridColumn: 2, gridRow: 1 }}>
                   {net.toFixed(2).replace('.', ',')} €
                 </div>
-                <div style={{ fontSize: 16, fontWeight: 500, color: '#222', textAlign: 'right', gridColumn: 1, gridRow: 2 }}>
-                  + Porto & Verpackung:
-                </div>
-                <div style={{ fontSize: 16, fontWeight: 500, color: '#222', textAlign: 'right', gridColumn: 2, gridRow: 2 }}>
-                  {porto.toFixed(2).replace('.', ',')} €
-                </div>
+
               </div>
             </div>
           </div>

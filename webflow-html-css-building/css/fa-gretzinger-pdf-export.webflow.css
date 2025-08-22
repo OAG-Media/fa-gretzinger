@@ -1,0 +1,255 @@
+:root {
+  --checkbox: 22px;
+  --vertical-rem: .75rem;
+}
+
+.w-layout-grid {
+  grid-row-gap: 16px;
+  grid-column-gap: 16px;
+  grid-template-rows: auto auto;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-columns: 1fr;
+  display: grid;
+}
+
+.page-wrapper {
+  justify-content: center;
+  align-items: flex-start;
+  width: 1240px;
+  height: 1754px;
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+}
+
+.padding-global {
+  margin-left: 5%;
+  margin-right: 5%;
+}
+
+.main-pdf-export-grid {
+  grid-column-gap: 2rem;
+  grid-row-gap: 2rem;
+  grid-template-rows: auto auto auto;
+  grid-template-columns: 1fr;
+  align-items: start;
+  width: 100%;
+  margin-top: 5%;
+  margin-bottom: 5%;
+}
+
+.header {
+  grid-column-gap: 1rem;
+  grid-row-gap: 1rem;
+  flex-flow: column;
+  display: flex;
+}
+
+.checkbox-content {
+  grid-column-gap: 3rem;
+  grid-row-gap: 3rem;
+  flex-flow: column;
+  padding-top: 2rem;
+  padding-bottom: 2rem;
+  display: flex;
+}
+
+.pricing.hide {
+  display: block;
+}
+
+.header-grid {
+  grid-template-rows: auto;
+  grid-template-columns: 1fr 1fr;
+}
+
+.pdf-export-txt {
+  font-family: Droid Serif, serif;
+  font-size: var(--checkbox);
+  padding: 1px;
+}
+
+.pdf-export-txt.headline {
+  padding-bottom: 5px;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.pdf-export-txt.heading {
+  font-size: 14px;
+}
+
+.pdf-export-txt.pricing {
+  text-align: center;
+}
+
+.pdf-export-txt.pricing.active {
+  text-align: right;
+}
+
+.pdf-export-txt.pricing.inactive {
+  color: #0000;
+}
+
+.pdf-export-txt.end-price {
+  font-weight: 700;
+}
+
+.pdf-export-txt.porto {
+  font-size: 16px;
+}
+
+.social-wrapper {
+  grid-column-gap: .25rem;
+  grid-row-gap: .25rem;
+  color: #000;
+  justify-content: flex-start;
+  align-items: center;
+  text-decoration-color: #000;
+  display: flex;
+}
+
+.icon-wrapper {
+  flex-flow: column;
+  justify-content: center;
+  align-items: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  display: flex;
+}
+
+.icon-embed-xxsmall {
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 1rem;
+  height: 1rem;
+  display: flex;
+}
+
+.social-icon {
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  display: flex;
+}
+
+.code-embed {
+  width: 20rem;
+}
+
+.reperatur-auftrag-header {
+  text-align: center;
+  font-family: Droid Serif, serif;
+  font-size: 3rem;
+}
+
+.seperator {
+  opacity: .5;
+  background-color: #525252;
+  border-radius: 50px;
+  width: 100%;
+  height: 2px;
+}
+
+.seperator.vertical {
+  width: 2px;
+  height: 100%;
+}
+
+.checkbox-main-grid {
+  grid-column-gap: 3rem;
+  grid-row-gap: 3rem;
+  grid-template-rows: auto;
+  grid-template-columns: 1fr max-content 1fr;
+}
+
+.left-grid-content {
+  grid-column-gap: 2rem;
+  grid-row-gap: 2rem;
+  flex-flow: column;
+  display: flex;
+}
+
+.checkbox-seperator {
+  flex-flow: column;
+  justify-content: center;
+  align-items: center;
+  display: flex;
+}
+
+.checkbox-txt-wrapper {
+  grid-column-gap: var(--vertical-rem);
+  grid-row-gap: var(--vertical-rem);
+  flex-flow: column;
+  display: flex;
+}
+
+.checkbox-txt-group {
+  grid-column-gap: .5rem;
+  grid-row-gap: .5rem;
+  justify-content: flex-start;
+  align-items: center;
+  display: flex;
+}
+
+.checkbox {
+  width: var(--checkbox);
+  height: var(--checkbox);
+  border: 1px solid #000;
+  justify-content: center;
+  align-items: center;
+  display: flex;
+}
+
+.checkbox-txt-pricing {
+  grid-column-gap: .5rem;
+  grid-row-gap: .5rem;
+  grid-template-rows: auto;
+  grid-template-columns: max-content max-content 1fr;
+  grid-auto-columns: 1fr;
+  justify-content: flex-start;
+  align-items: center;
+  display: grid;
+}
+
+.text-block {
+  text-align: center;
+}
+
+.ausgefuerte-arbeiten-grid {
+  grid-template-rows: auto;
+  grid-template-columns: max-content max-content 1fr;
+}
+
+.checkbox-wrapper, .txt-vertical-wrapper, .pricing-vertical-wrapper {
+  grid-column-gap: var(--vertical-rem);
+  grid-row-gap: var(--vertical-rem);
+  flex-flow: column;
+  display: flex;
+}
+
+.active {
+  text-align: center;
+}
+
+.end-price-wrapper {
+  grid-column-gap: .35rem;
+  grid-row-gap: .35rem;
+  flex-flow: column;
+  justify-content: center;
+  align-items: flex-end;
+  display: flex;
+}
+
+#w-node-bc97b3a7-2b07-6a50-5876-4d00b23b5480-f883fcd2 {
+  grid-area: span 1 / span 1 / span 1 / span 1;
+}
+
+#w-node-_8896f2e2-5a64-3afb-4b45-4796c4c3ea66-f883fcd2, #w-node-bac6243d-6182-c991-2fe3-5b8990ca32f4-f883fcd2 {
+  justify-self: end;
+}
+
+

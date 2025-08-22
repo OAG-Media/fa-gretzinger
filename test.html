@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Crypto Influencer Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Neutral Harmony -->
+    <!-- Application Structure Plan: The application is designed as a single-page interactive dashboard to help users find and evaluate crypto influencers for partnerships. The structure prioritizes a task-oriented user flow over mirroring the report's linear layout. It begins with a high-level summary (Key Metrics) and visual overview (Charts) for quick insights. The core of the app is the "Influencer Explorer," an interactive section with filtering and search capabilities, allowing users to actively find partners that match their specific criteria (platform, audience size). Finally, actionable advice from the report is organized into a collapsible "Strategic Recommendations" accordion, keeping it accessible but uncluttered. This structure enables users to quickly understand the landscape, drill down to specific data, and then access strategic guidance in a logical sequence. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: Aggregate influencer counts and platform distribution -> Goal: Inform/Overview -> Viz/Method: Dynamic stat cards and a Doughnut Chart (Chart.js). Interaction: Hover tooltips on chart. Justification: Provides a quick, scannable summary of the dataset's composition.
+        - Report Info: Influencer distribution across follower tiers (Nano, Micro, Medium) -> Goal: Compare -> Viz/Method: Horizontal Bar Chart (Chart.js). Interaction: Hover tooltips. Justification: Effectively compares the size of each influencer category, highlighting the focus on "little to medium" accounts.
+        - Report Info: Detailed list of all influencers -> Goal: Organize/Explore -> Viz/Method: Interactive list of cards with HTML/CSS/Tailwind. Interaction: Multi-faceted filtering (platform, tier) and text search powered by JS. Justification: This is the most critical user task. A dynamic, filterable list is far more usable than a static table, allowing users to efficiently narrow down the full list to a targeted selection of potential partners.
+        - Report Info: Strategic recommendations for outreach -> Goal: Inform/Guide -> Viz/Method: Collapsible Accordion (HTML/Tailwind/JS). Interaction: Click to expand/collapse sections. Justification: Organizes detailed textual information in a compact, user-controlled manner, preventing information overload on the main dashboard.
+        - Library/Method: Chart.js for all canvas-based visualizations. Vanilla JS for all interaction logic (filtering, search, accordion). -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #FDFBF8; /* Warm neutral background */
+            color: #4A4A4A;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 350px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+                max-height: 400px;
+            }
+        }
+        .nav-button {
+            transition: all 0.3s ease;
+        }
+        .nav-button.active {
+            background-color: #A855F7; /* Accent color */
+            color: white;
+            box-shadow: 0 4px 14px 0 rgb(0 0 0 / 10%);
+        }
+        .card-enter {
+            animation: card-enter 0.5s ease-out forwards;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        @keyframes card-enter {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease-in-out;
+        }
+        .accordion-button.open .accordion-icon {
+            transform: rotate(180deg);
+        }
+        .accordion-icon {
+            transition: transform 0.3s ease;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="container mx-auto p-4 sm:p-6 md:p-8">
+        
+        <header class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-800 mb-2">Crypto Influencer Partnership Explorer</h1>
+            <p class="text-lg text-gray-500 max-w-3xl mx-auto">An interactive tool to identify and analyze small to medium-sized crypto influencers on Instagram and TikTok for strategic partnerships.</p>
+        </header>
+
+        <main>
+            <!-- Key Metrics Section -->
+            <section id="metrics" class="mb-12">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-bold text-gray-800">High-Level Overview</h2>
+                    <p class="text-md text-gray-500 mt-1">A snapshot of the influencer landscape based on the report.</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+                    <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                        <h3 class="text-5xl font-bold text-purple-600" id="total-influencers">28</h3>
+                        <p class="text-gray-500 mt-2">Total Influencers Identified</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                        <h3 class="text-5xl font-bold text-purple-600" id="instagram-count">15</h3>
+                        <p class="text-gray-500 mt-2">Instagram Focused</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                        <h3 class="text-5xl font-bold text-purple-600" id="tiktok-count">13</h3>
+                        <p class="text-gray-500 mt-2">TikTok Focused</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Visualizations Section -->
+            <section id="visualizations" class="mb-16">
+                 <div class="text-center mb-8">
+                    <h2 class="text-3xl font-bold text-gray-800">Data Visualization</h2>
+                    <p class="text-md text-gray-500 mt-1">Visual breakdown of influencer categories and platforms.</p>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                    <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                        <h3 class="font-bold text-lg text-center mb-4">Influencers by Follower Tier</h3>
+                        <div class="chart-container">
+                            <canvas id="tierChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                        <h3 class="font-bold text-lg text-center mb-4">Platform Distribution</h3>
+                         <div class="chart-container">
+                            <canvas id="platformChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Influencer Explorer Section -->
+            <section id="explorer" class="bg-white p-6 sm:p-8 rounded-xl shadow-lg border border-gray-100 mb-16">
+                <div class="text-center mb-8">
+                     <h2 class="text-3xl font-bold text-gray-800">Influencer Explorer</h2>
+                     <p class="text-md text-gray-500 mt-1">Filter and search to find the perfect partners for your platform.</p>
+                </div>
+                
+                <!-- Filters -->
+                <div class="flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
+                    <div class="flex flex-wrap justify-center gap-2" id="platform-filters">
+                        <button data-filter="all" class="nav-button active py-2 px-4 bg-gray-200 text-gray-700 rounded-full font-semibold">All Platforms</button>
+                        <button data-filter="instagram" class="nav-button py-2 px-4 bg-gray-200 text-gray-700 rounded-full font-semibold">Instagram</button>
+                        <button data-filter="tiktok" class="nav-button py-2 px-4 bg-gray-200 text-gray-700 rounded-full font-semibold">TikTok</button>
+                    </div>
+                    <div class="flex flex-wrap justify-center gap-2" id="tier-filters">
+                         <button data-filter="all" class="nav-button active py-2 px-4 bg-gray-200 text-gray-700 rounded-full font-semibold">All Tiers</button>
+                         <button data-filter="nano" class="nav-button py-2 px-4 bg-gray-200 text-gray-700 rounded-full font-semibold">Nano (1k-10k)</button>
+                         <button data-filter="micro" class="nav-button py-2 px-4 bg-gray-200 text-gray-700 rounded-full font-semibold">Micro (10k-100k)</button>
+                         <button data-filter="medium" class="nav-button py-2 px-4 bg-gray-200 text-gray-700 rounded-full font-semibold">Medium (100k-1M)</button>
+                    </div>
+                     <div class="relative w-full md:w-auto">
+                        <input type="text" id="search-input" placeholder="Search by name..." class="w-full md:w-64 pl-4 pr-10 py-2 border border-gray-300 rounded-full focus:ring-purple-500 focus:border-purple-500">
+                        <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400">
+                             <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" /></svg>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Influencer Grid -->
+                <div id="influencer-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- JS will populate this -->
+                </div>
+                 <div id="no-results" class="text-center py-12 text-gray-500 hidden">
+                    <h3 class="text-2xl font-semibold">No Influencers Found</h3>
+                    <p>Try adjusting your filters or search term.</p>
+                </div>
+            </section>
+            
+            <!-- Strategic Recommendations -->
+            <section id="recommendations">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-bold text-gray-800">Strategic Recommendations</h2>
+                    <p class="text-md text-gray-500 mt-1">Actionable advice for effective influencer outreach and partnership, based on the report's findings.</p>
+                </div>
+                <div id="accordion-container" class="space-y-4 max-w-4xl mx-auto">
+                    <!-- JS will populate this -->
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+<script>
+const influencerData = [
+    { name: 'laura_woods_4646', instagramFollowers: 18100, tiktokFollowers: null, topics: 'Professional Crypto Trader, Crypto Analyst, Digital Marketer, Public Speaker & Life Coach', platform: 'instagram', website: null },
+    { name: 'sayyestofire', instagramFollowers: 8600, tiktokFollowers: null, topics: '#1 Crypto Educator for Millennials, Financial Independence, Crypto Course', platform: 'instagram', website: null },
+    { name: 'steven.heisenberg', instagramFollowers: 6200, tiktokFollowers: null, topics: 'Crypto Enthusiast and Artist', platform: 'instagram', website: null },
+    { name: 'thementor.uk', instagramFollowers: 15700, tiktokFollowers: null, topics: 'Crypto Education Creating Millionaires, Community Building', platform: 'instagram', website: null },
+    { name: 'dylan_brodigan', instagramFollowers: 9200, tiktokFollowers: null, topics: 'NFT NYC Speaker, Crypto, Sales, Unboxing', platform: 'instagram', website: null },
+    { name: 'bitcoin_expert1', instagramFollowers: 20800, tiktokFollowers: null, topics: 'Crypto trader since 2015, Crypto advisor', platform: 'instagram', website: null },
+    { name: 'thejoeyhartman', instagramFollowers: 175000, tiktokFollowers: null, topics: 'Crypto & Forex Insights, Charts, 1-on-1 mentoring', platform: 'instagram', website: null },
+    { name: 'cryptocasey', instagramFollowers: 50500, tiktokFollowers: 'Not specified', topics: 'Crypto & Blockchain Education, Market Analysis, Predictions', platform: 'both', website: 'http://linktr.ee/crypto.casey' },
+    { name: 'tallguytycoon', instagramFollowers: 367000, tiktokFollowers: null, topics: 'Crypto Tips & News, Altcoin Investing, Blockchain Engineering', platform: 'instagram', website: null },
+    { name: 'cryptowendyo', instagramFollowers: 83800, tiktokFollowers: 296900, topics: 'Crypto Interviews, Trading & Trends, Market Analysis', platform: 'both', website: 'https://www.cryptowendyo.com/partners' },
+    { name: 'felix_hartmann', instagramFollowers: 54700, tiktokFollowers: 'Not specified', topics: 'Crypto Trader, Crypto Academy Founder, Blockchain Advisor', platform: 'both', website: null },
+    { name: 'girl_gone_crypto', instagramFollowers: 202700, tiktokFollowers: 'Not specified', topics: 'Making Crypto Relatable, "The Crypto Minute" vlog', platform: 'both', website: 'https://www.lealovescrypto.com/' },
+    { name: 'bvbtc', instagramFollowers: 17000, tiktokFollowers: null, topics: 'Satirical Crypto Content, "Blockchain and Morty"', platform: 'instagram', website: null },
+    { name: 'thecryptolark_davis', instagramFollowers: 333000, tiktokFollowers: null, topics: 'Online Crypto Courses, Beginner Confidence in Crypto', platform: 'instagram', website: null },
+    { name: 'cryptokingkeyur', instagramFollowers: 849600, tiktokFollowers: null, topics: 'Crypto Community, Analyst & Investor', platform: 'instagram', website: 'https://t.me/CryptoKingKeyur' },
+    { name: 'enspyreinvesting', instagramFollowers: null, tiktokFollowers: 265000, topics: 'Tech, Investing, Crypto', platform: 'tiktok', website: null },
+    { name: 'investment_updates', instagramFollowers: null, tiktokFollowers: 273000, topics: 'Crypto and Investment content for beginners', platform: 'tiktok', website: null },
+    { name: 'sebastiansaldarriagas', instagramFollowers: null, tiktokFollowers: 303000, topics: 'Crypto Freedom Mentor, Best Selling Author', platform: 'tiktok', website: null },
+    { name: 'morningstartrades', instagramFollowers: null, tiktokFollowers: 6800, topics: 'Stock/Crypto Trader', platform: 'tiktok', website: null },
+    { name: 'angryadviser', instagramFollowers: null, tiktokFollowers: 101000, topics: 'Crypto Influencer, insights & tips', platform: 'tiktok', website: null },
+    { name: 'zeedood', instagramFollowers: null, tiktokFollowers: 99700, topics: 'Crypto enthusiast & "Conspiracy Theorist"', platform: 'tiktok', website: null },
+    { name: 'crypto.trainer', instagramFollowers: null, tiktokFollowers: 30900, topics: 'Teaching Crypto/Blockchain', platform: 'tiktok', website: null },
+    { name: 'masteroptionstrader', instagramFollowers: null, tiktokFollowers: 13500, topics: 'Stocks, Options, Crypto', platform: 'tiktok', website: null },
+    { name: 'ricardoramirezmx', instagramFollowers: 81000, tiktokFollowers: 1300000, topics: 'Technical analysis, market predictions, long-term strategies', platform: 'both', website: 'Links provided' },
+    { name: 'club.futurosmillonarios', instagramFollowers: 114000, tiktokFollowers: 65000, topics: 'Financial education, passive income, investment tips', platform: 'both', website: 'Links provided' },
+    { name: 'criptozky', instagramFollowers: 'Not specified', tiktokFollowers: 49200, topics: 'Trading strategies, blockchain insights, emerging crypto trends', platform: 'tiktok', website: 'Links provided' }
+];
+
+const recommendationsData = [
+    {
+        title: "Tailoring the Approach for Affiliate System Integration",
+        content: "Avoid generic templates. Personalize your outreach by highlighting how your platform aligns with the influencer's content. Clearly communicate the benefits of your affiliate system, including competitive commissions and transparent tracking. Propose specific content collaboration ideas like tutorials or reviews to increase partnership success. Use Linktree or direct websites as the primary contact point for efficiency."
+    },
+    {
+        title: "Maximizing Engagement and Reach",
+        content: "Prioritize influencers with a strong presence on both Instagram and TikTok for broader reach. Focus on creators who produce educational content, as their audience is more receptive to learning about new platforms. Seek out influencers who actively engage with their community through Q&As or groups, as this indicates a loyal and responsive following, which is beneficial for driving affiliate sign-ups."
+    },
+    {
+        title: "Monitoring and Optimization",
+        content: "Implement robust tracking for each influencer's affiliate link to monitor clicks, sign-ups, and conversions. Use this performance data to continuously refine your outreach strategy, adjust content briefs, and optimize affiliate terms for future partnerships. An iterative, data-driven approach will make your influencer marketing efforts increasingly effective over time."
+    }
+];
+
+document.addEventListener('DOMContentLoaded', () => {
+
+    const influencerGrid = document.getElementById('influencer-grid');
+    const platformFilters = document.getElementById('platform-filters');
+    const tierFilters = document.getElementById('tier-filters');
+    const searchInput = document.getElementById('search-input');
+    const noResults = document.getElementById('no-results');
+    const accordionContainer = document.getElementById('accordion-container');
+
+    let activePlatformFilter = 'all';
+    let activeTierFilter = 'all';
+    let searchTerm = '';
+
+    const formatFollowers = (num) => {
+        if (num === null || num === 'Not specified') return 'N/A';
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
+        return num;
+    };
+
+    const getTier = (followers) => {
+        if (followers >= 1000 && followers < 10000) return 'nano';
+        if (followers >= 10000 && followers < 100000) return 'micro';
+        if (followers >= 100000) return 'medium';
+        return 'unknown';
+    };
+
+    const renderInfluencers = (influencers) => {
+        influencerGrid.innerHTML = '';
+        if (influencers.length === 0) {
+            noResults.classList.remove('hidden');
+        } else {
+            noResults.classList.add('hidden');
+        }
+        
+        influencers.forEach((inf, index) => {
+            const card = document.createElement('div');
+            card.className = 'bg-gray-50 border border-gray-200 rounded-lg p-5 flex flex-col justify-between shadow-sm hover:shadow-xl transition-shadow duration-300 card-enter';
+            card.style.animationDelay = `${index * 50}ms`;
+
+            let platformIcons = '';
+            if (inf.platform === 'instagram' || inf.platform === 'both') {
+                 platformIcons += `<span class="inline-block bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full h-6 w-6 flex items-center justify-center text-xs font-bold">IG</span>`;
+            }
+             if (inf.platform === 'tiktok' || inf.platform === 'both') {
+                 platformIcons += `<span class="inline-block bg-black text-white rounded-full h-6 w-6 flex items-center justify-center text-xs font-bold ml-2">TT</span>`;
+            }
+            
+            const websiteLink = inf.website && inf.website.startsWith('http') 
+                ? `<a href="${inf.website}" target="_blank" rel="noopener noreferrer" class="text-purple-600 hover:text-purple-800 font-semibold text-sm mt-2 inline-block">Visit Website &rarr;</a>`
+                : inf.website && inf.website.startsWith('https://t.me') 
+                ? `<a href="${inf.website}" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:text-blue-700 font-semibold text-sm mt-2 inline-block">Telegram &rarr;</a>`
+                : `<span class="text-gray-400 text-sm mt-2 inline-block">No direct link</span>`;
+            
+            card.innerHTML = `
+                <div>
+                    <div class="flex justify-between items-start mb-3">
+                        <h3 class="font-bold text-lg text-gray-800 break-all">${inf.name}</h3>
+                        <div class="flex-shrink-0 flex">${platformIcons}</div>
+                    </div>
+                    <div class="text-sm space-y-2 mb-4">
+                        <p class="text-gray-600"><strong class="font-semibold text-gray-800">Followers:</strong> 
+                            ${inf.instagramFollowers ? 'IG: ' + formatFollowers(inf.instagramFollowers) : ''} 
+                            ${inf.tiktokFollowers ? (inf.instagramFollowers ? ' / ' : '') + 'TikTok: ' + formatFollowers(inf.tiktokFollowers) : ''}
+                        </p>
+                        <p class="text-gray-600"><strong class="font-semibold text-gray-800">Topics:</strong> ${inf.topics}</p>
+                    </div>
+                </div>
+                <div>${websiteLink}</div>
+            `;
+            influencerGrid.appendChild(card);
+        });
+    };
+    
+    const filterAndRender = () => {
+        let filtered = influencerData;
+
+        if (activePlatformFilter !== 'all') {
+            filtered = filtered.filter(inf => inf.platform === activePlatformFilter || inf.platform === 'both');
+        }
+
+        if (activeTierFilter !== 'all') {
+            filtered = filtered.filter(inf => {
+                const igFollowers = inf.instagramFollowers || 0;
+                const ttFollowers = inf.tiktokFollowers && typeof inf.tiktokFollowers === 'number' ? inf.tiktokFollowers : 0;
+                const maxFollowers = Math.max(igFollowers, ttFollowers);
+                return getTier(maxFollowers) === activeTierFilter;
+            });
+        }
+        
+        if (searchTerm) {
+            filtered = filtered.filter(inf => inf.name.toLowerCase().includes(searchTerm));
+        }
+        
+        renderInfluencers(filtered);
+    };
+
+    platformFilters.addEventListener('click', (e) => {
+        if (e.target.tagName === 'BUTTON') {
+            activePlatformFilter = e.target.dataset.filter;
+            platformFilters.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+            e.target.classList.add('active');
+            filterAndRender();
+        }
+    });
+
+    tierFilters.addEventListener('click', (e) => {
+        if (e.target.tagName === 'BUTTON') {
+            activeTierFilter = e.target.dataset.filter;
+            tierFilters.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+            e.target.classList.add('active');
+            filterAndRender();
+        }
+    });
+    
+    searchInput.addEventListener('input', (e) => {
+        searchTerm = e.target.value.toLowerCase();
+        filterAndRender();
+    });
+
+    const setupCharts = () => {
+        const tierCounts = { nano: 0, micro: 0, medium: 0 };
+        const platformCounts = { instagram: 0, tiktok: 0, both: 0 };
+        
+        influencerData.forEach(inf => {
+            const igFollowers = inf.instagramFollowers || 0;
+            const ttFollowers = inf.tiktokFollowers && typeof inf.tiktokFollowers === 'number' ? inf.tiktokFollowers : 0;
+            const maxFollowers = Math.max(igFollowers, ttFollowers);
+            const tier = getTier(maxFollowers);
+            if(tierCounts[tier] !== undefined) tierCounts[tier]++;
+            
+            if(platformCounts[inf.platform] !== undefined) platformCounts[inf.platform]++;
+        });
+
+        // Tier Chart
+        const tierCtx = document.getElementById('tierChart').getContext('2d');
+        new Chart(tierCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Nano (1k-10k)', 'Micro (10k-100k)', 'Medium (100k+)'],
+                datasets: [{
+                    label: 'Number of Influencers',
+                    data: [tierCounts.nano, tierCounts.micro, tierCounts.medium],
+                    backgroundColor: ['#C4B5FD', '#A78BFA', '#8B5CF6'],
+                    borderColor: '#FFFFFF',
+                    borderWidth: 2,
+                    borderRadius: 5,
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#4A4A4A',
+                        titleFont: { size: 14, weight: 'bold' },
+                        bodyFont: { size: 12 },
+                        displayColors: false,
+                    }
+                },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { grid: { display: false } }
+                }
+            }
+        });
+
+        // Platform Chart
+        const platformCtx = document.getElementById('platformChart').getContext('2d');
+        const totalIg = platformCounts.instagram + platformCounts.both;
+        const totalTt = platformCounts.tiktok + platformCounts.both;
+        
+        new Chart(platformCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Instagram Focused', 'TikTok Focused', 'Both Platforms'],
+                datasets: [{
+                    data: [platformCounts.instagram, platformCounts.tiktok, platformCounts.both],
+                    backgroundColor: ['#D8B4FE', '#4A4A4A', '#A855F7'],
+                    borderColor: '#FFFFFF',
+                    borderWidth: 4,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            font: {
+                                size: 14
+                            }
+                        }
+                    },
+                    tooltip: {
+                         backgroundColor: '#4A4A4A',
+                         titleFont: { size: 14, weight: 'bold' },
+                         bodyFont: { size: 12 },
+                    }
+                }
+            }
+        });
+        document.getElementById('instagram-count').textContent = totalIg;
+        document.getElementById('tiktok-count').textContent = totalTt;
+        document.getElementById('total-influencers').textContent = influencerData.length;
+    };
+    
+    const setupAccordion = () => {
+        recommendationsData.forEach((item, index) => {
+            const accordionItem = document.createElement('div');
+            accordionItem.className = 'bg-white rounded-lg shadow-md border border-gray-100';
+            accordionItem.innerHTML = `
+                <button class="accordion-button w-full flex justify-between items-center text-left p-5 font-semibold text-lg text-gray-800">
+                    <span>${item.title}</span>
+                    <span class="accordion-icon text-purple-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </span>
+                </button>
+                <div class="accordion-content">
+                    <p class="p-5 pt-0 text-gray-600">${item.content}</p>
+                </div>
+            `;
+            accordionContainer.appendChild(accordionItem);
+        });
+
+        accordionContainer.addEventListener('click', (e) => {
+            const button = e.target.closest('.accordion-button');
+            if(button) {
+                const content = button.nextElementSibling;
+                const isOpen = button.classList.contains('open');
+
+                document.querySelectorAll('.accordion-button').forEach(btn => {
+                    btn.classList.remove('open');
+                    btn.nextElementSibling.style.maxHeight = '0px';
+                });
+
+                if (!isOpen) {
+                    button.classList.add('open');
+                    content.style.maxHeight = content.scrollHeight + 'px';
+                }
+            }
+        });
+    }
+
+    filterAndRender();
+    setupCharts();
+    setupAccordion();
+});
+</script>
+
+</body>
+</html>

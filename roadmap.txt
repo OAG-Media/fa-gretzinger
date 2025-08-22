@@ -1,0 +1,55 @@
+Project Roadmap: Gretzinger Invoicing & Customer Management Platform
+===============================================================
+
+Vision:
+-------
+A browser-based, whitelabel-ready invoicing and customer management software for hearing aid service providers, starting with Gretzinger. The platform will allow clients to manage repair orders, invoices, and customer data online, with secure authentication and analytics, and will be extendable to other clients in the future.
+
+Current State:
+--------------
+- Online "Reparaturauftrag" (repair order) form with PDF export.
+- Deployed and accessible via Vercel.
+
+Future State (Goals):
+---------------------
+1. **Full-featured invoicing and customer management system**
+2. **User authentication**
+   - Login with username/password
+   - Two-factor authentication (2FA)
+3. **Dashboard**
+   - Main navigation with modules:
+     - Kundendatenbank (Customer Database)
+     - Reparaturauftrag (Repair Orders)
+     - Rechnungen (Invoices)
+4. **Data relationships**
+   - Repair orders and invoices linked to customers
+   - Sortable and filterable by date, customer, etc.
+   - End-of-month combined invoicing/reporting
+5. **Supabase integration**
+   - All data (users, customers, orders, invoices) managed in Supabase (Postgres, Auth, Storage)
+6. **Analytics**
+   - Revenue calculation and reporting
+   - Dashboard widgets for key metrics
+7. **Whitelabeling**
+   - Branding and settings per client
+   - Multi-tenant support for future customers
+
+Development Roadmap (Next Steps):
+---------------------------------
+1. Set up Supabase project (if not already done)
+2. Add authentication (Supabase Auth: email/password + 2FA)
+3. Create dashboard layout with navigation for main modules
+4. Design database schema for customers, repair orders, and invoices
+5. Connect current "Reparaturauftrag" form to Supabase (save/load orders)
+6. Build customer database and invoice modules
+7. Add analytics and reporting
+8. Prepare for whitelabeling (branding, multi-tenant, etc.)
+
+Notes:
+------
+- The system should be easy to use, customer-specific, and extensible for other clients.
+- All features should be browser-based and accessible online.
+- Security and data privacy are important (auth, 2FA, access control).
+
+---
+This file documents the vision and roadmap for the project. Refer to it for future planning and onboarding. 
