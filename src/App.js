@@ -118,22 +118,101 @@ function App() {
   };
 
   const filteredCustomers = customers.filter(customer => {
-    const searchTerm = customerSearch.toLowerCase();
-    return (
-      customer.company.toLowerCase().includes(searchTerm) ||
-      customer.branch.toLowerCase().includes(searchTerm) ||
-      customer.location.toLowerCase().includes(searchTerm) ||
-      customer.street.toLowerCase().includes(searchTerm)
-    );
+    if (!customerSearch.trim()) return false;
+    
+    const searchTerm = customerSearch.toLowerCase().trim();
+    const searchWords = searchTerm.split(' ').filter(word => word.length > 0);
+    
+    return searchWords.every(word => {
+      return (
+        customer.company?.toLowerCase().includes(word) ||
+        customer.branch?.toLowerCase().includes(word) ||
+        customer.location?.toLowerCase().includes(word) ||
+        customer.street?.toLowerCase().includes(word) ||
+        customer.country?.toLowerCase().includes(word) ||
+        customer.contact_person?.toLowerCase().includes(word)
+      );
+    });
+  }).sort((a, b) => {
+    // Sort alphabetically by company name
+    const companyA = a.company?.toLowerCase() || '';
+    const companyB = b.company?.toLowerCase() || '';
+    return companyA.localeCompare(companyB);
   });
 
   // Load customers from Supabase
   useEffect(() => {
     const loadCustomers = async () => {
       try {
-        // For now, we'll use the hardcoded data since we haven't set up Supabase client yet
-        // This will be replaced with actual Supabase query
-        const mockCustomers = [
+        // Load all customers from the database
+        const response = await fetch('/api/customers');
+        if (response.ok) {
+          const data = await response.json();
+          setCustomers(data);
+        } else {
+          // Fallback to hardcoded data for now
+          const fallbackCustomers = [
+            {
+              id: '1',
+              branch: 'Altes Land Hörgeräte',
+              company: 'Hörgeräte Altes Land',
+              contact_person: 'Nina Bastein',
+              street: 'Hinterstr. 14a',
+              location: '21723 Hollern-Twielenfleth',
+              country: 'Deutschland'
+            },
+            {
+              id: '2',
+              branch: 'Hörgeräte Langer Ingolstadt (Am Westpark)',
+              company: 'Hörgeräte LANGER GmbH & Co. KG',
+              contact_person: '',
+              street: 'Am Westpark 1',
+              location: '85057 Ingolstadt',
+              country: 'Deutschland'
+            },
+            {
+              id: '3',
+              branch: 'Ihr Ohr',
+              company: 'Ihr Ohr',
+              contact_person: 'Simone Weyand-Fink e.U.',
+              street: 'Postgasse 13',
+              location: '1010 Wien',
+              country: 'Österreich'
+            },
+            {
+              id: '4',
+              branch: 'KUNO',
+              company: 'KUNO',
+              contact_person: 'Augenoptik und Hörakustik GmbH',
+              street: 'Karlstr. 20-22',
+              location: '74564 Crailsheim',
+              country: 'Deutschland'
+            },
+            {
+              id: '5',
+              branch: 'Hörgeräte Langer Adelsheim',
+              company: 'Hörgeräte LANGER GmbH & Co. KG',
+              contact_person: '',
+              street: 'Marktstraße 6',
+              location: '74740 Adelsheim',
+              country: 'Deutschland'
+            },
+            {
+              id: '6',
+              branch: 'Hörgeräte Langer Asperg',
+              company: 'Hörgeräte LANGER GmbH & Co. KG',
+              contact_person: '',
+              street: 'Markgröninger Straße 14',
+              location: '71679 Asperg',
+              country: 'Deutschland'
+            }
+          ];
+          setCustomers(fallbackCustomers);
+        }
+      } catch (error) {
+        console.error('Error loading customers:', error);
+        // Use fallback data on error
+        const fallbackCustomers = [
           {
             id: '1',
             branch: 'Altes Land Hörgeräte',
@@ -160,11 +239,36 @@ function App() {
             street: 'Postgasse 13',
             location: '1010 Wien',
             country: 'Österreich'
+          },
+          {
+            id: '4',
+            branch: 'KUNO',
+            company: 'KUNO',
+            contact_person: 'Augenoptik und Hörakustik GmbH',
+            street: 'Karlstr. 20-22',
+            location: '74564 Crailsheim',
+            country: 'Deutschland'
+          },
+          {
+            id: '5',
+            branch: 'Hörgeräte Langer Adelsheim',
+            company: 'Hörgeräte LANGER GmbH & Co. KG',
+            contact_person: '',
+            street: 'Marktstraße 6',
+            location: '74740 Adelsheim',
+            country: 'Deutschland'
+          },
+          {
+            id: '6',
+            branch: 'Hörgeräte Langer Asperg',
+            company: 'Hörgeräte LANGER GmbH & Co. KG',
+            contact_person: '',
+            street: 'Markgröninger Straße 14',
+            location: '71679 Asperg',
+            country: 'Deutschland'
           }
         ];
-        setCustomers(mockCustomers);
-      } catch (error) {
-        console.error('Error loading customers:', error);
+        setCustomers(fallbackCustomers);
       }
     };
 
@@ -203,10 +307,11 @@ function App() {
         <div style={{
           background: 'white',
           borderRadius: '12px',
-          padding: '40px',
+          padding: '50px',
           boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
           width: '100%',
-          maxWidth: '400px'
+          maxWidth: '450px',
+          margin: '0 auto'
         }}>
           {/* Logo */}
           <div style={{ textAlign: 'center', marginBottom: '30px' }}>
@@ -225,21 +330,15 @@ function App() {
             }}>
               Hörgeräteservice
             </div>
-            <div style={{
-              width: '60px',
-              height: '60px',
-              background: '#1d426a',
-              borderRadius: '50%',
-              margin: '0 auto',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontSize: '24px',
-              fontWeight: 'bold'
-            }}>
-              G
-            </div>
+            <img 
+              src="/gretzinger-logo.svg" 
+              alt="Gretzinger Logo" 
+              style={{
+                width: '120px',
+                height: 'auto',
+                margin: '0 auto'
+              }}
+            />
           </div>
 
           {/* Login Form */}
@@ -380,14 +479,25 @@ function App() {
     doc.setLineWidth(0.3);
     doc.line(10, 40, 200, 40);
 
+    // Customer Information Section
+    if (selectedCustomer) {
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.text('Akustikername / Absender bzw. Firmenstempel:', 10, 45);
+      doc.setFont(undefined, 'normal');
+      doc.text(selectedCustomer.branch !== selectedCustomer.company ? `${selectedCustomer.company} - ${selectedCustomer.branch}` : selectedCustomer.company, 10, 50);
+      doc.text(selectedCustomer.street, 10, 55);
+      doc.text(`${selectedCustomer.location}, ${selectedCustomer.country}`, 10, 60);
+    }
+
     // Title
     doc.setFontSize(22);
     doc.setFont(undefined, 'bold');
-    doc.text('Reparaturauftrag', 105, 52, { align: 'center' });
+    doc.text('Reparaturauftrag', 105, 70, { align: 'center' });
     doc.setFontSize(12);
     doc.setFont(undefined, 'normal');
     // More padding below title
-    let y = 68;
+    let y = 86;
 
     // Column positions
     const leftX = 14;
@@ -564,6 +674,7 @@ function App() {
         maxWidth: 950,
         margin: '0 auto',
         padding: '0 2rem',
+        marginTop: '2rem',
         marginBottom: '1rem'
       }}>
         <div style={{
@@ -590,7 +701,8 @@ function App() {
                 border: '2px solid #e1e5e9',
                 borderRadius: '8px',
                 fontSize: '16px',
-                transition: 'border-color 0.2s'
+                transition: 'border-color 0.2s',
+                boxSizing: 'border-box'
               }}
               onFocus={() => setShowCustomerDropdown(true)}
             />
@@ -605,32 +717,38 @@ function App() {
                 background: 'white',
                 border: '1px solid #e1e5e9',
                 borderRadius: '8px',
-                maxHeight: '300px',
+                maxHeight: '400px',
                 overflowY: 'auto',
                 zIndex: 1000,
                 boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
               }}>
-                {filteredCustomers.slice(0, 20).map((customer, index) => (
-                  <div
-                    key={index}
-                    onClick={() => handleCustomerSelect(customer)}
-                    style={{
-                      padding: '12px 16px',
-                      cursor: 'pointer',
-                      borderBottom: '1px solid #f0f0f0',
-                      transition: 'background-color 0.2s'
-                    }}
-                    onMouseEnter={(e) => e.target.style.background = '#f8f9fa'}
-                    onMouseLeave={(e) => e.target.style.background = 'white'}
-                  >
-                    <div style={{ fontWeight: '600', color: '#1d426a', marginBottom: '4px' }}>
-                      {customer.branch !== customer.company ? `${customer.company} - ${customer.branch}` : customer.company}
+                {filteredCustomers.length > 0 ? (
+                  filteredCustomers.map((customer, index) => (
+                    <div
+                      key={customer.id || index}
+                      onClick={() => handleCustomerSelect(customer)}
+                      style={{
+                        padding: '12px 16px',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid #f0f0f0',
+                        transition: 'background-color 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.target.style.background = '#f8f9fa'}
+                      onMouseLeave={(e) => e.target.style.background = 'white'}
+                    >
+                      <div style={{ fontWeight: '600', color: '#1d426a', marginBottom: '4px' }}>
+                        {customer.branch !== customer.company ? `${customer.company} - ${customer.branch}` : customer.company}
+                      </div>
+                      <div style={{ fontSize: '14px', color: '#666' }}>
+                        {customer.street}, {customer.location}, {customer.country}
+                      </div>
                     </div>
-                    <div style={{ fontSize: '14px', color: '#666' }}>
-                      {customer.street}, {customer.location}, {customer.country}
-                    </div>
+                  ))
+                ) : (
+                  <div style={{ padding: '16px', textAlign: 'center', color: '#666' }}>
+                    Keine Kunden gefunden
                   </div>
-                ))}
+                )}
               </div>
             )}
           </div>
