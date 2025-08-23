@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -58,6 +58,11 @@ const ARBEITEN = [
 ];
 
 function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  
   const [country, setCountry] = useState('DE');
   const [freigabe, setFreigabe] = useState('Reparatur laut KV durchführen');
   const [fehler, setFehler] = useState({});
@@ -66,6 +71,10 @@ function App() {
   const [bottom, setBottom] = useState('kostenpflichtig');
   const [reklamationDate, setReklamationDate] = useState('');
   const [kulanzPorto, setKulanzPorto] = useState('ja');
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customers, setCustomers] = useState([]);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
 
   // Logic for disabling all fields if not 'Reparatur laut KV durchführen' or if Verfahren disables fields
   const verfahrenDisables = bottom === 'garantie' || bottom === 'reklamation' || bottom === 'kulanz';
@@ -95,6 +104,231 @@ function App() {
   };
   const handleKulanzPorto = (val) => setKulanzPorto(val);
   const handleReklamationDate = (e) => setReklamationDate(e.target.value);
+
+  // Customer handlers
+  const handleCustomerSelect = (customer) => {
+    setSelectedCustomer(customer);
+    setCustomerSearch('');
+    setShowCustomerDropdown(false);
+  };
+
+  const handleCustomerSearch = (value) => {
+    setCustomerSearch(value);
+    setShowCustomerDropdown(true);
+  };
+
+  const filteredCustomers = customers.filter(customer => {
+    const searchTerm = customerSearch.toLowerCase();
+    return (
+      customer.company.toLowerCase().includes(searchTerm) ||
+      customer.branch.toLowerCase().includes(searchTerm) ||
+      customer.location.toLowerCase().includes(searchTerm) ||
+      customer.street.toLowerCase().includes(searchTerm)
+    );
+  });
+
+  // Load customers from Supabase
+  useEffect(() => {
+    const loadCustomers = async () => {
+      try {
+        // For now, we'll use the hardcoded data since we haven't set up Supabase client yet
+        // This will be replaced with actual Supabase query
+        const mockCustomers = [
+          {
+            id: '1',
+            branch: 'Altes Land Hörgeräte',
+            company: 'Hörgeräte Altes Land',
+            contact_person: 'Nina Bastein',
+            street: 'Hinterstr. 14a',
+            location: '21723 Hollern-Twielenfleth',
+            country: 'Deutschland'
+          },
+          {
+            id: '2',
+            branch: 'Hörgeräte Langer Ingolstadt (Am Westpark)',
+            company: 'Hörgeräte LANGER GmbH & Co. KG',
+            contact_person: '',
+            street: 'Am Westpark 1',
+            location: '85057 Ingolstadt',
+            country: 'Deutschland'
+          },
+          {
+            id: '3',
+            branch: 'Ihr Ohr',
+            company: 'Ihr Ohr',
+            contact_person: 'Simone Weyand-Fink e.U.',
+            street: 'Postgasse 13',
+            location: '1010 Wien',
+            country: 'Österreich'
+          }
+        ];
+        setCustomers(mockCustomers);
+      } catch (error) {
+        console.error('Error loading customers:', error);
+      }
+    };
+
+    loadCustomers();
+  }, []);
+
+  // Login handler
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (loginEmail === 'Fa.Gretzinger@t-online.de' && loginPassword === 'GretBrunn2025!') {
+      setIsLoggedIn(true);
+      setLoginError('');
+    } else {
+      setLoginError('Ungültige Anmeldedaten');
+    }
+  };
+
+  // Logout handler
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setLoginEmail('');
+    setLoginPassword('');
+  };
+
+  // If not logged in, show login form
+  if (!isLoggedIn) {
+    return (
+      <div style={{ 
+        minHeight: '100vh', 
+        background: 'linear-gradient(135deg, #1d426a 0%, #2a5a8a 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px'
+      }}>
+        <div style={{
+          background: 'white',
+          borderRadius: '12px',
+          padding: '40px',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
+          width: '100%',
+          maxWidth: '400px'
+        }}>
+          {/* Logo */}
+          <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+            <div style={{
+              fontSize: '28px',
+              fontWeight: '700',
+              color: '#1d426a',
+              marginBottom: '8px'
+            }}>
+              GRETZINGER
+            </div>
+            <div style={{
+              fontSize: '16px',
+              color: '#666',
+              marginBottom: '20px'
+            }}>
+              Hörgeräteservice
+            </div>
+            <div style={{
+              width: '60px',
+              height: '60px',
+              background: '#1d426a',
+              borderRadius: '50%',
+              margin: '0 auto',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              fontSize: '24px',
+              fontWeight: 'bold'
+            }}>
+              G
+            </div>
+          </div>
+
+          {/* Login Form */}
+          <form onSubmit={handleLogin}>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                color: '#333',
+                fontWeight: '500'
+              }}>
+                E-Mail
+              </label>
+              <input
+                type="email"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  border: '2px solid #e1e5e9',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  transition: 'border-color 0.2s'
+                }}
+                placeholder="Ihre E-Mail-Adresse"
+                required
+              />
+            </div>
+
+            <div style={{ marginBottom: '25px' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                color: '#333',
+                fontWeight: '500'
+              }}>
+                Passwort
+              </label>
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  border: '2px solid #e1e5e9',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  transition: 'border-color 0.2s'
+                }}
+                placeholder="Ihr Passwort"
+                required
+              />
+            </div>
+
+            {loginError && (
+              <div style={{
+                color: '#dc3545',
+                fontSize: '14px',
+                marginBottom: '20px',
+                textAlign: 'center'
+              }}>
+                {loginError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              style={{
+                width: '100%',
+                padding: '14px',
+                background: '#1d426a',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '16px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s'
+              }}
+            >
+              Anmelden
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   // Calculation
   const countryObj = COUNTRY_OPTIONS.find((c) => c.key === country);
@@ -315,11 +549,117 @@ function App() {
   };
 
   return (
-    <div className="App" style={{ fontFamily: 'Arial, sans-serif', background: '#fff', minHeight: '100vh' }}>
+    <div 
+      className="App" 
+      style={{ fontFamily: 'Arial, sans-serif', background: '#fff', minHeight: '100vh' }}
+      onClick={() => setShowCustomerDropdown(false)}
+    >
       <header style={{ display: 'flex', alignItems: 'center', padding: '2rem 1rem 1rem 1rem', borderBottom: '1px solid #eee' }}>
         <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 80, marginRight: 24 }} />
         <h1 style={{ fontWeight: 400, color: '#1d426a', fontSize: '2rem', margin: 0 }}>Reparaturauftrag</h1>
       </header>
+      
+      {/* Customer Selection Section */}
+      <div style={{
+        maxWidth: 950,
+        margin: '0 auto',
+        padding: '0 2rem',
+        marginBottom: '1rem'
+      }}>
+        <div style={{
+          background: 'white',
+          border: '1px solid #e0e0e0',
+          borderRadius: 8,
+          padding: '1.5rem',
+          boxShadow: '0 1px 4px #0001'
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: '1rem', color: '#1d426a' }}>
+            Kunde auswählen:
+          </div>
+          
+          {/* Customer Search Input */}
+          <div style={{ position: 'relative', marginBottom: '1rem' }}>
+            <input
+              type="text"
+              value={customerSearch}
+              onChange={(e) => handleCustomerSearch(e.target.value)}
+              placeholder="Kunde suchen (Firma, Filiale, Ort, Straße)..."
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                border: '2px solid #e1e5e9',
+                borderRadius: '8px',
+                fontSize: '16px',
+                transition: 'border-color 0.2s'
+              }}
+              onFocus={() => setShowCustomerDropdown(true)}
+            />
+            
+            {/* Customer Dropdown */}
+            {showCustomerDropdown && customerSearch && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                background: 'white',
+                border: '1px solid #e1e5e9',
+                borderRadius: '8px',
+                maxHeight: '300px',
+                overflowY: 'auto',
+                zIndex: 1000,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+              }}>
+                {filteredCustomers.slice(0, 20).map((customer, index) => (
+                  <div
+                    key={index}
+                    onClick={() => handleCustomerSelect(customer)}
+                    style={{
+                      padding: '12px 16px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid #f0f0f0',
+                      transition: 'background-color 0.2s'
+                    }}
+                    onMouseEnter={(e) => e.target.style.background = '#f8f9fa'}
+                    onMouseLeave={(e) => e.target.style.background = 'white'}
+                  >
+                    <div style={{ fontWeight: '600', color: '#1d426a', marginBottom: '4px' }}>
+                      {customer.branch !== customer.company ? `${customer.company} - ${customer.branch}` : customer.company}
+                    </div>
+                    <div style={{ fontSize: '14px', color: '#666' }}>
+                      {customer.street}, {customer.location}, {customer.country}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          {/* Selected Customer Display */}
+          {selectedCustomer && (
+            <div style={{
+              background: '#f8f9fa',
+              border: '1px solid #e1e5e9',
+              borderRadius: '8px',
+              padding: '1rem',
+              marginTop: '1rem'
+            }}>
+              <div style={{ fontWeight: '600', color: '#1d426a', marginBottom: '0.5rem' }}>
+                Ausgewählter Kunde:
+              </div>
+              <div style={{ fontSize: '16px', marginBottom: '0.25rem' }}>
+                {selectedCustomer.branch !== selectedCustomer.company ? `${selectedCustomer.company} - ${selectedCustomer.branch}` : selectedCustomer.company}
+              </div>
+              <div style={{ fontSize: '14px', color: '#666' }}>
+                {selectedCustomer.street}
+              </div>
+              <div style={{ fontSize: '14px', color: '#666' }}>
+                {selectedCustomer.location}, {selectedCustomer.country}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
       <div style={{
         display: 'grid',
         gridTemplateRows: 'auto 1fr auto',
@@ -477,7 +817,14 @@ function App() {
           </div>
         </form>
         {/* Bottom row: PDF Export button right-aligned */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={handleLogout}
+            style={{ padding: '8px 18px', fontSize: 15, background: '#dc3545', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+          >
+            Abmelden
+          </button>
           <button
             type="button"
             onClick={handlePdfExport}
