@@ -74,10 +74,9 @@ function App() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerSearch, setCustomerSearch] = useState('');
   const [customers, setCustomers] = useState([]);
-  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-  const [selectedCompany, setSelectedCompany] = useState(null);
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
   const [showBranchDropdown, setShowBranchDropdown] = useState(false);
+  const [selectedCompany, setSelectedCompany] = useState(null);
 
   // Logic for disabling all fields if not 'Reparatur laut KV durchführen' or if Verfahren disables fields
   const verfahrenDisables = bottom === 'garantie' || bottom === 'reklamation' || bottom === 'kulanz';
@@ -111,10 +110,6 @@ function App() {
   // Customer handlers
   const handleCustomerSelect = (customer) => {
     setSelectedCustomer(customer);
-    setSelectedCompany(null);
-    setCustomerSearch('');
-    setShowCustomerDropdown(false);
-    setShowCompanyDropdown(false);
     setShowBranchDropdown(false);
   };
 
@@ -123,12 +118,6 @@ function App() {
     setSelectedCustomer(null);
     setShowCompanyDropdown(false);
     setShowBranchDropdown(true);
-  };
-
-  const handleCustomerSearch = (value) => {
-    setCustomerSearch(value);
-    setShowCompanyDropdown(true);
-    setShowBranchDropdown(false);
   };
 
   // Group customers by company
@@ -388,6 +377,19 @@ function App() {
     };
 
     loadCustomers();
+  }, []);
+
+  // Click outside handler for dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.customer-dropdown')) {
+        setShowCompanyDropdown(false);
+        setShowBranchDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Login handler
@@ -778,10 +780,6 @@ function App() {
     <div 
       className="App" 
       style={{ fontFamily: 'Arial, sans-serif', background: '#fff', minHeight: '100vh' }}
-      onClick={() => {
-        setShowCompanyDropdown(false);
-        setShowBranchDropdown(false);
-      }}
     >
       <header style={{ display: 'flex', alignItems: 'center', padding: '2rem 1rem 1rem 1rem', borderBottom: '1px solid #eee' }}>
         <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 80, marginRight: 24 }} />
@@ -808,27 +806,31 @@ function App() {
           </div>
           
           {/* Company Selection */}
-          <div style={{ marginBottom: '1rem' }}>
+          <div style={{ marginBottom: '1rem' }} className="customer-dropdown">
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
               Firma auswählen:
             </label>
             <div style={{ position: 'relative' }}>
-              <input
-                type="text"
-                value={customerSearch}
-                onChange={(e) => handleCustomerSearch(e.target.value)}
-                placeholder="Firma suchen..."
+              <div
                 style={{
                   width: '100%',
                   padding: '12px 16px',
                   border: '2px solid #e1e5e9',
                   borderRadius: '8px',
                   fontSize: '16px',
-                  transition: 'border-color 0.2s',
-                  boxSizing: 'border-box'
+                  background: 'white',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
                 }}
-                onFocus={() => setShowCompanyDropdown(true)}
-              />
+                onClick={() => setShowCompanyDropdown(!showCompanyDropdown)}
+              >
+                <span style={{ color: selectedCompany ? '#333' : '#999' }}>
+                  {selectedCompany || 'Firma auswählen...'}
+                </span>
+                <span style={{ fontSize: '12px', color: '#666' }}>▼</span>
+              </div>
               
               {/* Company Dropdown */}
               {showCompanyDropdown && (
@@ -845,19 +847,28 @@ function App() {
                   zIndex: 1000,
                   boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
                 }}>
-                  {filteredCompanies.length > 0 ? (
-                    <>
-                      <div style={{ 
-                        padding: '8px 16px', 
-                        background: '#f8f9fa', 
-                        borderBottom: '1px solid #e1e5e9',
-                        fontSize: '12px',
-                        color: '#666',
-                        fontWeight: '500'
-                      }}>
-                        {filteredCompanies.length} Firma{filteredCompanies.length !== 1 ? 'en' : ''} gefunden
-                      </div>
-                      {filteredCompanies.map((company, index) => (
+                  {/* Search Input */}
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #e1e5e9' }}>
+                    <input
+                      type="text"
+                      value={customerSearch}
+                      onChange={(e) => setCustomerSearch(e.target.value)}
+                      placeholder="Firma suchen..."
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: '1px solid #e1e5e9',
+                        borderRadius: '4px',
+                        fontSize: '14px',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Company List */}
+                  <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                    {filteredCompanies.length > 0 ? (
+                      filteredCompanies.map((company, index) => (
                         <div
                           key={index}
                           onClick={() => handleCompanySelect(company.name)}
@@ -877,13 +888,13 @@ function App() {
                             {company.branchCount} Filiale{company.branchCount !== 1 ? 'n' : ''}
                           </div>
                         </div>
-                      ))}
-                    </>
-                  ) : (
-                    <div style={{ padding: '16px', textAlign: 'center', color: '#666' }}>
-                      Keine Firmen gefunden
-                    </div>
-                  )}
+                      ))
+                    ) : (
+                      <div style={{ padding: '16px', textAlign: 'center', color: '#666' }}>
+                        Keine Firmen gefunden
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -891,7 +902,7 @@ function App() {
 
           {/* Branch Selection (if company selected) */}
           {selectedCompany && (
-            <div style={{ marginBottom: '1rem' }}>
+            <div style={{ marginBottom: '1rem' }} className="customer-dropdown">
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
                 Filiale auswählen:
               </label>
@@ -903,12 +914,18 @@ function App() {
                     border: '2px solid #e1e5e9',
                     borderRadius: '8px',
                     fontSize: '16px',
-                    background: '#f8f9fa',
-                    cursor: 'pointer'
+                    background: 'white',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
                   }}
                   onClick={() => setShowBranchDropdown(!showBranchDropdown)}
                 >
-                  {selectedCompany} ({selectedCompanyBranches.length} Filiale{selectedCompanyBranches.length !== 1 ? 'n' : ''})
+                  <span style={{ color: selectedCustomer ? '#333' : '#999' }}>
+                    {selectedCustomer ? (selectedCustomer.branch !== selectedCustomer.company ? selectedCustomer.branch : selectedCustomer.company) : 'Filiale auswählen...'}
+                  </span>
+                  <span style={{ fontSize: '12px', color: '#666' }}>▼</span>
                 </div>
                 
                 {/* Branch Dropdown */}
