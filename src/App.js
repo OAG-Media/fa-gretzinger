@@ -121,18 +121,19 @@ function App() {
     if (!customerSearch.trim()) return false;
     
     const searchTerm = customerSearch.toLowerCase().trim();
-    const searchWords = searchTerm.split(' ').filter(word => word.length > 0);
     
-    return searchWords.every(word => {
-      return (
-        customer.company?.toLowerCase().includes(word) ||
-        customer.branch?.toLowerCase().includes(word) ||
-        customer.location?.toLowerCase().includes(word) ||
-        customer.street?.toLowerCase().includes(word) ||
-        customer.country?.toLowerCase().includes(word) ||
-        customer.contact_person?.toLowerCase().includes(word)
-      );
-    });
+    // Check if any field contains the search term (partial matching)
+    const searchableFields = [
+      customer.company || '',
+      customer.branch || '',
+      customer.location || '',
+      customer.street || '',
+      customer.country || '',
+      customer.contact_person || ''
+    ].map(field => field.toLowerCase());
+    
+    // Check if search term is contained in any field
+    return searchableFields.some(field => field.includes(searchTerm));
   }).sort((a, b) => {
     // Sort alphabetically by company name
     const companyA = a.company?.toLowerCase() || '';
@@ -205,6 +206,42 @@ function App() {
               street: 'Markgröninger Straße 14',
               location: '71679 Asperg',
               country: 'Deutschland'
+            },
+            {
+              id: '7',
+              branch: 'Hörgeräte Dölle',
+              company: 'Hörgeräte Dölle',
+              contact_person: 'Augenoptik und Hörakustik',
+              street: 'Große Str. 50',
+              location: '49565 Bramsche',
+              country: 'Deutschland'
+            },
+            {
+              id: '8',
+              branch: 'Dölle Hörgeräte Mettingen',
+              company: 'Hörgeräte Dölle',
+              contact_person: 'Augenoptik und Hörakustik',
+              street: 'Clemensstrasse 5b',
+              location: '49497 Mettingen',
+              country: 'Deutschland'
+            },
+            {
+              id: '9',
+              branch: 'Helgert & Rieger',
+              company: 'Helgert & Rieger',
+              contact_person: 'Hörgeräteakustik',
+              street: 'Innerer Laufer Platz 6-8',
+              location: '90403 Nürnberg',
+              country: 'Deutschland'
+            },
+            {
+              id: '10',
+              branch: 'Hörberatung Nürnberg',
+              company: 'Hörberatung',
+              contact_person: '',
+              street: 'Hallplatz 2, in der Mauthalle',
+              location: '90402 Nürnberg',
+              country: 'Deutschland'
             }
           ];
           setCustomers(fallbackCustomers);
@@ -266,6 +303,42 @@ function App() {
             street: 'Markgröninger Straße 14',
             location: '71679 Asperg',
             country: 'Deutschland'
+          },
+          {
+            id: '7',
+            branch: 'Hörgeräte Dölle',
+            company: 'Hörgeräte Dölle',
+            contact_person: 'Augenoptik und Hörakustik',
+            street: 'Große Str. 50',
+            location: '49565 Bramsche',
+            country: 'Deutschland'
+          },
+          {
+            id: '8',
+            branch: 'Dölle Hörgeräte Mettingen',
+            company: 'Hörgeräte Dölle',
+            contact_person: 'Augenoptik und Hörakustik',
+            street: 'Clemensstrasse 5b',
+            location: '49497 Mettingen',
+            country: 'Deutschland'
+          },
+          {
+            id: '9',
+            branch: 'Helgert & Rieger',
+            company: 'Helgert & Rieger',
+            contact_person: 'Hörgeräteakustik',
+            street: 'Innerer Laufer Platz 6-8',
+            location: '90403 Nürnberg',
+            country: 'Deutschland'
+          },
+          {
+            id: '10',
+            branch: 'Hörberatung Nürnberg',
+            company: 'Hörberatung',
+            contact_person: '',
+            street: 'Hallplatz 2, in der Mauthalle',
+            location: '90402 Nürnberg',
+            country: 'Deutschland'
           }
         ];
         setCustomers(fallbackCustomers);
@@ -314,10 +387,19 @@ function App() {
           margin: '0 auto'
         }}>
           {/* Logo */}
-          <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+          <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+            <img 
+              src="/gretzinger-logo.svg" 
+              alt="Gretzinger Logo" 
+              style={{
+                width: '140px',
+                height: 'auto',
+                margin: '0 auto 20px auto'
+              }}
+            />
             <div style={{
-              fontSize: '28px',
-              fontWeight: '700',
+              fontSize: '24px',
+              fontWeight: '600',
               color: '#1d426a',
               marginBottom: '8px'
             }}>
@@ -325,20 +407,10 @@ function App() {
             </div>
             <div style={{
               fontSize: '16px',
-              color: '#666',
-              marginBottom: '20px'
+              color: '#666'
             }}>
               Hörgeräteservice
             </div>
-            <img 
-              src="/gretzinger-logo.svg" 
-              alt="Gretzinger Logo" 
-              style={{
-                width: '120px',
-                height: 'auto',
-                margin: '0 auto'
-              }}
-            />
           </div>
 
           {/* Login Form */}
@@ -723,30 +795,42 @@ function App() {
                 boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
               }}>
                 {filteredCustomers.length > 0 ? (
-                  filteredCustomers.map((customer, index) => (
-                    <div
-                      key={customer.id || index}
-                      onClick={() => handleCustomerSelect(customer)}
-                      style={{
-                        padding: '12px 16px',
-                        cursor: 'pointer',
-                        borderBottom: '1px solid #f0f0f0',
-                        transition: 'background-color 0.2s'
-                      }}
-                      onMouseEnter={(e) => e.target.style.background = '#f8f9fa'}
-                      onMouseLeave={(e) => e.target.style.background = 'white'}
-                    >
-                      <div style={{ fontWeight: '600', color: '#1d426a', marginBottom: '4px' }}>
-                        {customer.branch !== customer.company ? `${customer.company} - ${customer.branch}` : customer.company}
-                      </div>
-                      <div style={{ fontSize: '14px', color: '#666' }}>
-                        {customer.street}, {customer.location}, {customer.country}
-                      </div>
+                  <>
+                    <div style={{ 
+                      padding: '8px 16px', 
+                      background: '#f8f9fa', 
+                      borderBottom: '1px solid #e1e5e9',
+                      fontSize: '12px',
+                      color: '#666',
+                      fontWeight: '500'
+                    }}>
+                      {filteredCustomers.length} Kunde{filteredCustomers.length !== 1 ? 'n' : ''} gefunden
                     </div>
-                  ))
+                    {filteredCustomers.map((customer, index) => (
+                      <div
+                        key={customer.id || index}
+                        onClick={() => handleCustomerSelect(customer)}
+                        style={{
+                          padding: '12px 16px',
+                          cursor: 'pointer',
+                          borderBottom: '1px solid #f0f0f0',
+                          transition: 'background-color 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.target.style.background = '#f8f9fa'}
+                        onMouseLeave={(e) => e.target.style.background = 'white'}
+                      >
+                        <div style={{ fontWeight: '600', color: '#1d426a', marginBottom: '4px' }}>
+                          {customer.branch !== customer.company ? `${customer.company} - ${customer.branch}` : customer.company}
+                        </div>
+                        <div style={{ fontSize: '14px', color: '#666' }}>
+                          {customer.street}, {customer.location}, {customer.country}
+                        </div>
+                      </div>
+                    ))}
+                  </>
                 ) : (
                   <div style={{ padding: '16px', textAlign: 'center', color: '#666' }}>
-                    Keine Kunden gefunden
+                    Keine Kunden gefunden für "{customerSearch}"
                   </div>
                 )}
               </div>
