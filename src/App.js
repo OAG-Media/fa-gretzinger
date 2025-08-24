@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { supabase } from './supabaseClient';
 
 const COUNTRY_OPTIONS = [
   { key: 'DE', label: 'Deutschland', arbeitszeit: 22.0, porto: 5.95 },
@@ -176,10 +177,14 @@ function App() {
   useEffect(() => {
     const loadCustomers = async () => {
       try {
-        // Load all customers from the database
-        const response = await fetch('/api/customers');
-        if (response.ok) {
-          const data = await response.json();
+        // Load all customers from Supabase
+        const { data, error } = await supabase.from('customers').select('*');
+        if (error) {
+          console.error('Supabase error:', error);
+          throw error;
+        }
+        if (data && data.length > 0) {
+          console.log(`Loaded ${data.length} customers from Supabase`);
           setCustomers(data);
         } else {
           // Fallback to hardcoded data for now
