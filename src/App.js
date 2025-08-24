@@ -815,7 +815,7 @@ function App() {
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
               Firma auswählen:
             </label>
-            <div style={{ position: 'relative', overflow: 'visible' }}>
+            <div style={{ position: 'relative' }}>
               <div
                 style={{
                   width: '100%',
@@ -850,8 +850,7 @@ function App() {
                   maxHeight: '300px',
                   overflowY: 'auto',
                   zIndex: 1000,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                  overflow: 'hidden'
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
                 }}>
                   {/* Search Input */}
                   <div style={{ padding: '12px 16px', borderBottom: '1px solid #e1e5e9' }}>
@@ -912,7 +911,7 @@ function App() {
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
                 Filiale auswählen:
               </label>
-              <div style={{ position: 'relative', overflow: 'visible' }}>
+              <div style={{ position: 'relative' }}>
                 <div
                   style={{
                     width: '100%',
@@ -947,8 +946,7 @@ function App() {
                     maxHeight: '300px',
                     overflowY: 'auto',
                     zIndex: 1000,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                    overflow: 'hidden'
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
                   }}>
                     {selectedCompanyBranches.map((branch, index) => (
                       <div
