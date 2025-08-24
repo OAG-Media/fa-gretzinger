@@ -478,7 +478,7 @@ function App() {
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
                 style={{
-                  width: 'calc(100% - 32px)',
+                  width: '100%',
                   padding: '12px 16px',
                   border: '2px solid #e1e5e9',
                   borderRadius: '8px',
@@ -505,7 +505,7 @@ function App() {
                 value={loginPassword}
                 onChange={(e) => setLoginPassword(e.target.value)}
                 style={{
-                  width: 'calc(100% - 32px)',
+                  width: '100%',
                   padding: '12px 16px',
                   border: '2px solid #e1e5e9',
                   borderRadius: '8px',
@@ -608,7 +608,7 @@ function App() {
       doc.setFont(undefined, 'bold');
       doc.text('Akustikername / Absender bzw. Firmenstempel:', 10, 45);
       doc.setFont(undefined, 'normal');
-      doc.text(selectedCustomer.branch !== selectedCustomer.company ? `${selectedCustomer.company} - ${selectedCustomer.branch}` : selectedCustomer.company, 10, 50);
+      doc.text(selectedCustomer.company, 10, 50);
       doc.text(selectedCustomer.street, 10, 55);
       doc.text(`${selectedCustomer.location}, ${selectedCustomer.country}`, 10, 60);
     }
@@ -815,7 +815,7 @@ function App() {
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
               Firma auswählen:
             </label>
-            <div style={{ position: 'relative' }}>
+            <div style={{ position: 'relative', overflow: 'visible' }}>
               <div
                 style={{
                   width: '100%',
@@ -850,7 +850,8 @@ function App() {
                   maxHeight: '300px',
                   overflowY: 'auto',
                   zIndex: 1000,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                  overflow: 'hidden'
                 }}>
                   {/* Search Input */}
                   <div style={{ padding: '12px 16px', borderBottom: '1px solid #e1e5e9' }}>
@@ -911,7 +912,7 @@ function App() {
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
                 Filiale auswählen:
               </label>
-              <div style={{ position: 'relative' }}>
+              <div style={{ position: 'relative', overflow: 'visible' }}>
                 <div
                   style={{
                     width: '100%',
@@ -946,7 +947,8 @@ function App() {
                     maxHeight: '300px',
                     overflowY: 'auto',
                     zIndex: 1000,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    overflow: 'hidden'
                   }}>
                     {selectedCompanyBranches.map((branch, index) => (
                       <div
