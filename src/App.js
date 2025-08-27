@@ -642,7 +642,7 @@ function App() {
     doc.setFont(undefined, 'normal');
     
     // Repair Order Details Table
-    let y = 86;
+    let y = 80;
     if (kommission || hersteller || geraetetyp || seriennummer || werkstatteingang || zubehoer) {
       doc.setFontSize(10);
       doc.setFont(undefined, 'bold');
@@ -695,14 +695,14 @@ function App() {
       
       // Workshop Notes
       if (kvDate || perMethod || werkstattNotiz) {
-        let notesY = tableY + 20;
+        let notesY = tableY + 15;
         doc.setFont(undefined, 'bold');
         doc.text('Rep. werkstatt Notiz: KV am:', startX, notesY);
         doc.setFont(undefined, 'normal');
         
         if (kvDate) {
           const [yyyy, mm, dd] = kvDate.split('-');
-          doc.text(`${dd}.${mm}.${yyyy}`, startX + 45, notesY);
+          doc.text(` ${dd}.${mm}.${yyyy}`, startX + 45, notesY);
         }
         
         doc.setFont(undefined, 'bold');
@@ -729,9 +729,10 @@ function App() {
     const sectionPad = 4; // Reduced from 8
     const linePad = 6; // Increased from 4 to add 2px gap between checkboxes
     const labelPad = 8;
+    var startcheckbox = 103;
 
     // Left column: Freigabe, Fehlerangaben, Verfahren
-    let yLeft = y + 4; // Add 4px padding above "Bei Freigabe bitte ankreuzen"
+    let yLeft = startcheckbox; // Add 4px padding above "Bei Freigabe bitte ankreuzen"
     doc.setFont(undefined, 'bold');
     doc.text('Bei Freigabe bitte ankreuzen:', leftX, yLeft);
     doc.setFont(undefined, 'normal');
@@ -796,7 +797,7 @@ function App() {
     }
 
     // Right column: Ausgeführte Arbeiten (true 3-column grid)
-    let yRight = y;
+    let yRight = startcheckbox;
     doc.setFont(undefined, 'bold');
     doc.text('Ausgeführte Arbeiten:', rightX, yRight);
     doc.setFont(undefined, 'normal');
@@ -840,9 +841,10 @@ function App() {
     yRight += 2; // Reduced from sectionPad (4)
 
     // Draw vertical line between columns (only after left grid finishes)
-    doc.setDrawColor(180);
-    doc.setLineWidth(0.2);
-    doc.line(separatorX, y, separatorX, yRight + 3); // Only go to right column end, not overlapping Verfahren
+   // y = yRight + 5;
+   // doc.setDrawColor(180);
+   // doc.setLineWidth(0.2);
+   // doc.line(separatorX, y, separatorX, yRight + 3); // Only go to right column end, not overlapping Verfahren
 
     // Nettopreis & Porto directly below "Ausgeführte Arbeiten", right-aligned
     const pricingY = yRight + 8; // Position directly below right column
@@ -855,7 +857,7 @@ function App() {
 
     // Notizen section at the bottom (only if there are notes)
     if (werkstattNotiz && werkstattNotiz.trim() !== '') {
-      const notizenY = pricingY + 20; // Position below pricing
+      const notizenY = pricingY + 15; // Position below pricing
       doc.setFont(undefined, 'bold');
       doc.setFontSize(12);
       doc.text('Notizen:', 10, notizenY);
