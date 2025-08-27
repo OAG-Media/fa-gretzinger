@@ -647,29 +647,29 @@ function App() {
       doc.setFontSize(10);
       doc.setFont(undefined, 'bold');
       
-      // Table headers
-      const tableY = y;
+      // Table headers with 3px padding
+      const tableY = y + 3; // Add 3px top padding
       const colWidth = 30;
-      const startX = 10;
+      const startX = 13; // Add 3px left padding (10 + 3)
       
-      // Draw table borders
+      // Draw table borders with padding
       doc.setDrawColor(0); // Black color
       doc.setLineWidth(0.3); // Thicker lines for table borders
       
-      // Draw horizontal lines
-      doc.line(startX, tableY - 2, startX + colWidth * 6, tableY - 2); // Top border
-      doc.line(startX, tableY + 10, startX + colWidth * 6, tableY + 10); // Bottom border
+      // Draw horizontal lines with padding
+      doc.line(startX - 3, tableY - 5, startX + colWidth * 6 - 3, tableY - 5); // Top border
+      doc.line(startX - 3, tableY + 13, startX + colWidth * 6 - 3, tableY + 13); // Bottom border
       
-      // Draw vertical lines
-      doc.line(startX, tableY - 2, startX, tableY + 10); // Left border
-      doc.line(startX + colWidth, tableY - 2, startX + colWidth, tableY + 10); // Column 1
-      doc.line(startX + colWidth * 2, tableY - 2, startX + colWidth * 2, tableY + 10); // Column 2
-      doc.line(startX + colWidth * 3, tableY - 2, startX + colWidth * 3, tableY + 10); // Column 3
-      doc.line(startX + colWidth * 4, tableY - 2, startX + colWidth * 4, tableY + 10); // Column 4
-      doc.line(startX + colWidth * 5, tableY - 2, startX + colWidth * 5, tableY + 10); // Column 5
-      doc.line(startX + colWidth * 6, tableY - 2, startX + colWidth * 6, tableY + 10); // Right border
+      // Draw vertical lines with padding
+      doc.line(startX - 3, tableY - 5, startX - 3, tableY + 13); // Left border
+      doc.line(startX + colWidth - 3, tableY - 5, startX + colWidth - 3, tableY + 13); // Column 1
+      doc.line(startX + colWidth * 2 - 3, tableY - 5, startX + colWidth * 2 - 3, tableY + 13); // Column 2
+      doc.line(startX + colWidth * 3 - 3, tableY - 5, startX + colWidth * 3 - 3, tableY + 13); // Column 3
+      doc.line(startX + colWidth * 4 - 3, tableY - 5, startX + colWidth * 4 - 3, tableY + 13); // Column 4
+      doc.line(startX + colWidth * 5 - 3, tableY - 5, startX + colWidth * 5 - 3, tableY + 13); // Column 5
+      doc.line(startX + colWidth * 6 - 3, tableY - 5, startX + colWidth * 6 - 3, tableY + 13); // Right border
       
-      // Headers
+      // Headers with padding
       doc.text('Kommission', startX, tableY);
       doc.text('Hersteller', startX + colWidth, tableY);
       doc.text('Gerätetyp', startX + colWidth * 2, tableY);
@@ -677,7 +677,7 @@ function App() {
       doc.text('Werkstatteingang', startX + colWidth * 4, tableY);
       doc.text('Zubehör', startX + colWidth * 5, tableY);
       
-      // Data row
+      // Data row with padding
       doc.setFont(undefined, 'normal');
       doc.text(kommission || '', startX, tableY + 8);
       doc.text(hersteller || '', startX + colWidth, tableY + 8);
@@ -727,7 +727,7 @@ function App() {
     const rightX = separatorX + 4; // right column starts just after separator
     const priceColX = 190; // fixed X for right-aligned prices
     const sectionPad = 4; // Reduced from 8
-    const linePad = 4; // Reduced from 6
+    const linePad = 6; // Increased from 4 to add 2px gap between checkboxes
     const labelPad = 8;
 
     // Left column: Freigabe, Fehlerangaben, Verfahren
@@ -751,7 +751,7 @@ function App() {
       const checked = !!fehler[f];
       drawCheckbox(doc, leftX + 2, yLeft - 3.5, checked);
       doc.text(f, leftX + 8, yLeft);
-      yLeft += linePad - 1;
+      yLeft += linePad; // Fixed: removed the -1 to match other sections
       if (idx === FEHLERANGABEN.length - 1) {
         yLeft += sectionPad;
       }
