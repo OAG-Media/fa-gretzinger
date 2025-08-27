@@ -78,6 +78,17 @@ function App() {
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
   const [showBranchDropdown, setShowBranchDropdown] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState(null);
+  
+  // Repair Order Details State
+  const [kommission, setKommission] = useState('');
+  const [hersteller, setHersteller] = useState('');
+  const [geraetetyp, setGeraetetyp] = useState('');
+  const [seriennummer, setSeriennummer] = useState('');
+  const [werkstatteingang, setWerkstatteingang] = useState('');
+  const [zubehoer, setZubehoer] = useState('');
+  const [kvDate, setKvDate] = useState('');
+  const [perMethod, setPerMethod] = useState('Fax');
+  const [werkstattNotiz, setWerkstattNotiz] = useState('');
 
   // Logic for disabling all fields if not 'Reparatur laut KV durchführen' or if Verfahren disables fields
   const verfahrenDisables = bottom === 'garantie' || bottom === 'reklamation' || bottom === 'kulanz';
@@ -88,6 +99,16 @@ function App() {
   const handleReset = () => {
     setArbeiten({});
     setArbeitenManual({});
+    // Reset repair order details
+    setKommission('');
+    setHersteller('');
+    setGeraetetyp('');
+    setSeriennummer('');
+    setWerkstatteingang('');
+    setZubehoer('');
+    setKvDate('');
+    setPerMethod('Fax');
+    setWerkstattNotiz('');
   };
 
   // Handlers
@@ -619,8 +640,69 @@ function App() {
     doc.text('Reparaturauftrag', 105, 70, { align: 'center' });
     doc.setFontSize(12);
     doc.setFont(undefined, 'normal');
-    // More padding below title
+    
+    // Repair Order Details Table
     let y = 86;
+    if (kommission || hersteller || geraetetyp || seriennummer || werkstatteingang || zubehoer) {
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      
+      // Table headers
+      const tableY = y;
+      const colWidth = 30;
+      const startX = 10;
+      
+      // Headers
+      doc.text('Kommission', startX, tableY);
+      doc.text('Hersteller', startX + colWidth, tableY);
+      doc.text('Gerätetyp', startX + colWidth * 2, tableY);
+      doc.text('Seriennummer', startX + colWidth * 3, tableY);
+      doc.text('Werkstatteingang', startX + colWidth * 4, tableY);
+      doc.text('Zubehör', startX + colWidth * 5, tableY);
+      
+      // Data row
+      doc.setFont(undefined, 'normal');
+      doc.text(kommission || '', startX, tableY + 8);
+      doc.text(hersteller || '', startX + colWidth, tableY + 8);
+      doc.text(geraetetyp || '', startX + colWidth * 2, tableY + 8);
+      doc.text(seriennummer || '', startX + colWidth * 3, tableY + 8);
+      
+      // Format date for Werkstatteingang
+      let werkstatteingangFormatted = '';
+      if (werkstatteingang) {
+        const [yyyy, mm, dd] = werkstatteingang.split('-');
+        werkstatteingangFormatted = `${dd}.${mm}.${yyyy}`;
+      }
+      doc.text(werkstatteingangFormatted, startX + colWidth * 4, tableY + 8);
+      doc.text(zubehoer || '', startX + colWidth * 5, tableY + 8);
+      
+      // Workshop Notes
+      if (kvDate || perMethod || werkstattNotiz) {
+        let notesY = tableY + 20;
+        doc.setFont(undefined, 'bold');
+        doc.text('Rep. werkstatt Notiz: KV am:', startX, notesY);
+        doc.setFont(undefined, 'normal');
+        
+        if (kvDate) {
+          const [yyyy, mm, dd] = kvDate.split('-');
+          doc.text(`${dd}.${mm}.${yyyy}`, startX + 45, notesY);
+        }
+        
+        doc.setFont(undefined, 'bold');
+        doc.text('per:', startX + 70, notesY);
+        doc.setFont(undefined, 'normal');
+        doc.text(perMethod || '', startX + 80, notesY);
+        
+        if (werkstattNotiz) {
+          doc.text(werkstattNotiz, startX + 100, notesY);
+        }
+      }
+      
+      y = tableY + 35; // Move main content down
+    }
+    
+    // More padding below title
+    y = Math.max(y, 86);
 
     // Column positions
     const leftX = 14;
@@ -1025,6 +1107,225 @@ function App() {
           )}
         </div>
       </div>
+      
+      {/* Repair Order Details Table */}
+      {selectedCustomer && (
+        <div style={{
+          maxWidth: 950,
+          margin: '0 auto',
+          padding: '0 2rem',
+          marginBottom: '1rem'
+        }}>
+          <div style={{
+            background: 'white',
+            border: '1px solid #e0e0e0',
+            borderRadius: 8,
+            padding: '1.5rem',
+            boxShadow: '0 1px 4px #0001'
+          }}>
+            <div style={{ fontWeight: '600', marginBottom: '1rem', color: '#1d426a' }}>
+              Reparaturauftrag Details:
+            </div>
+            
+            {/* 6-Column Table */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 1fr',
+              gap: '1rem',
+              marginBottom: '1.5rem'
+            }}>
+              {/* Kommission */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333', fontSize: '14px' }}>
+                  Kommission:
+                </label>
+                <input
+                  type="text"
+                  value={kommission}
+                  onChange={(e) => setKommission(e.target.value)}
+                  placeholder="z.B. 020-5031"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: '1px solid #e1e5e9',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              
+              {/* Hersteller */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333', fontSize: '14px' }}>
+                  Hersteller:
+                </label>
+                <input
+                  type="text"
+                  value={hersteller}
+                  onChange={(e) => setHersteller(e.target.value)}
+                  placeholder="z.B. HHM"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: '1px solid #e1e5e9',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              
+              {/* Gerätetyp */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333', fontSize: '14px' }}>
+                  Gerätetyp:
+                </label>
+                <input
+                  type="text"
+                  value={geraetetyp}
+                  onChange={(e) => setGeraetetyp(e.target.value)}
+                  placeholder="z.B. G400 Mini"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: '1px solid #e1e5e9',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              
+              {/* Seriennummer */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333', fontSize: '14px' }}>
+                  Seriennummer:
+                </label>
+                <input
+                  type="text"
+                  value={seriennummer}
+                  onChange={(e) => setSeriennummer(e.target.value)}
+                  placeholder="z.B. 53742513"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: '1px solid #e1e5e9',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              
+              {/* Werkstatteingang */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333', fontSize: '14px' }}>
+                  Werkstatteingang:
+                </label>
+                <input
+                  type="date"
+                  value={werkstatteingang}
+                  onChange={(e) => setWerkstatteingang(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: '1px solid #e1e5e9',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              
+              {/* Zubehör */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333', fontSize: '14px' }}>
+                  Zubehör:
+                </label>
+                <input
+                  type="text"
+                  value={zubehoer}
+                  onChange={(e) => setZubehoer(e.target.value)}
+                  placeholder="z.B. ex Hörer"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: '1px solid #e1e5e9',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            </div>
+            
+            {/* Workshop Notes Section */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'auto 1fr auto 1fr 1fr',
+              gap: '1rem',
+              alignItems: 'end'
+            }}>
+              <div style={{ fontWeight: '500', color: '#333', fontSize: '14px' }}>
+                Rep. werkstatt Notiz: KV am:
+              </div>
+              <div>
+                <input
+                  type="date"
+                  value={kvDate}
+                  onChange={(e) => setKvDate(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: '1px solid #e1e5e9',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              <div style={{ fontWeight: '500', color: '#333', fontSize: '14px' }}>
+                per:
+              </div>
+              <div>
+                <select
+                  value={perMethod}
+                  onChange={(e) => setPerMethod(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: '1px solid #e1e5e9',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <option value="Fax">Fax</option>
+                  <option value="Mail">Mail</option>
+                </select>
+              </div>
+              <div>
+                <input
+                  type="text"
+                  value={werkstattNotiz}
+                  onChange={(e) => setWerkstattNotiz(e.target.value)}
+                  placeholder="Weitere Notizen..."
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: '1px solid #e1e5e9',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div style={{
         display: 'grid',
         gridTemplateRows: 'auto 1fr auto',
