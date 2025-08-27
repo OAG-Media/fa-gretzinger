@@ -647,27 +647,27 @@ function App() {
       doc.setFontSize(10);
       doc.setFont(undefined, 'bold');
       
-      // Table headers with 3px padding
-      const tableY = y + 3; // Add 3px top padding
+      // Table headers with 1px padding
+      const tableY = y + 1; // Reduced to 1px top padding
       const colWidth = 30;
-      const startX = 13; // Add 3px left padding (10 + 3)
+      const startX = 11; // Reduced to 1px left padding (10 + 1)
       
-      // Draw table borders with padding
+      // Draw table borders with minimal padding
       doc.setDrawColor(0); // Black color
       doc.setLineWidth(0.3); // Thicker lines for table borders
       
-      // Draw horizontal lines with padding
-      doc.line(startX - 3, tableY - 5, startX + colWidth * 6 - 3, tableY - 5); // Top border
-      doc.line(startX - 3, tableY + 13, startX + colWidth * 6 - 3, tableY + 13); // Bottom border
+      // Draw horizontal lines with minimal padding
+      doc.line(startX - 1, tableY - 3, startX + colWidth * 6 - 1, tableY - 3); // Top border
+      doc.line(startX - 1, tableY + 11, startX + colWidth * 6 - 1, tableY + 11); // Bottom border
       
-      // Draw vertical lines with padding
-      doc.line(startX - 3, tableY - 5, startX - 3, tableY + 13); // Left border
-      doc.line(startX + colWidth - 3, tableY - 5, startX + colWidth - 3, tableY + 13); // Column 1
-      doc.line(startX + colWidth * 2 - 3, tableY - 5, startX + colWidth * 2 - 3, tableY + 13); // Column 2
-      doc.line(startX + colWidth * 3 - 3, tableY - 5, startX + colWidth * 3 - 3, tableY + 13); // Column 3
-      doc.line(startX + colWidth * 4 - 3, tableY - 5, startX + colWidth * 4 - 3, tableY + 13); // Column 4
-      doc.line(startX + colWidth * 5 - 3, tableY - 5, startX + colWidth * 5 - 3, tableY + 13); // Column 5
-      doc.line(startX + colWidth * 6 - 3, tableY - 5, startX + colWidth * 6 - 3, tableY + 13); // Right border
+      // Draw vertical lines with minimal padding
+      doc.line(startX - 1, tableY - 3, startX - 1, tableY + 11); // Left border
+      doc.line(startX + colWidth - 1, tableY - 3, startX + colWidth - 1, tableY + 11); // Column 1
+      doc.line(startX + colWidth * 2 - 1, tableY - 3, startX + colWidth * 2 - 1, tableY + 11); // Column 2
+      doc.line(startX + colWidth * 3 - 1, tableY - 3, startX + colWidth * 3 - 1, tableY + 11); // Column 3
+      doc.line(startX + colWidth * 4 - 1, tableY - 3, startX + colWidth * 4 - 1, tableY + 11); // Column 4
+      doc.line(startX + colWidth * 5 - 1, tableY - 3, startX + colWidth * 5 - 1, tableY + 11); // Column 5
+      doc.line(startX + colWidth * 6 - 1, tableY - 3, startX + colWidth * 6 - 1, tableY + 11); // Right border
       
       // Headers with padding
       doc.text('Kommission', startX, tableY);
@@ -715,11 +715,11 @@ function App() {
         }
       }
       
-      y = tableY + 25; // Reduced from 35 to bring net price closer
+      y = tableY + 20; // Further reduced from 25 to reduce margin below heading
     }
     
     // More padding below title
-    y = Math.max(y, 86);
+    y = Math.max(y, 80); // Reduced from 86 to bring content closer to title
 
     // Column positions
     const leftX = 14;
@@ -731,7 +731,7 @@ function App() {
     const labelPad = 8;
 
     // Left column: Freigabe, Fehlerangaben, Verfahren
-    let yLeft = y;
+    let yLeft = y + 4; // Add 4px padding above "Bei Freigabe bitte ankreuzen"
     doc.setFont(undefined, 'bold');
     doc.text('Bei Freigabe bitte ankreuzen:', leftX, yLeft);
     doc.setFont(undefined, 'normal');
@@ -842,10 +842,10 @@ function App() {
     // Draw vertical line between columns (only after left grid finishes)
     doc.setDrawColor(180);
     doc.setLineWidth(0.2);
-    doc.line(separatorX, y, separatorX, Math.max(yLeft, yRight) + 3); // Reduced from +5
+    doc.line(separatorX, y, separatorX, yRight + 3); // Only go to right column end
 
-    // Draw horizontal separator line below the grid
-    const sepY = Math.max(yLeft, yRight) + 6; // Reduced from +10
+    // Draw horizontal separator line below "Ausgeführte Arbeiten" (right column)
+    const sepY = yRight + 6; // Position below right column, not below left column
     doc.line(10, sepY, 200, sepY);
 
     // Nettopreis & Porto below the new separator, right-aligned
@@ -855,6 +855,26 @@ function App() {
     doc.setFont(undefined, 'normal');
     doc.setFontSize(10);
     doc.text(`+ Porto & Verpackung: ${porto.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 10, sepY + 16, { align: 'right' });
+
+    // Notizen section at the bottom
+    const notizenY = sepY + 30; // Position below pricing
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(12);
+    doc.text('Notizen:', 10, notizenY);
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(10);
+    
+    // Draw a large text input field border
+    doc.setDrawColor(100);
+    doc.setLineWidth(0.2);
+    doc.rect(10, notizenY + 5, 180, 40); // Large rectangle for notes
+    
+    // Add placeholder text inside the box
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'italic');
+    doc.text('Hier können Sie zusätzliche Notizen eingeben...', 15, notizenY + 15);
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(10);
 
     doc.save('reparaturauftrag.pdf');
   };
