@@ -715,16 +715,16 @@ function App() {
         }
       }
       
-      y = tableY + 15; // Further reduced from 20 to reduce margin below heading
+      y = tableY + 10; // Reduced margin below heading only
     }
     
     // More padding below title
-    y = Math.max(y, 75); // Further reduced from 80 to bring content closer to title
+    y = Math.max(y, 82); // Keep normal spacing for content sections
 
     // Column positions
     const leftX = 14;
-    const separatorX = 100; // move separator further right
-    const rightX = separatorX + 8; // right column starts with more space after separator
+    const separatorX = 110; // move separator further right to prevent overlap
+    const rightX = separatorX + 10; // right column starts with more space after separator
     const priceColX = 190; // fixed X for right-aligned prices
     const sectionPad = 4; // Reduced from 8
     const linePad = 6; // Increased from 4 to add 2px gap between checkboxes
@@ -853,25 +853,23 @@ function App() {
     doc.setFontSize(10);
     doc.text(`+ Porto & Verpackung: ${porto.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 10, pricingY + 6, { align: 'right' });
 
-    // Notizen section at the bottom
-    const notizenY = pricingY + 20; // Position below pricing
-    doc.setFont(undefined, 'bold');
-    doc.setFontSize(12);
-    doc.text('Notizen:', 10, notizenY);
-    doc.setFont(undefined, 'normal');
-    doc.setFontSize(10);
-    
-    // Draw a large text input field border
-    doc.setDrawColor(100);
-    doc.setLineWidth(0.2);
-    doc.rect(10, notizenY + 5, 180, 40); // Large rectangle for notes
-    
-    // Add placeholder text inside the box
-    doc.setFontSize(9);
-    doc.setFont(undefined, 'italic');
-    doc.text('Hier können Sie zusätzliche Notizen eingeben...', 15, notizenY + 15);
-    doc.setFont(undefined, 'normal');
-    doc.setFontSize(10);
+    // Notizen section at the bottom (only if there are notes)
+    if (werkstattNotiz && werkstattNotiz.trim() !== '') {
+      const notizenY = pricingY + 20; // Position below pricing
+      doc.setFont(undefined, 'bold');
+      doc.setFontSize(12);
+      doc.text('Notizen:', 10, notizenY);
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(10);
+      
+      // Draw a text input field border
+      doc.setDrawColor(100);
+      doc.setLineWidth(0.2);
+      doc.rect(10, notizenY + 5, 180, 20); // Smaller rectangle for notes
+      
+      // Add the actual note text
+      doc.text(werkstattNotiz, 15, notizenY + 15);
+    }
 
     doc.save('reparaturauftrag.pdf');
   };
