@@ -811,14 +811,14 @@ function App() {
           </div>
           
           {/* Company Selection */}
-          <div style={{ marginBottom: '1rem' }} className="customer-dropdown">
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
+          <div style={{ marginBottom: '1rem', maxWidth: 'Auto' }} className="customer-dropdown">
+            <label style={{ position: 'relative', display: 'flex', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
               Firma auswählen:
             </label>
-            <div style={{ position: 'relative' }}>
+            <div style={{ position: 'relative', width: '100%' }}>
               <div
                 style={{
-                  width: '100%',
+                  width: 'auto',
                   padding: '12px 16px',
                   border: '2px solid #e1e5e9',
                   borderRadius: '8px',
@@ -840,7 +840,7 @@ function App() {
               {/* Company Dropdown */}
               {showCompanyDropdown && (
                 <div style={{
-                  position: 'absolute',
+                  position: 'relative',
                   top: '100%',
                   left: 0,
                   right: 0,
@@ -849,8 +849,10 @@ function App() {
                   borderRadius: '8px',
                   maxHeight: '300px',
                   overflowY: 'auto',
-                  zIndex: 1000,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                  zIndex: 1500,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                  width: '100%',
+                  boxSizing: 'border-box'
                 }}>
                   {/* Search Input */}
                   <div style={{ padding: '12px 16px', borderBottom: '1px solid #e1e5e9' }}>
@@ -907,14 +909,14 @@ function App() {
 
           {/* Branch Selection (if company selected) */}
           {selectedCompany && (
-            <div style={{ marginBottom: '1rem' }} className="customer-dropdown">
+            <div style={{ marginBottom: '1rem', maxWidth: '100%' }} className="customer-dropdown">
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
                 Filiale auswählen:
               </label>
-              <div style={{ position: 'relative' }}>
+              <div style={{ position: 'relative', width: '100%' }}>
                 <div
                   style={{
-                    width: '100%',
+                    width: 'auto',
                     padding: '12px 16px',
                     border: '2px solid #e1e5e9',
                     borderRadius: '8px',
@@ -945,8 +947,10 @@ function App() {
                     borderRadius: '8px',
                     maxHeight: '300px',
                     overflowY: 'auto',
-                    zIndex: 1000,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                    zIndex: 1500,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    width: '100%',
+                    boxSizing: 'border-box'
                   }}>
                     {selectedCompanyBranches.map((branch, index) => (
                       <div
