@@ -715,16 +715,16 @@ function App() {
         }
       }
       
-      y = tableY + 20; // Further reduced from 25 to reduce margin below heading
+      y = tableY + 15; // Further reduced from 20 to reduce margin below heading
     }
     
     // More padding below title
-    y = Math.max(y, 80); // Reduced from 86 to bring content closer to title
+    y = Math.max(y, 75); // Further reduced from 80 to bring content closer to title
 
     // Column positions
     const leftX = 14;
     const separatorX = 100; // move separator further right
-    const rightX = separatorX + 4; // right column starts just after separator
+    const rightX = separatorX + 8; // right column starts with more space after separator
     const priceColX = 190; // fixed X for right-aligned prices
     const sectionPad = 4; // Reduced from 8
     const linePad = 6; // Increased from 4 to add 2px gap between checkboxes
@@ -842,22 +842,19 @@ function App() {
     // Draw vertical line between columns (only after left grid finishes)
     doc.setDrawColor(180);
     doc.setLineWidth(0.2);
-    doc.line(separatorX, y, separatorX, yRight + 3); // Only go to right column end
+    doc.line(separatorX, y, separatorX, yRight + 3); // Only go to right column end, not overlapping Verfahren
 
-    // Draw horizontal separator line below "Ausgeführte Arbeiten" (right column)
-    const sepY = yRight + 6; // Position below right column, not below left column
-    doc.line(10, sepY, 200, sepY);
-
-    // Nettopreis & Porto below the new separator, right-aligned
+    // Nettopreis & Porto directly below "Ausgeführte Arbeiten", right-aligned
+    const pricingY = yRight + 8; // Position directly below right column
     doc.setFont(undefined, 'bold');
     doc.setFontSize(14);
-    doc.text(`Nettopreis: ${net.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 10, sepY + 10, { align: 'right' });
+    doc.text(`Nettopreis: ${net.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 10, pricingY, { align: 'right' });
     doc.setFont(undefined, 'normal');
     doc.setFontSize(10);
-    doc.text(`+ Porto & Verpackung: ${porto.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 10, sepY + 16, { align: 'right' });
+    doc.text(`+ Porto & Verpackung: ${porto.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 10, pricingY + 6, { align: 'right' });
 
     // Notizen section at the bottom
-    const notizenY = sepY + 30; // Position below pricing
+    const notizenY = pricingY + 20; // Position below pricing
     doc.setFont(undefined, 'bold');
     doc.setFontSize(12);
     doc.text('Notizen:', 10, notizenY);
