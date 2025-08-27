@@ -652,6 +652,23 @@ function App() {
       const colWidth = 30;
       const startX = 10;
       
+      // Draw table borders
+      doc.setDrawColor(0); // Black color
+      doc.setLineWidth(0.3); // Thicker lines for table borders
+      
+      // Draw horizontal lines
+      doc.line(startX, tableY - 2, startX + colWidth * 6, tableY - 2); // Top border
+      doc.line(startX, tableY + 10, startX + colWidth * 6, tableY + 10); // Bottom border
+      
+      // Draw vertical lines
+      doc.line(startX, tableY - 2, startX, tableY + 10); // Left border
+      doc.line(startX + colWidth, tableY - 2, startX + colWidth, tableY + 10); // Column 1
+      doc.line(startX + colWidth * 2, tableY - 2, startX + colWidth * 2, tableY + 10); // Column 2
+      doc.line(startX + colWidth * 3, tableY - 2, startX + colWidth * 3, tableY + 10); // Column 3
+      doc.line(startX + colWidth * 4, tableY - 2, startX + colWidth * 4, tableY + 10); // Column 4
+      doc.line(startX + colWidth * 5, tableY - 2, startX + colWidth * 5, tableY + 10); // Column 5
+      doc.line(startX + colWidth * 6, tableY - 2, startX + colWidth * 6, tableY + 10); // Right border
+      
       // Headers
       doc.text('Kommission', startX, tableY);
       doc.text('Hersteller', startX + colWidth, tableY);
@@ -698,7 +715,7 @@ function App() {
         }
       }
       
-      y = tableY + 35; // Move main content down
+      y = tableY + 25; // Reduced from 35 to bring net price closer
     }
     
     // More padding below title
@@ -709,8 +726,8 @@ function App() {
     const separatorX = 100; // move separator further right
     const rightX = separatorX + 4; // right column starts just after separator
     const priceColX = 190; // fixed X for right-aligned prices
-    const sectionPad = 8;
-    const linePad = 6;
+    const sectionPad = 4; // Reduced from 8
+    const linePad = 4; // Reduced from 6
     const labelPad = 8;
 
     // Left column: Freigabe, Fehlerangaben, Verfahren
@@ -820,15 +837,15 @@ function App() {
       if (value) doc.text(value, priceColX, yRight, { align: 'right' });
       yRight += linePad;
     });
-    yRight += sectionPad;
+    yRight += 2; // Reduced from sectionPad (4)
 
     // Draw vertical line between columns (only after left grid finishes)
     doc.setDrawColor(180);
     doc.setLineWidth(0.2);
-    doc.line(separatorX, y, separatorX, Math.max(yLeft, yRight) + 5);
+    doc.line(separatorX, y, separatorX, Math.max(yLeft, yRight) + 3); // Reduced from +5
 
     // Draw horizontal separator line below the grid
-    const sepY = Math.max(yLeft, yRight) + 10;
+    const sepY = Math.max(yLeft, yRight) + 6; // Reduced from +10
     doc.line(10, sepY, 200, sepY);
 
     // Nettopreis & Porto below the new separator, right-aligned
@@ -1425,7 +1442,7 @@ function App() {
             </div>
             <div style={boxStyle}>
               <div style={{ fontWeight: 600, marginBottom: 8, textAlign: 'left' }}>Ausgeführte Arbeiten:</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
                 {ARBEITEN.map((a) => {
                   const checked = !!arbeiten[a.key];
                   // Determine if this row needs a price or input field
