@@ -139,7 +139,25 @@ function App() {
     setSelectedCompany(company);
     setSelectedCustomer(null);
     setShowCompanyDropdown(false);
-    setShowBranchDropdown(true);
+    
+    // Check if search term matches a specific branch or street
+    const searchTerm = customerSearch.toLowerCase().trim();
+    const companyBranches = groupedCustomers[company]?.branches || [];
+    
+    // Find the specific branch that matches the search
+    const matchingBranch = companyBranches.find(branch => 
+      branch.branch.toLowerCase().includes(searchTerm) ||
+      branch.street.toLowerCase().includes(searchTerm) ||
+      branch.location.toLowerCase().includes(searchTerm)
+    );
+    
+    if (matchingBranch) {
+      // Auto-select the matching branch
+      handleCustomerSelect(matchingBranch);
+    } else {
+      // Show branch dropdown if no specific match
+      setShowBranchDropdown(true);
+    }
   };
 
   // Group customers by company
@@ -161,10 +179,22 @@ function App() {
     branchCount: group.branches.length
   }));
 
-  // Filter companies based on search
+  // Filter companies based on search (including street and branch names)
   const filteredCompanies = companies.filter(company => {
     if (!customerSearch.trim()) return true;
-    return company.name.toLowerCase().includes(customerSearch.toLowerCase());
+    
+    const searchTerm = customerSearch.toLowerCase().trim();
+    
+    // Check if search term matches company name
+    if (company.name.toLowerCase().includes(searchTerm)) return true;
+    
+    // Check if search term matches any branch name or street
+    const companyBranches = groupedCustomers[company.name]?.branches || [];
+    return companyBranches.some(branch => 
+      branch.branch.toLowerCase().includes(searchTerm) ||
+      branch.street.toLowerCase().includes(searchTerm) ||
+      branch.location.toLowerCase().includes(searchTerm)
+    );
   });
 
   // Get branches for selected company
