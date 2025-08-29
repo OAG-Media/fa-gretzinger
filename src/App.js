@@ -635,6 +635,8 @@ function App() {
   } else if (bottom === 'kulanz') {
     net = 0;
     if (kulanzPorto === 'nein') porto = 0;
+    // For Kulanz, net price should include Porto if enabled
+    net = porto;
   }
 
   // PDF Export function
@@ -816,6 +818,16 @@ function App() {
         doc.text(label, leftX + 8, yLeft);
       }
       yLeft += linePad;
+      
+      // Add Porto ja/nein under "Kostenpflichtige Reparatur"
+      if (opt.value === 'kostenpflichtig' && checked) {
+        yLeft += 1;
+        drawCheckbox(doc, leftX + 10, yLeft - 3.5, kulanzPorto === 'ja');
+        doc.text('Porto ja', leftX + 16, yLeft);
+        drawCheckbox(doc, leftX + 38, yLeft - 3.5, kulanzPorto === 'nein');
+        doc.text('Porto nein', leftX + 44, yLeft);
+        yLeft += linePad;
+      }
     });
     if (bottom === 'kulanz') {
       yLeft += 1;
@@ -876,6 +888,16 @@ function App() {
    // doc.setLineWidth(0.2);
    // doc.line(separatorX, y, separatorX, yRight + 3); // Only go to right column end, not overlapping Verfahren
 
+    // Porto toggle section above pricing
+    const portoToggleY = yRight + 4; // Position above pricing
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(10);
+    doc.text('Porto & Verpackung:', rightX + 8 + maxLabelWidth + 10, portoToggleY, { align: 'right' });
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(9);
+    doc.text('Porto ja', rightX + 8 + maxLabelWidth - 20, portoToggleY);
+    doc.text('Porto nein', rightX + 8 + maxLabelWidth + 20, portoToggleY);
+    
     // Nettopreis & Porto directly below "Ausgeführte Arbeiten", right-aligned
     const pricingY = yRight + 8; // Position directly below right column
     doc.setFont(undefined, 'bold');
@@ -1526,6 +1548,31 @@ function App() {
               </div>
             </div>
             <div style={{ ...boxStyle, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginTop: 20 }}>
+              {/* Porto Toggle Section */}
+              <div style={{ width: '100%', marginBottom: 16, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16 }}>
+                <span style={{ fontSize: 14, fontWeight: 500, color: '#666' }}>Porto & Verpackung:</span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input 
+                    type="radio" 
+                    name="portoToggle" 
+                    checked={kulanzPorto === 'ja'} 
+                    onChange={() => handleKulanzPorto('ja')}
+                    style={{ margin: 0 }}
+                  /> 
+                  <span style={{ fontSize: 14 }}>Porto ja</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input 
+                    type="radio" 
+                    name="portoToggle" 
+                    checked={kulanzPorto === 'nein'} 
+                    onChange={() => handleKulanzPorto('nein')}
+                    style={{ margin: 0 }}
+                  /> 
+                  <span style={{ fontSize: 14 }}>Porto nein</span>
+                </label>
+              </div>
+              
               <div style={{ width: '100%', display: 'grid', gridTemplateColumns: 'max-content max-content', gridTemplateRows: 'max-content max-content', justifyContent: 'end', alignItems: 'center', gap: '0 32px' }}>
                 
               <div style={{ fontSize: 16, fontWeight: 500, color: '#222', textAlign: 'right', gridColumn: 1, gridRow: 1 }}>
