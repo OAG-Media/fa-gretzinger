@@ -89,6 +89,7 @@ function App() {
   const [kvDate, setKvDate] = useState('');
   const [perMethod, setPerMethod] = useState('Fax');
   const [werkstattNotiz, setWerkstattNotiz] = useState('');
+  const [werkstattDate, setWerkstattDate] = useState('');
 
   // Logic for disabling all fields if not 'Reparatur laut KV durchführen' or if Verfahren disables fields
   const verfahrenDisables = bottom === 'garantie' || bottom === 'reklamation' || bottom === 'kulanz';
@@ -109,6 +110,7 @@ function App() {
     setKvDate('');
     setPerMethod('Fax');
     setWerkstattNotiz('');
+    setWerkstattDate('');
   };
 
   // Handlers
@@ -128,6 +130,7 @@ function App() {
   };
   const handleKulanzPorto = (val) => setKulanzPorto(val);
   const handleReklamationDate = (e) => setReklamationDate(e.target.value);
+  const handleWerkstattDate = (e) => setWerkstattDate(e.target.value);
 
   // Customer handlers
   const handleCustomerSelect = (customer) => {
@@ -659,6 +662,18 @@ function App() {
     doc.setLineWidth(0.3);
     doc.line(10, 40, 200, 40);
 
+    // Workshop Date Section (Top Right)
+    if (werkstattDate) {
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.text('gesendet an die Werkstatt:', 120, 45);
+      doc.setFont(undefined, 'normal');
+      
+      // Format date as DD.MM.YYYY
+      const [yyyy, mm, dd] = werkstattDate.split('-');
+      doc.text(`${dd}.${mm}.${yyyy}`, 120, 50);
+    }
+
     // Customer Information Section
     if (selectedCustomer) {
       doc.setFontSize(10);
@@ -1162,6 +1177,34 @@ function App() {
           )}
           
           {/* Selected Customer Display */}
+          {/* Workshop Date Field */}
+          <div style={{
+            background: '#f8f9fa',
+            border: '1px solid #e1e5e9',
+            borderRadius: '8px',
+            padding: '1rem',
+            marginTop: '1rem',
+            marginBottom: '1rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <label style={{ fontWeight: '600', color: '#1d426a', fontSize: '14px', minWidth: '200px' }}>
+                gesendet an die Werkstatt:
+              </label>
+              <input
+                type="date"
+                value={werkstattDate}
+                onChange={handleWerkstattDate}
+                style={{
+                  padding: '8px 12px',
+                  border: '1px solid #e1e5e9',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  minWidth: '150px'
+                }}
+              />
+            </div>
+          </div>
+          
           {selectedCustomer && (
             <div style={{
               background: '#f8f9fa',
