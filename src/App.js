@@ -609,6 +609,11 @@ function App() {
   let porto = countryObj ? countryObj.porto : 0;
   let arbeitszeit = countryObj ? countryObj.arbeitszeit : 0;
 
+  // Apply Porto toggle for all procedure types
+  if (kulanzPorto === 'nein') {
+    porto = 0;
+  }
+
   if (freigabe === 'Unrepariert zurückschicken') {
     net = 14.95;
     porto = 0;
@@ -631,11 +636,10 @@ function App() {
     net += porto;
   } else if (bottom === 'garantie' || bottom === 'reklamation') {
     net = 0;
-    porto = 0;
+    // Porto can still be applied if enabled via toggle
   } else if (bottom === 'kulanz') {
     net = 0;
-    if (kulanzPorto === 'nein') porto = 0;
-    // For Kulanz, net price should include Porto if enabled
+    // Porto is already handled above for all types
     net = porto;
   }
 
@@ -895,8 +899,18 @@ function App() {
     doc.text('Porto & Verpackung:', rightX + 8 + maxLabelWidth + 10, portoToggleY, { align: 'right' });
     doc.setFont(undefined, 'normal');
     doc.setFontSize(9);
-    doc.text('Porto ja', rightX + 8 + maxLabelWidth - 20, portoToggleY);
-    doc.text('Porto nein', rightX + 8 + maxLabelWidth + 20, portoToggleY);
+    
+    // Draw Porto toggle checkboxes
+    const portoJaX = rightX + 8 + maxLabelWidth - 25;
+    const portoNeinX = rightX + 8 + maxLabelWidth + 15;
+    
+    // Porto ja checkbox
+    drawCheckbox(doc, portoJaX, portoToggleY - 3.5, kulanzPorto === 'ja');
+    doc.text('Porto ja', portoJaX + 6, portoToggleY);
+    
+    // Porto nein checkbox
+    drawCheckbox(doc, portoNeinX, portoToggleY - 3.5, kulanzPorto === 'nein');
+    doc.text('Porto nein', portoNeinX + 6, portoToggleY);
     
     // Nettopreis & Porto directly below "Ausgeführte Arbeiten", right-aligned
     const pricingY = yRight + 8; // Position directly below right column
