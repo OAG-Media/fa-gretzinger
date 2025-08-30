@@ -90,6 +90,14 @@ function App() {
   const [perMethod, setPerMethod] = useState('Fax');
   const [werkstattNotiz, setWerkstattNotiz] = useState('');
   const [werkstattDate, setWerkstattDate] = useState('');
+  
+  // Manual Fehlerangaben State
+  const [manualFehler1, setManualFehler1] = useState('');
+  const [manualFehler2, setManualFehler2] = useState('');
+  const [manualFehler3, setManualFehler3] = useState('');
+  const [manualFehlerChecked1, setManualFehlerChecked1] = useState(false);
+  const [manualFehlerChecked2, setManualFehlerChecked2] = useState(false);
+  const [manualFehlerChecked3, setManualFehlerChecked3] = useState(false);
 
   // Logic for disabling all fields if not 'Reparatur laut KV durchführen' or if Verfahren disables fields
   const verfahrenDisables = bottom === 'garantie' || bottom === 'reklamation' || bottom === 'kulanz';
@@ -111,6 +119,14 @@ function App() {
     setPerMethod('Fax');
     setWerkstattNotiz('');
     setWerkstattDate('');
+    
+    // Reset manual Fehlerangaben
+    setManualFehler1('');
+    setManualFehler2('');
+    setManualFehler3('');
+    setManualFehlerChecked1(false);
+    setManualFehlerChecked2(false);
+    setManualFehlerChecked3(false);
   };
 
   // Handlers
@@ -131,6 +147,11 @@ function App() {
   const handleKulanzPorto = (val) => setKulanzPorto(val);
   const handleReklamationDate = (e) => setReklamationDate(e.target.value);
   const handleWerkstattDate = (e) => setWerkstattDate(e.target.value);
+  
+  // Manual Fehlerangaben handlers
+  const handleManualFehler1 = (checked) => setManualFehlerChecked1(checked);
+  const handleManualFehler2 = (checked) => setManualFehlerChecked2(checked);
+  const handleManualFehler3 = (checked) => setManualFehlerChecked3(checked);
 
   // Customer handlers
   const handleCustomerSelect = (customer) => {
@@ -820,6 +841,32 @@ function App() {
         yLeft += sectionPad;
       }
     });
+    
+    // Manual Fehlerangaben in PDF
+    if (manualFehler1 || manualFehler2 || manualFehler3) {
+      yLeft += 2; // Add some space before manual entries
+      doc.setFont(undefined, 'normal');
+      
+      if (manualFehler1) {
+        drawCheckbox(doc, leftX + 2, yLeft - 3.5, manualFehlerChecked1);
+        doc.text(manualFehler1, leftX + 8, yLeft);
+        yLeft += linePad;
+      }
+      
+      if (manualFehler2) {
+        drawCheckbox(doc, leftX + 2, yLeft - 3.5, manualFehlerChecked2);
+        doc.text(manualFehler2, leftX + 8, yLeft);
+        yLeft += linePad;
+      }
+      
+      if (manualFehler3) {
+        drawCheckbox(doc, leftX + 2, yLeft - 3.5, manualFehlerChecked3);
+        doc.text(manualFehler3, leftX + 8, yLeft);
+        yLeft += linePad;
+      }
+      
+      yLeft += sectionPad;
+    }
     doc.setFont(undefined, 'bold');
     doc.text('Verfahren:', leftX, yLeft);
     doc.setFont(undefined, 'normal');
@@ -1517,6 +1564,81 @@ function App() {
                     <input type="checkbox" checked={!!fehler[f]} onChange={() => handleFehler(f)} disabled={isDisabled} /> {f}
                   </label>
                 ))}
+                
+                {/* Manual Fehlerangaben Entries */}
+                <div style={{ marginTop: '8px', borderTop: '1px solid #e0e0e0', paddingTop: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={manualFehlerChecked1} 
+                      onChange={(e) => handleManualFehler1(e.target.checked)} 
+                      disabled={isDisabled}
+                      style={{ alignSelf: 'center' }}
+                    />
+                    <input
+                      type="text"
+                      value={manualFehler1}
+                      onChange={(e) => setManualFehler1(e.target.value)}
+                      placeholder="Manuelle Fehlerangabe 1"
+                      style={{
+                        flex: 1,
+                        padding: '4px 8px',
+                        border: '1px solid #e1e5e9',
+                        borderRadius: '4px',
+                        fontSize: '14px',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={manualFehlerChecked2} 
+                      onChange={(e) => handleManualFehler2(e.target.checked)} 
+                      disabled={isDisabled}
+                      style={{ alignSelf: 'center' }}
+                    />
+                    <input
+                      type="text"
+                      value={manualFehler2}
+                      onChange={(e) => setManualFehler2(e.target.value)}
+                      placeholder="Manuelle Fehlerangabe 2"
+                      style={{
+                        flex: 1,
+                        padding: '4px 8px',
+                        border: '1px solid #e1e5e9',
+                        borderRadius: '4px',
+                        fontSize: '14px',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={manualFehlerChecked3} 
+                      onChange={(e) => handleManualFehler3(e.target.checked)} 
+                      disabled={isDisabled}
+                      style={{ alignSelf: 'center' }}
+                    />
+                    <input
+                      type="text"
+                      value={manualFehler3}
+                      onChange={(e) => setManualFehler3(e.target.value)}
+                      placeholder="Manuelle Fehlerangabe 3"
+                      style={{
+                        flex: 1,
+                        padding: '4px 8px',
+                        border: '1px solid #e1e5e9',
+                        borderRadius: '4px',
+                        fontSize: '14px',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
             <div style={boxStyle}>
