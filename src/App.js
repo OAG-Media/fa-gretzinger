@@ -649,52 +649,49 @@ function App() {
   // PDF Export function
   const handlePdfExport = () => {
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const zeile = 12;
     // Header
     doc.setFont('helvetica', '');
-    doc.setFontSize(10);
-    doc.text('HG Gretzinger UG, Hörgeräteservice', 10, 12);
-    doc.text('Gibitzenhofstr. 86', 10, 17);
-    doc.text('90443 Nürnberg', 10, 22);
-    doc.text('Homepage: www.Fa-Gretzinger.de', 10, 27);
-    doc.text('E-Mail: Fa.Gretzinger@t-online.de', 10, 32);
-    doc.text('Tel. +49 (0)911 / 540 49 44, Fax.: 540 49 46', 10, 37);
+    doc.setFontSize(8);
+    doc.text('HG Gretzinger UG, Hörgeräteservice', 10, zeile);
+    doc.text('Gibitzenhofstr. 86', 10, zeile+4);
+    doc.text('90443 Nürnberg', 10, zeile+8);
+    doc.text('Homepage: www.Fa-Gretzinger.de', 10, zeile+12);
+    doc.text('E-Mail: Fa.Gretzinger@t-online.de', 10, zeile+16);
+    doc.text('Tel. +49 (0)911 / 540 49 44, Fax.: 540 49 46', 10, zeile +20);
     doc.addImage('https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png', 'PNG', 155, 8, 35, 16);
-    doc.setLineWidth(0.3);
-    doc.line(10, 40, 200, 40);
+    doc.setLineWidth(0.2);
+    doc.line(10, zeile+24, 200, zeile+24);
 
-    // Workshop Date Section (Top Right)
-    if (werkstattDate) {
-      doc.setFontSize(10);
-      doc.setFont(undefined, 'bold');
-      doc.text('gesendet an die Werkstatt:', 120, 45);
-      doc.setFont(undefined, 'normal');
-      
-      // Format date as DD.MM.YYYY
-      const [yyyy, mm, dd] = werkstattDate.split('-');
-      doc.text(`${dd}.${mm}.${yyyy}`, 120, 50);
-    }
+
 
     // Customer Information Section
     if (selectedCustomer) {
-      doc.setFontSize(10);
+      doc.setFontSize(8);
       doc.setFont(undefined, 'bold');
-      doc.text('Akustikername / Absender bzw. Firmenstempel:', 10, 45);
+      doc.text('Akustikername / Absender bzw. Firmenstempel:', 10, zeile+28);
       doc.setFont(undefined, 'normal');
-      doc.text(selectedCustomer.company, 10, 50);
-      doc.text(selectedCustomer.street, 10, 55);
-      doc.text(`${selectedCustomer.location}, ${selectedCustomer.country}`, 10, 60);
+      doc.text(selectedCustomer.company, 10, zeile+32);
+      doc.text(selectedCustomer.street, 10, zeile+36);
+      doc.text(`${selectedCustomer.location}, ${selectedCustomer.country}`, 10, zeile+40);
     }
 
     // Title
+    const repauftrag = zeile + 50;
+
     doc.setFontSize(22);
     doc.setFont(undefined, 'bold');
-    doc.text('Reparaturauftrag', 105, 70, { align: 'center' });
+    doc.text('Reparaturauftrag', 105, repauftrag, { align: 'center' });
     doc.setFontSize(12);
     doc.setFont(undefined, 'normal');
+
+
     
-    // Repair Order Details Table
-    let y = 80;
-    if (kommission || hersteller || geraetetyp || seriennummer || werkstatteingang || zubehoer) {
+    
+    // Repair Order Details Table - Always show with fixed length
+    let y = repauftrag + 8;
+    // Always show the table, even if empty (will show dashes)
+    {
       doc.setFontSize(10);
       doc.setFont(undefined, 'bold');
       
@@ -728,42 +725,57 @@ function App() {
       doc.text('Werkstatteingang', startX + colWidth * 4, tableY);
       doc.text('Zubehör', startX + colWidth * 5, tableY);
       
-      // Data row with padding
+      // Data row with padding - always show with fixed length and dashes for empty fields
       doc.setFont(undefined, 'normal');
-      doc.text(kommission || '', startX, tableY + 8);
-      doc.text(hersteller || '', startX + colWidth, tableY + 8);
-      doc.text(geraetetyp || '', startX + colWidth * 2, tableY + 8);
-      doc.text(seriennummer || '', startX + colWidth * 3, tableY + 8);
+      doc.text(kommission || '-', startX, tableY + 8);
+      doc.text(hersteller || '-', startX + colWidth, tableY + 8);
+      doc.text(geraetetyp || '-', startX + colWidth * 2, tableY + 8);
+      doc.text(seriennummer || '-', startX + colWidth * 3, tableY + 8);
       
       // Format date for Werkstatteingang
-      let werkstatteingangFormatted = '';
+      let werkstatteingangFormatted = '-';
       if (werkstatteingang) {
         const [yyyy, mm, dd] = werkstatteingang.split('-');
         werkstatteingangFormatted = `${dd}.${mm}.${yyyy}`;
       }
       doc.text(werkstatteingangFormatted, startX + colWidth * 4, tableY + 8);
-      doc.text(zubehoer || '', startX + colWidth * 5, tableY + 8);
+      doc.text(zubehoer || '-', startX + colWidth * 5, tableY + 8);
       
       // Workshop Notes
       if (kvDate || perMethod || werkstattNotiz) {
+        doc.setFontSize(8);
         let notesY = tableY + 15;
         doc.setFont(undefined, 'bold');
-        doc.text('Rep. werkstatt Notiz: KV am:', startX, notesY);
+        doc.text('Rep. werkstatt Notiz: KV am:', startX-1, notesY);
         doc.setFont(undefined, 'normal');
         
         if (kvDate) {
           const [yyyy, mm, dd] = kvDate.split('-');
-          doc.text(` ${dd}.${mm}.${yyyy}`, startX + 45, notesY);
+          doc.text(` ${dd}.${mm}.${yyyy}`, startX + 35, notesY);
         }
+
+                // Workshop Date Section (Top Right)
+                if (werkstattDate) {
+                  doc.setFontSize(8);
+                  doc.setFont(undefined, 'bold');
+                  doc.text('gesendet an die Werkstatt:', 140, notesY);
+                  doc.setFont(undefined, 'normal');
+                  
+                  // Format date as DD.MM.YYYY
+                  const [yyyy, mm, dd] = werkstattDate.split('-');
+                  doc.setFontSize(8);
+                  doc.text(`${dd}.${mm}.${yyyy}`, 175, notesY);
+                }
         
+        doc.setFontSize(8);
         doc.setFont(undefined, 'bold');
-        doc.text('per:', startX + 70, notesY);
+        doc.text('per:', startX + 55, notesY);
         doc.setFont(undefined, 'normal');
-        doc.text(perMethod || '', startX + 80, notesY);
+        doc.text(perMethod || '', startX + 61, notesY);
         
-        if (werkstattNotiz) {
-          doc.text(werkstattNotiz, startX + 100, notesY);
-        }
+        //if (werkstattNotiz) {
+        //  doc.text(werkstattNotiz, startX + 100, notesY);
+        //}
       }
       
       y = tableY + 10; // Reduced margin below heading only
@@ -933,8 +945,8 @@ function App() {
     doc.setFontSize(14);
     doc.text(`Nettopreis: ${net.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 10, pricingY, { align: 'right' });
     doc.setFont(undefined, 'normal');
-    doc.setFontSize(10);
-    doc.text(`+ Porto & Verpackung: ${porto.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 10, pricingY + 6, { align: 'right' });
+    doc.setFontSize(8);
+    doc.text(`inkl. Porto & Verpackung: ${porto.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 10, pricingY + 6, { align: 'right' });
 
     // Notizen section at the bottom (only if there are notes)
     if (werkstattNotiz && werkstattNotiz.trim() !== '') {
@@ -1448,22 +1460,7 @@ function App() {
                   <option value="Mail">Mail</option>
                 </select>
               </div>
-              <div>
-                <input
-                  type="text"
-                  value={werkstattNotiz}
-                  onChange={(e) => setWerkstattNotiz(e.target.value)}
-                  placeholder="Weitere Notizen..."
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #e1e5e9',
-                    borderRadius: '4px',
-                    fontSize: '14px',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
+
             </div>
           </div>
         </div>
@@ -1552,6 +1549,28 @@ function App() {
                   </label>
                 </div>
               </div>
+            </div>
+            
+            {/* Notizen Section - Moved below Verfahren */}
+            <div style={boxStyle}>
+              <div style={{ fontWeight: 600, marginBottom: 8, textAlign: 'left' }}>Notizen:</div>
+              <textarea
+                value={werkstattNotiz}
+                onChange={(e) => setWerkstattNotiz(e.target.value)}
+                placeholder="Weitere Notizen..."
+                style={{
+                  width: '100%',
+                  minHeight: '120px',
+                  padding: '12px',
+                  border: '1px solid #e1e5e9',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  fontFamily: 'Arial, sans-serif',
+                  resize: 'vertical',
+                  boxSizing: 'border-box',
+                  lineHeight: '1.4'
+                }}
+              />
             </div>
           </div>
           {/* Right column */}
