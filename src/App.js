@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import './App.css';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -1059,14 +1059,17 @@ function App() {
 
   return (
     <Router>
-      <div 
+            <div 
         className="App" 
         style={{ fontFamily: 'Arial, sans-serif', background: '#fff', minHeight: '100vh' }}
       >
-      <header style={{ display: 'flex', alignItems: 'center', padding: '2rem 1rem 1rem 1rem', borderBottom: '1px solid #eee' }}>
-        <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 80, marginRight: 24 }} />
-        <h1 style={{ fontWeight: 400, color: '#1d426a', fontSize: '2rem', margin: 0 }}>Reparaturauftrag</h1>
-      </header>
+        <Routes>
+          <Route path="/" element={
+            <>
+              <header style={{ display: 'flex', alignItems: 'center', padding: '2rem 1rem 1rem 1rem', borderBottom: '1px solid #eee' }}>
+                <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 80, marginRight: 24 }} />
+                <h1 style={{ fontWeight: 400, color: '#1d426a', fontSize: '2rem', margin: 0 }}>Reparaturauftrag</h1>
+              </header>
       
       {/* Customer Selection Section */}
       <div style={{
@@ -1859,9 +1862,12 @@ function App() {
           </button>
         </div>
       </div>
-    </div>
-      </Router>
-    );
+            </>
+          } />
+        </Routes>
+      </div>
+    </Router>
+  );
 }
 
 export default App;
