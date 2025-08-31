@@ -59,6 +59,44 @@ const ARBEITEN = [
   { key: 'endkontrolle', label: 'Endkontrolle', price: 3.0 },
 ];
 
+// Dashboard Component - You'll actually see this!
+const Dashboard = ({ setIsLoggedIn }) => {
+  return (
+    <div style={{ padding: '2rem', textAlign: 'center' }}>
+      <h1 style={{ color: '#1d426a', marginBottom: '2rem' }}>Gretzinger Hörgeräte Dashboard</h1>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '2rem', maxWidth: '800px', margin: '0 auto' }}>
+        <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '1.2rem 1.5rem', boxShadow: '0 1px 4px #0001' }}>
+          <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Akustiker</h3>
+          <p style={{ color: '#666', marginBottom: '1rem' }}>Kunden verwalten und bearbeiten</p>
+          <button style={{ padding: '10px 20px', background: '#1d426a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+            Akustiker öffnen
+          </button>
+        </div>
+        <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '1.2rem 1.5rem', boxShadow: '0 1px 4px #0001' }}>
+          <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Reperaturauftrag erstellen</h3>
+          <p style={{ color: '#666', marginBottom: '1rem' }}>Neuen Reparaturauftrag anlegen</p>
+          <button style={{ padding: '10px 20px', background: '#1d426a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+            Reperaturauftrag erstellen
+          </button>
+        </div>
+        <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '1.2rem 1.5rem', boxShadow: '0 1px 4px #0001' }}>
+          <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Erstellte Reperaturaufträge</h3>
+          <p style={{ color: '#666', marginBottom: '1rem' }}>Alle Reparaturaufträge anzeigen</p>
+          <button style={{ padding: '10px 20px', background: '#1d426a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+            Reperaturaufträge anzeigen
+          </button>
+        </div>
+      </div>
+      <button 
+        onClick={() => setIsLoggedIn(false)} 
+        style={{ marginTop: '2rem', padding: '8px 18px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+      >
+        Abmelden
+      </button>
+    </div>
+  );
+};
+
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
@@ -1064,7 +1102,8 @@ function App() {
         style={{ fontFamily: 'Arial, sans-serif', background: '#fff', minHeight: '100vh' }}
       >
         <Routes>
-          <Route path="/" element={
+          <Route path="/" element={<Dashboard setIsLoggedIn={setIsLoggedIn} />} />
+          <Route path="/reperaturauftrag" element={
             <>
               <header style={{ display: 'flex', alignItems: 'center', padding: '2rem 1rem 1rem 1rem', borderBottom: '1px solid #eee' }}>
                 <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 80, marginRight: 24 }} />
