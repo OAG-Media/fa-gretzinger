@@ -106,10 +106,199 @@ const Dashboard = ({ setIsLoggedIn, navigate }) => {
   );
 };
 
+// Add New Akustiker Modal Component
+const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkustiker }) => {
+  if (!isOpen) return null;
+  
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSubmit();
+  };
+  
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 2000
+    }}>
+      <div style={{
+        background: 'white',
+        borderRadius: '8px',
+        padding: '2rem',
+        width: '90%',
+        maxWidth: '500px',
+        maxHeight: '90vh',
+        overflowY: 'auto'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <h2 style={{ margin: 0, color: '#1d426a' }}>Neuen Akustiker anlegen</h2>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: '24px',
+              cursor: 'pointer',
+              color: '#666'
+            }}
+          >
+            ×
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+              Filiale *
+            </label>
+            <input
+              type="text"
+              value={newAkustiker.branch}
+              onChange={(e) => setNewAkustiker(prev => ({ ...prev, branch: e.target.value }))}
+              required
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+          
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+              Firma *
+            </label>
+            <input
+              type="text"
+              value={newAkustiker.company}
+              onChange={(e) => setNewAkustiker(prev => ({ ...prev, company: e.target.value }))}
+              required
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+          
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+              Straße *
+            </label>
+            <input
+              type="text"
+              value={newAkustiker.street}
+              onChange={(e) => setNewAkustiker(prev => ({ ...prev, street: e.target.value }))}
+              required
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+          
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+              Ort *
+            </label>
+            <input
+              type="text"
+              value={newAkustiker.location}
+              onChange={(e) => setNewAkustiker(prev => ({ ...prev, location: e.target.value }))}
+              required
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+          
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+              Land *
+            </label>
+            <select
+              value={newAkustiker.country}
+              onChange={(e) => setNewAkustiker(prev => ({ ...prev, country: e.target.value }))}
+              required
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                boxSizing: 'border-box'
+              }}
+            >
+              <option value="DE">Deutschland</option>
+              <option value="AT">Österreich</option>
+            </select>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: '10px 20px',
+                background: '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer'
+              }}
+            >
+              Abbrechen
+            </button>
+            <button
+              type="submit"
+              style={{
+                padding: '10px 20px',
+                background: '#28a745',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer'
+              }}
+            >
+              Akustiker anlegen
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 // Wrapper component that can use useNavigate hook
 function AppContent() {
   const navigate = useNavigate();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    // Check localStorage on component mount
+    const savedLoginState = localStorage.getItem('isLoggedIn');
+    return savedLoginState === 'true';
+  });
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -151,6 +340,16 @@ function AppContent() {
   
   // IDO/HDO State for Arbeitszeit pricing
   const [idoHdo, setIdoHdo] = useState('IDO');
+  
+  // Add New Akustiker Modal State
+  const [showAddAkustikerModal, setShowAddAkustikerModal] = useState(false);
+  const [newAkustiker, setNewAkustiker] = useState({
+    branch: '',
+    company: '',
+    street: '',
+    location: '',
+    country: 'DE'
+  });
 
   // Logic for disabling all fields if not 'Reparatur laut KV durchführen' or if Verfahren disables fields
   const verfahrenDisables = bottom === 'garantie' || bottom === 'reklamation' || bottom === 'kulanz';
@@ -203,6 +402,56 @@ function AppContent() {
   const handleKulanzPorto = (val) => setKulanzPorto(val);
   const handleReklamationDate = (e) => setReklamationDate(e.target.value);
   const handleWerkstattDate = (e) => setWerkstattDate(e.target.value);
+  
+  // Add New Akustiker handler
+  const handleAddAkustiker = async () => {
+    try {
+      // Check for duplicate (exact match: name + branch + street)
+      const isDuplicate = customers.some(customer => 
+        customer.company === newAkustiker.company &&
+        customer.branch === newAkustiker.branch &&
+        customer.street === newAkustiker.street
+      );
+      
+      if (isDuplicate) {
+        alert('Dieser Akustiker befindet sich bereits in der Datenbank');
+        return;
+      }
+      
+      // Add to Supabase
+      const { data, error } = await supabase
+        .from('customers')
+        .insert([{
+          branch: newAkustiker.branch,
+          company: newAkustiker.company,
+          street: newAkustiker.street,
+          location: newAkustiker.location,
+          country: newAkustiker.country === 'DE' ? 'Deutschland' : 'Österreich',
+          contact_person: ''
+        }]);
+      
+      if (error) throw error;
+      
+      // Refresh customers list
+      await loadCustomers();
+      
+      // Reset form and close modal
+      setNewAkustiker({
+        branch: '',
+        company: '',
+        street: '',
+        location: '',
+        country: 'DE'
+      });
+      setShowAddAkustikerModal(false);
+      
+      alert('Akustiker erfolgreich angelegt!');
+      
+    } catch (error) {
+      console.error('Error adding akustiker:', error);
+      alert('Fehler beim Anlegen des Akustikers');
+    }
+  };
   
   // Manual Fehlerangaben handlers
   const handleManualFehler1 = (checked) => setManualFehlerChecked1(checked);
@@ -308,8 +557,7 @@ function AppContent() {
   });
 
   // Load customers from Supabase
-  useEffect(() => {
-    const loadCustomers = async () => {
+  const loadCustomers = async () => {
       try {
         // Load all customers from Supabase
         const { data, error } = await supabase.from('customers').select('*');
@@ -514,9 +762,11 @@ function AppContent() {
         setCustomers(fallbackCustomers);
       }
     };
-
-    loadCustomers();
-  }, []);
+    
+    // Load customers on component mount
+    useEffect(() => {
+      loadCustomers();
+    }, []);
 
   // Click outside handler for dropdowns
   useEffect(() => {
@@ -536,6 +786,7 @@ function AppContent() {
     e.preventDefault();
     if (loginEmail === 'Fa.Gretzinger@t-online.de' && loginPassword === 'GretBrunn2025!') {
       setIsLoggedIn(true);
+      localStorage.setItem('isLoggedIn', 'true');
       setLoginError('');
     } else {
       setLoginError('Ungültige Anmeldedaten');
@@ -545,6 +796,7 @@ function AppContent() {
   // Logout handler
   const handleLogout = () => {
     setIsLoggedIn(false);
+    localStorage.removeItem('isLoggedIn');
     setLoginEmail('');
     setLoginPassword('');
   };
@@ -1161,8 +1413,27 @@ function AppContent() {
           padding: '1.5rem',
           boxShadow: '0 1px 4px #0001'
         }}>
-          <div style={{ fontWeight: 600, marginBottom: '1rem', color: '#1d426a' }}>
-            Kunde auswählen:
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <div style={{ fontWeight: 600, color: '#1d426a' }}>
+              Kunde auswählen:
+            </div>
+            <button
+              onClick={() => setShowAddAkustikerModal(true)}
+              style={{
+                padding: '8px 16px',
+                background: '#28a745',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <span>+</span> Neuen Akustiker anlegen
+            </button>
           </div>
           
           {/* Company Selection */}
@@ -1919,6 +2190,16 @@ function AppContent() {
             </div>
           </div>
         </form>
+        
+        {/* Add New Akustiker Modal */}
+        <AddAkustikerModal
+          isOpen={showAddAkustikerModal}
+          onClose={() => setShowAddAkustikerModal(false)}
+          onSubmit={handleAddAkustiker}
+          newAkustiker={newAkustiker}
+          setNewAkustiker={setNewAkustiker}
+        />
+        
         {/* Bottom row: PDF Export button right-aligned */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <button
