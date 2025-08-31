@@ -106,6 +106,284 @@ const Dashboard = ({ setIsLoggedIn, navigate }) => {
   );
 };
 
+// Akustiker Management Page Component
+const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerModal, newAkustiker, setNewAkustiker, handleAddAkustiker, navigate }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('name'); // 'name', 'street', 'location'
+  const [sortOrder, setSortOrder] = useState('asc'); // 'asc', 'desc'
+  
+  // Filter and sort customers
+  const filteredAndSortedCustomers = customers
+    .filter(customer => {
+      if (!searchTerm.trim()) return true;
+      const search = searchTerm.toLowerCase();
+      return (
+        customer.company?.toLowerCase().includes(search) ||
+        customer.branch?.toLowerCase().includes(search) ||
+        customer.street?.toLowerCase().includes(search) ||
+        customer.location?.toLowerCase().includes(search) ||
+        customer.country?.toLowerCase().includes(search) ||
+        customer.contact_person?.toLowerCase().includes(search)
+      );
+    })
+    .sort((a, b) => {
+      let aValue, bValue;
+      
+      switch (sortBy) {
+        case 'name':
+          aValue = (a.company || '') + (a.branch || '');
+          bValue = (b.company || '') + (b.branch || '');
+          break;
+        case 'street':
+          aValue = a.street || '';
+          bValue = b.street || '';
+          break;
+        case 'location':
+          aValue = a.location || '';
+          bValue = b.location || '';
+          break;
+        default:
+          aValue = (a.company || '') + (a.branch || '');
+          bValue = (b.company || '') + (b.branch || '');
+      }
+      
+      if (sortOrder === 'asc') {
+        return aValue.localeCompare(bValue);
+      } else {
+        return bValue.localeCompare(aValue);
+      }
+    });
+
+  return (
+    <div style={{ fontFamily: 'Arial, sans-serif', background: '#fff', minHeight: '100vh' }}>
+      {/* Header */}
+      <header style={{ display: 'flex', alignItems: 'center', padding: '2rem 1rem 1rem 1rem', borderBottom: '1px solid #eee' }}>
+        <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 80, marginRight: 24 }} />
+        <h1 style={{ fontWeight: 400, color: '#1d426a', fontSize: '2rem', margin: 0 }}>Akustiker Verwaltung</h1>
+      </header>
+      
+      {/* Breadcrumbs */}
+      <div style={{ padding: '1rem 1rem 0.5rem 1rem', borderBottom: '1px solid #f0f0f0' }}>
+        <nav style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '14px', color: '#666' }}>
+          <button 
+            onClick={() => navigate('/')}
+            style={{ 
+              background: 'none', 
+              border: 'none', 
+              color: '#1d426a', 
+              cursor: 'pointer', 
+              textDecoration: 'underline',
+              fontSize: '14px',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = '#f0f0f0'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+          >
+            Startseite
+          </button>
+          <span style={{ color: '#999' }}>/</span>
+          <span style={{ color: '#333', fontWeight: '500' }}>Akustiker</span>
+        </nav>
+      </div>
+
+      {/* Main Content */}
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '2rem' }}>
+        {/* Search and Controls */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            {/* Search */}
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                placeholder="Suche nach Name, Straße, Ort..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  padding: '10px 16px',
+                  border: '2px solid #e1e5e9',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  width: '300px',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            
+            {/* Sort Controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '14px', color: '#666' }}>Sortieren nach:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  border: '2px solid #e1e5e9',
+                  borderRadius: '6px',
+                  fontSize: '14px'
+                }}
+              >
+                <option value="name">Name</option>
+                <option value="street">Straße</option>
+                <option value="location">Ort</option>
+              </select>
+              <button
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                style={{
+                  padding: '8px 12px',
+                  background: '#1d426a',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                {sortOrder === 'asc' ? '↑' : '↓'}
+              </button>
+            </div>
+          </div>
+          
+          {/* Add New Akustiker Button */}
+          <button
+            onClick={() => setShowAddAkustikerModal(true)}
+            style={{
+              padding: '12px 24px',
+              background: '#28a745',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: '500',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            }}
+          >
+            <span style={{ fontSize: '20px' }}>+</span>
+            Neuen Akustiker anlegen
+          </button>
+        </div>
+
+        {/* Results Count */}
+        <div style={{ marginBottom: '1rem', color: '#666', fontSize: '14px' }}>
+          {filteredAndSortedCustomers.length} von {customers.length} Akustikern gefunden
+        </div>
+
+        {/* Akustiker List */}
+        <div style={{ background: 'white', borderRadius: '8px', border: '1px solid #e0e0e0', overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #dee2e6' }}>
+                <th style={{ padding: '16px', textAlign: 'left', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
+                  Filiale
+                </th>
+                <th style={{ padding: '16px', textAlign: 'left', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
+                  Firma
+                </th>
+                <th style={{ padding: '16px', textAlign: 'left', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
+                  Ansprechpartner
+                </th>
+                <th style={{ padding: '16px', textAlign: 'left', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
+                  Straße
+                </th>
+                <th style={{ padding: '16px', textAlign: 'left', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
+                  Ort
+                </th>
+                <th style={{ padding: '16px', textAlign: 'left', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
+                  Land
+                </th>
+                <th style={{ padding: '16px', textAlign: 'center', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
+                  Aktionen
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredAndSortedCustomers.map((customer, index) => (
+                <tr 
+                  key={customer.id || index}
+                  style={{ 
+                    borderBottom: '1px solid #f0f0f0',
+                    backgroundColor: index % 2 === 0 ? '#fff' : '#f8f9fa'
+                  }}
+                >
+                  <td style={{ padding: '16px', fontSize: '14px', color: '#333' }}>
+                    {customer.branch || '-'}
+                  </td>
+                  <td style={{ padding: '16px', fontSize: '14px', color: '#333', fontWeight: '500' }}>
+                    {customer.company || '-'}
+                  </td>
+                  <td style={{ padding: '16px', fontSize: '14px', color: '#666' }}>
+                    {customer.contact_person || '-'}
+                  </td>
+                  <td style={{ padding: '16px', fontSize: '14px', color: '#333' }}>
+                    {customer.street || '-'}
+                  </td>
+                  <td style={{ padding: '16px', fontSize: '14px', color: '#333' }}>
+                    {customer.location || '-'}
+                  </td>
+                  <td style={{ padding: '16px', fontSize: '14px', color: '#333' }}>
+                    {customer.country || '-'}
+                  </td>
+                  <td style={{ padding: '16px', textAlign: 'center' }}>
+                    <button
+                      style={{
+                        padding: '6px 12px',
+                        background: '#1d426a',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        marginRight: '8px'
+                      }}
+                      onClick={() => {
+                        // TODO: Navigate to customer detail page
+                        console.log('Edit customer:', customer);
+                      }}
+                    >
+                      ✏️ Bearbeiten
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Empty State */}
+        {filteredAndSortedCustomers.length === 0 && (
+          <div style={{ 
+            textAlign: 'center', 
+            padding: '3rem', 
+            color: '#666',
+            background: '#f8f9fa',
+            borderRadius: '8px',
+            border: '1px solid #e0e0e0'
+          }}>
+            <div style={{ fontSize: '18px', marginBottom: '0.5rem' }}>Keine Akustiker gefunden</div>
+            <div style={{ fontSize: '14px' }}>
+              {searchTerm ? 'Versuchen Sie einen anderen Suchbegriff.' : 'Fügen Sie den ersten Akustiker hinzu.'}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Add New Akustiker Modal */}
+      <AddAkustikerModal
+        isOpen={showAddAkustikerModal}
+        onClose={() => setShowAddAkustikerModal(false)}
+        onSubmit={handleAddAkustiker}
+        newAkustiker={newAkustiker}
+        setNewAkustiker={setNewAkustiker}
+      />
+    </div>
+  );
+};
+
 // Add New Akustiker Modal Component
 const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkustiker }) => {
   if (!isOpen) return null;
@@ -1365,6 +1643,7 @@ function AppContent() {
     >
       <Routes>
         <Route path="/" element={<Dashboard setIsLoggedIn={setIsLoggedIn} navigate={navigate} />} />
+        <Route path="/akustiker" element={<AkustikerPage customers={customers} setShowAddAkustikerModal={setShowAddAkustikerModal} showAddAkustikerModal={showAddAkustikerModal} newAkustiker={newAkustiker} setNewAkustiker={setNewAkustiker} handleAddAkustiker={handleAddAkustiker} navigate={navigate} />} />
         <Route path="/reperaturauftrag" element={
             <>
               <header style={{ display: 'flex', alignItems: 'center', padding: '2rem 1rem 1rem 1rem', borderBottom: '1px solid #eee' }}>
