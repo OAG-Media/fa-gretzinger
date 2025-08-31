@@ -559,14 +559,15 @@ function App() {
   // If not logged in, show login form
   if (!isLoggedIn) {
     return (
-      <div style={{ 
-        minHeight: '100vh', 
-        background: 'linear-gradient(135deg, #1d426a 0%, #2a5a8a 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '20px'
-      }}>
+      <Router>
+        <div style={{ 
+          minHeight: '100vh', 
+          background: 'linear-gradient(135deg, #1d426a 0%, #2a5a8a 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
         <div style={{
           background: 'white',
           borderRadius: '12px',
