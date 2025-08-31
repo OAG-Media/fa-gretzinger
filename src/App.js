@@ -98,6 +98,9 @@ function App() {
   const [manualFehlerChecked1, setManualFehlerChecked1] = useState(false);
   const [manualFehlerChecked2, setManualFehlerChecked2] = useState(false);
   const [manualFehlerChecked3, setManualFehlerChecked3] = useState(false);
+  
+  // IDO/HDO State for Arbeitszeit pricing
+  const [idoHdo, setIdoHdo] = useState('IDO');
 
   // Logic for disabling all fields if not 'Reparatur laut KV durchführen' or if Verfahren disables fields
   const verfahrenDisables = bottom === 'garantie' || bottom === 'reklamation' || bottom === 'kulanz';
@@ -127,6 +130,9 @@ function App() {
     setManualFehlerChecked1(false);
     setManualFehlerChecked2(false);
     setManualFehlerChecked3(false);
+    
+    // Reset IDO/HDO to default
+    setIdoHdo('IDO');
   };
 
   // Handlers
@@ -152,6 +158,9 @@ function App() {
   const handleManualFehler1 = (checked) => setManualFehlerChecked1(checked);
   const handleManualFehler2 = (checked) => setManualFehlerChecked2(checked);
   const handleManualFehler3 = (checked) => setManualFehlerChecked3(checked);
+  
+  // IDO/HDO handler
+  const handleIdoHdo = (val) => setIdoHdo(val);
 
   // Customer handlers
   const handleCustomerSelect = (customer) => {
@@ -632,6 +641,16 @@ function App() {
   let net = 0;
   let porto = countryObj ? countryObj.porto : 0;
   let arbeitszeit = countryObj ? countryObj.arbeitszeit : 0;
+  
+  // Apply IDO/HDO pricing for Germany only
+  if (country === 'DE') {
+    if (idoHdo === 'IDO') {
+      arbeitszeit = 22.0;
+    } else if (idoHdo === 'HDO') {
+      arbeitszeit = 26.0;
+    }
+  }
+  // Austria always uses 26.0 (unchanged)
 
   // Apply Porto toggle for all procedure types
   if (kulanzPorto === 'nein') {
@@ -667,38 +686,48 @@ function App() {
     net = porto;
   }
 
+//--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------- PDF - Export ---------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
   // PDF Export function
   const handlePdfExport = () => {
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
     const zeile = 12;
+    const leftX = 10;
+    const leftxRow = 65;
     // Header
     doc.setFont('helvetica', '');
     doc.setFontSize(8);
-    doc.text('HG Gretzinger UG, Hörgeräteservice', 10, zeile);
-    doc.text('Gibitzenhofstr. 86', 10, zeile+4);
-    doc.text('90443 Nürnberg', 10, zeile+8);
-    doc.text('Homepage: www.Fa-Gretzinger.de', 10, zeile+12);
-    doc.text('E-Mail: Fa.Gretzinger@t-online.de', 10, zeile+16);
-    doc.text('Tel. +49 (0)911 / 540 49 44, Fax.: 540 49 46', 10, zeile +20);
-    doc.addImage('https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png', 'PNG', 155, 8, 35, 16);
+    doc.text('HG Gretzinger UG, Hörgeräteservice', leftX, zeile);
+    doc.text('Gibitzenhofstr. 86', leftX, zeile+4);
+    doc.text('90443 Nürnberg', leftX, zeile+8);
+    doc.text('Homepage: www.Fa-Gretzinger.de', leftxRow, zeile);
+    doc.text('E-Mail: Fa.Gretzinger@t-online.de', leftxRow, zeile+4);
+    doc.text('Tel. +49 (0)911 / 540 49 44, Fax.: 540 49 46', leftxRow, zeile +8);
+    doc.addImage('https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png', 'PNG', 165, 8, 33, 14);
     doc.setLineWidth(0.2);
-    doc.line(10, zeile+24, 200, zeile+24);
+    doc.line(leftX, zeile+14, 200, zeile+14);
 
 
 
     // Customer Information Section
+    const customerInfo = zeile+20;
     if (selectedCustomer) {
       doc.setFontSize(8);
       doc.setFont(undefined, 'bold');
-      doc.text('Akustikername / Absender bzw. Firmenstempel:', 10, zeile+28);
+      doc.text('Akustikername / Absender bzw. Firmenstempel:', 10, customerInfo);
       doc.setFont(undefined, 'normal');
-      doc.text(selectedCustomer.company, 10, zeile+32);
-      doc.text(selectedCustomer.street, 10, zeile+36);
-      doc.text(`${selectedCustomer.location}, ${selectedCustomer.country}`, 10, zeile+40);
+      doc.text(selectedCustomer.company, 10, customerInfo+4);
+      doc.text(selectedCustomer.street, 10, customerInfo+8);
+      doc.text(`${selectedCustomer.location}, ${selectedCustomer.country}`, 10, customerInfo+12);
     }
 
     // Title
-    const repauftrag = zeile + 50;
+    const repauftrag = customerInfo+17;
 
     doc.setFontSize(22);
     doc.setFont(undefined, 'bold');
@@ -806,8 +835,8 @@ function App() {
     y = Math.max(y, 82); // Keep normal spacing for content sections
 
     // Column positions
-    const leftX = 14;
-    const separatorX = 110; // move separator further right to prevent overlap
+    
+    const separatorX = 100; // move separator further right to prevent overlap
     const rightX = separatorX + 10; // right column starts with more space after separator
     const priceColX = 190; // fixed X for right-aligned prices
     const sectionPad = 4; // Reduced from 8
@@ -815,15 +844,19 @@ function App() {
     const labelPad = 8;
     var startcheckbox = 103;
 
+    var CheckBoxbereich = repauftrag + 32;
+
     // Left column: Freigabe, Fehlerangaben, Verfahren
-    let yLeft = startcheckbox; // Add 4px padding above "Bei Freigabe bitte ankreuzen"
+    let yLeft = CheckBoxbereich; // Add 4px padding above "Bei Freigabe bitte ankreuzen"
     doc.setFont(undefined, 'bold');
-    doc.text('Bei Freigabe bitte ankreuzen:', leftX, yLeft);
+    // doc.text('Bei Freigabe bitte ankreuzen:', leftX, yLeft);
+    doc.text('Bei Freigabe bitte ankreuzen:', leftX, CheckBoxbereich);
     doc.setFont(undefined, 'normal');
     yLeft += linePad + 1;
+    
     FREIGABE_OPTIONS.forEach(opt => {
       const checked = freigabe === opt;
-      drawCheckbox(doc, leftX + 2, yLeft - 3.5, checked);
+    drawCheckbox(doc, leftX + 1, yLeft - 2.5, checked);
       doc.text(opt, leftX + 8, yLeft);
       yLeft += linePad;
     });
@@ -834,7 +867,7 @@ function App() {
     yLeft += linePad + 1;
     FEHLERANGABEN.forEach((f, idx) => {
       const checked = !!fehler[f];
-      drawCheckbox(doc, leftX + 2, yLeft - 3.5, checked);
+      drawCheckbox(doc, leftX + 1, yLeft - 2.5, checked);
       doc.text(f, leftX + 8, yLeft);
       yLeft += linePad; // Fixed: removed the -1 to match other sections
       if (idx === FEHLERANGABEN.length - 1) {
@@ -847,26 +880,30 @@ function App() {
       yLeft += 2; // Add some space before manual entries
       doc.setFont(undefined, 'normal');
       
-      if (manualFehler1) {
-        drawCheckbox(doc, leftX + 2, yLeft - 3.5, manualFehlerChecked1);
-        doc.text(manualFehler1, leftX + 8, yLeft);
+      //if (manualFehler1) {
+        drawCheckbox(doc, leftX+1, yLeft - 8, manualFehlerChecked1);
+        doc.text(manualFehler1, leftX + 8, yLeft - 5);
         yLeft += linePad;
-      }
+      //}
       
-      if (manualFehler2) {
-        drawCheckbox(doc, leftX + 2, yLeft - 3.5, manualFehlerChecked2);
-        doc.text(manualFehler2, leftX + 8, yLeft);
+      //if (manualFehler2) {
+        drawCheckbox(doc, leftX + 1, yLeft - 8, manualFehlerChecked2);
+        doc.text(manualFehler2, leftX + 8, yLeft - 5);
         yLeft += linePad;
-      }
+      //}
       
-      if (manualFehler3) {
-        drawCheckbox(doc, leftX + 2, yLeft - 3.5, manualFehlerChecked3);
-        doc.text(manualFehler3, leftX + 8, yLeft);
-        yLeft += linePad;
-      }
+      //if (manualFehler3) {
+        drawCheckbox(doc, leftX + 1, yLeft - 8, manualFehlerChecked3);
+        doc.text(manualFehler3, leftX + 8, yLeft - 5);
+        //yLeft += linePad;
+      //}
       
-      yLeft += sectionPad;
+      //yLeft += sectionPad;
+      yLeft += 2;
+
     }
+
+
     doc.setFont(undefined, 'bold');
     doc.text('Verfahren:', leftX, yLeft);
     doc.setFont(undefined, 'normal');
@@ -897,15 +934,7 @@ function App() {
       }
       yLeft += linePad;
       
-      // Add Porto ja/nein under "Kostenpflichtige Reparatur"
-      if (opt.value === 'kostenpflichtig' && checked) {
-        yLeft += 1;
-        drawCheckbox(doc, leftX + 10, yLeft - 3.5, kulanzPorto === 'ja');
-        doc.text('Porto ja', leftX + 16, yLeft);
-        drawCheckbox(doc, leftX + 38, yLeft - 3.5, kulanzPorto === 'nein');
-        doc.text('Porto nein', leftX + 44, yLeft);
-        yLeft += linePad;
-      }
+
     });
     if (bottom === 'kulanz') {
       yLeft += 1;
@@ -917,7 +946,7 @@ function App() {
     }
 
     // Right column: Ausgeführte Arbeiten (true 3-column grid)
-    let yRight = startcheckbox;
+    let yRight = CheckBoxbereich;
     doc.setFont(undefined, 'bold');
     doc.text('Ausgeführte Arbeiten:', rightX, yRight);
     doc.setFont(undefined, 'normal');
@@ -966,38 +995,20 @@ function App() {
    // doc.setLineWidth(0.2);
    // doc.line(separatorX, y, separatorX, yRight + 3); // Only go to right column end, not overlapping Verfahren
 
-    // Porto toggle section above pricing
-    const portoToggleY = yRight + 4; // Position above pricing
-    doc.setFont(undefined, 'bold');
-    doc.setFontSize(10);
-    doc.text('Porto & Verpackung:', rightX + 8 + maxLabelWidth + 10, portoToggleY, { align: 'right' });
-    doc.setFont(undefined, 'normal');
-    doc.setFontSize(9);
-    
-    // Draw Porto toggle checkboxes
-    const portoJaX = rightX + 8 + maxLabelWidth - 25;
-    const portoNeinX = rightX + 8 + maxLabelWidth + 15;
-    
-    // Porto ja checkbox
-    drawCheckbox(doc, portoJaX, portoToggleY - 3.5, kulanzPorto === 'ja');
-    doc.text('Porto ja', portoJaX + 6, portoToggleY);
-    
-    // Porto nein checkbox
-    drawCheckbox(doc, portoNeinX, portoToggleY - 3.5, kulanzPorto === 'nein');
-    doc.text('Porto nein', portoNeinX + 6, portoToggleY);
+
     
     // Nettopreis & Porto directly below "Ausgeführte Arbeiten", right-aligned
     const pricingY = yRight + 8; // Position directly below right column
     doc.setFont(undefined, 'bold');
     doc.setFontSize(14);
-    doc.text(`Nettopreis: ${net.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 10, pricingY, { align: 'right' });
+    doc.text(`Nettopreis: ${net.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 35, pricingY, { align: 'right' });
     doc.setFont(undefined, 'normal');
     doc.setFontSize(8);
-    doc.text(`inkl. Porto & Verpackung: ${porto.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 10, pricingY + 6, { align: 'right' });
+    doc.text(`inkl. Porto & Verpackung: ${porto.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 35, pricingY + 6, { align: 'right' });
 
     // Notizen section at the bottom (only if there are notes)
-    if (werkstattNotiz && werkstattNotiz.trim() !== '') {
-      const notizenY = pricingY + 15; // Position below pricing
+    //if (werkstattNotiz && werkstattNotiz.trim() !== '') {
+      const notizenY = pricingY + 30; // Position below pricing
       doc.setFont(undefined, 'bold');
       doc.setFontSize(12);
       doc.text('Notizen:', 10, notizenY);
@@ -1010,8 +1021,8 @@ function App() {
       doc.rect(10, notizenY + 5, 180, 20); // Smaller rectangle for notes
       
       // Add the actual note text
-      doc.text(werkstattNotiz, 15, notizenY + 15);
-    }
+      doc.text(werkstattNotiz, 15, notizenY+10);
+    //}
 
     doc.save('reparaturauftrag.pdf');
   };
@@ -1026,6 +1037,14 @@ function App() {
       doc.setLineWidth(0.2);
     }
   };
+//--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------- Ende PDF-export ------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
 
   // UI
   const boxStyle = {
@@ -1707,6 +1726,35 @@ function App() {
                 </select>
               </div>
             </div>
+            
+            {/* IDO/HDO Selection - Only for Germany */}
+            {country === 'DE' && (
+              <div style={boxStyle}>
+                <div style={{ fontWeight: 600, marginBottom: 8, textAlign: 'left' }}>Arbeitszeit Typ:</div>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input 
+                      type="radio" 
+                      name="idoHdo" 
+                      checked={idoHdo === 'IDO'} 
+                      onChange={() => handleIdoHdo('IDO')}
+                      style={{ margin: 0 }}
+                    /> 
+                    <span style={{ fontSize: 14 }}>IDO (22,00 €)</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input 
+                      type="radio" 
+                      name="idoHdo" 
+                      checked={idoHdo === 'HDO'} 
+                      onChange={() => handleIdoHdo('HDO')}
+                      style={{ margin: 0 }}
+                    /> 
+                    <span style={{ fontSize: 14 }}>HDO (26,00 €)</span>
+                  </label>
+                </div>
+              </div>
+            )}
             <div style={boxStyle}>
               <div style={{ fontWeight: 600, marginBottom: 8, textAlign: 'left' }}>Ausgeführte Arbeiten:</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
