@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import './App.css';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -57,6 +58,62 @@ const ARBEITEN = [
   { key: 'arbeitszeit', label: 'Arbeitszeit', price: 'country' },
   { key: 'endkontrolle', label: 'Endkontrolle', price: 3.0 },
 ];
+
+// Protected Route Component
+const ProtectedRoute = ({ children, isLoggedIn }) => {
+  if (!isLoggedIn) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+};
+
+// Common Styles
+const boxStyle = {
+  background: '#fff',
+  border: '1px solid #e0e0e0',
+  borderRadius: 8,
+  padding: '1.2rem 1.5rem',
+  marginBottom: 20,
+  boxShadow: '0 1px 4px #0001',
+};
+
+// Dashboard Component
+const Dashboard = ({ setIsLoggedIn }) => {
+  return (
+    <div style={{ padding: '2rem', textAlign: 'center' }}>
+      <h1 style={{ color: '#1d426a', marginBottom: '2rem' }}>Gretzinger Hörgeräte Dashboard</h1>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '2rem', maxWidth: '800px', margin: '0 auto' }}>
+        <div style={boxStyle}>
+          <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Akustiker</h3>
+          <p style={{ color: '#666', marginBottom: '1rem' }}>Kunden verwalten und bearbeiten</p>
+          <button style={{ padding: '10px 20px', background: '#1d426a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+            Akustiker öffnen
+          </button>
+        </div>
+        <div style={boxStyle}>
+          <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Reperaturauftrag erstellen</h3>
+          <p style={{ color: '#666', marginBottom: '1rem' }}>Neuen Reparaturauftrag anlegen</p>
+          <button style={{ padding: '10px 20px', background: '#1d426a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+            Reperaturauftrag erstellen
+          </button>
+        </div>
+        <div style={boxStyle}>
+          <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Erstellte Reperaturaufträge</h3>
+          <p style={{ color: '#666', marginBottom: '1rem' }}>Alle Reparaturaufträge anzeigen</p>
+          <button style={{ padding: '10px 20px', background: '#1d426a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+            Reperaturaufträge anzeigen
+          </button>
+        </div>
+      </div>
+      <button 
+        onClick={() => setIsLoggedIn(false)} 
+        style={{ marginTop: '2rem', padding: '8px 18px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+      >
+        Abmelden
+      </button>
+    </div>
+  );
+};
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -1057,14 +1114,69 @@ function App() {
   };
 
   return (
-    <div 
-      className="App" 
-      style={{ fontFamily: 'Arial, sans-serif', background: '#fff', minHeight: '100vh' }}
-    >
-      <header style={{ display: 'flex', alignItems: 'center', padding: '2rem 1rem 1rem 1rem', borderBottom: '1px solid #eee' }}>
-        <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 80, marginRight: 24 }} />
-        <h1 style={{ fontWeight: 400, color: '#1d426a', fontSize: '2rem', margin: 0 }}>Reparaturauftrag</h1>
-      </header>
+    <Router>
+      <div 
+        className="App" 
+        style={{ fontFamily: 'Arial, sans-serif', background: '#fff', minHeight: '100vh' }}
+      >
+        <Routes>
+          <Route path="/login" element={
+            !isLoggedIn ? (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#f5f5f5' }}>
+                <div style={{ background: 'white', padding: '2rem', borderRadius: '8px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', width: '100%', maxWidth: '400px' }}>
+                  <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                    <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 80, marginBottom: '1rem' }} />
+                    <h2 style={{ color: '#1d426a', margin: 0 }}>Anmeldung</h2>
+                  </div>
+                  <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <input
+                      type="email"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      placeholder="E-Mail"
+                      required
+                      style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
+                    />
+                    <input
+                      type="password"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder="Passwort"
+                      required
+                      style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }}
+                    />
+                    {loginError && (
+                      <div style={{ color: '#dc3545', fontSize: '14px', textAlign: 'center' }}>
+                        {loginError}
+                      </div>
+                    )}
+                    <button
+                      type="submit"
+                      style={{ padding: '12px', background: '#1d426a', color: 'white', border: 'none', borderRadius: '4px', fontSize: '16px', cursor: 'pointer' }}
+                    >
+                      Anmelden
+                    </button>
+                  </form>
+                </div>
+              </div>
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )
+          } />
+          
+          <Route path="/dashboard" element={
+            <ProtectedRoute isLoggedIn={isLoggedIn}>
+              <Dashboard setIsLoggedIn={setIsLoggedIn} />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/reperaturauftrag" element={
+            <ProtectedRoute isLoggedIn={isLoggedIn}>
+              <div>
+                <header style={{ display: 'flex', alignItems: 'center', padding: '2rem 1rem 1rem 1rem', borderBottom: '1px solid #eee' }}>
+                  <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 80, marginRight: 24 }} />
+                  <h1 style={{ fontWeight: 400, color: '#1d426a', fontSize: '2rem', margin: 0 }}>Reparaturauftrag</h1>
+                </header>
       
       {/* Customer Selection Section */}
       <div style={{
@@ -1857,8 +1969,17 @@ function App() {
           </button>
         </div>
       </div>
-    </div>
-  );
+                </div>
+              </ProtectedRoute>
+            </Route>
+            
+            <Route path="/" element={
+              <Navigate to={isLoggedIn ? "/dashboard" : "/login"} replace />
+            } />
+          </Routes>
+        </div>
+      </Router>
+    );
 }
 
 export default App;
