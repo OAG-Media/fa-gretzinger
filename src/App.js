@@ -817,6 +817,301 @@ const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkus
   );
 };
 
+// Erstellte Reperaturaufträge Page Component
+const ErstellteReperaturauftragePage = () => {
+  const [repairOrders, setRepairOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState('desc');
+
+  // Load repair orders from Supabase
+  const loadRepairOrders = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('repair_orders')
+        .select(`
+          *,
+          customers (
+            company,
+            branch,
+            street,
+            location,
+            country
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setRepairOrders(data || []);
+    } catch (error) {
+      console.error('Error loading repair orders:', error);
+      alert('Fehler beim Laden der Reparaturaufträge');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRepairOrders();
+  }, []);
+
+  // Filter and sort repair orders
+  const filteredRepairOrders = repairOrders
+    .filter(order => {
+      const searchLower = searchTerm.toLowerCase();
+      return (
+        order.kommission?.toLowerCase().includes(searchLower) ||
+        order.hersteller?.toLowerCase().includes(searchLower) ||
+        order.geraetetyp?.toLowerCase().includes(searchLower) ||
+        order.seriennummer?.toLowerCase().includes(searchLower) ||
+        order.customers?.company?.toLowerCase().includes(searchLower) ||
+        order.customers?.branch?.toLowerCase().includes(searchLower)
+      );
+    })
+    .sort((a, b) => {
+      let aValue = a[sortBy];
+      let bValue = b[sortBy];
+
+      if (sortBy === 'created_at') {
+        aValue = new Date(aValue);
+        bValue = new Date(bValue);
+      }
+
+      if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+  const handleSort = (field) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString('de-DE');
+  };
+
+  const formatPrice = (price) => {
+    if (price === null || price === undefined) return '-';
+    return `${parseFloat(price).toFixed(2).replace('.', ',')} €`;
+  };
+
+  if (loading) {
+    return (
+      <div style={{ padding: '2rem', textAlign: 'center' }}>
+        <div style={{ fontSize: '18px', color: '#666' }}>Lade Reparaturaufträge...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '2rem', maxWidth: 1400, margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <div>
+          <h1 style={{ margin: 0, color: '#1d426a', fontSize: '2rem' }}>Erstellte Reperaturaufträge</h1>
+          <p style={{ margin: '0.5rem 0 0 0', color: '#666' }}>
+            Alle gespeicherten Reparaturaufträge verwalten und einsehen
+          </p>
+        </div>
+        <button
+          onClick={() => window.history.back()}
+          style={{
+            padding: '10px 20px',
+            background: '#6c757d',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }}
+        >
+          ← Zurück
+        </button>
+      </div>
+
+      {/* Search and Sort Controls */}
+      <div style={{ 
+        background: 'white', 
+        border: '1px solid #e0e0e0', 
+        borderRadius: 8, 
+        padding: '1.5rem',
+        marginBottom: '2rem',
+        boxShadow: '0 1px 4px #0001'
+      }}>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Search */}
+          <div style={{ flex: 1, minWidth: 300 }}>
+            <input
+              type="text"
+              placeholder="Suchen nach Kommission, Hersteller, Gerätetyp, Seriennummer, Firma, Filiale..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                border: '1px solid #e1e5e9',
+                borderRadius: '6px',
+                fontSize: '14px',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+
+          {/* Sort */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '14px', color: '#666' }}>Sortieren nach:</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              style={{
+                padding: '8px 12px',
+                border: '1px solid #e1e5e9',
+                borderRadius: '4px',
+                fontSize: '14px'
+              }}
+            >
+              <option value="created_at">Erstellt am</option>
+              <option value="kommission">Kommission</option>
+              <option value="hersteller">Hersteller</option>
+              <option value="nettopreis">Nettopreis</option>
+            </select>
+            <button
+              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+              style={{
+                padding: '8px 12px',
+                background: '#1d426a',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              {sortOrder === 'asc' ? '↑' : '↓'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Repair Orders Table */}
+      <div style={{
+        background: 'white',
+        border: '1px solid #e0e0e0',
+        borderRadius: 8,
+        overflow: 'hidden',
+        boxShadow: '0 1px 4px #0001'
+      }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: '#f8f9fa', borderBottom: '1px solid #e0e0e0' }}>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333', cursor: 'pointer' }}
+                  onClick={() => handleSort('created_at')}>
+                Erstellt am {sortBy === 'created_at' && (sortOrder === 'asc' ? '↑' : '↓')}
+              </th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333', cursor: 'pointer' }}
+                  onClick={() => handleSort('kommission')}>
+                Kommission {sortBy === 'kommission' && (sortOrder === 'asc' ? '↑' : '↓')}
+              </th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Firma</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Filiale</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333', cursor: 'pointer' }}
+                  onClick={() => handleSort('hersteller')}>
+                Hersteller {sortBy === 'hersteller' && (sortOrder === 'asc' ? '↑' : '↓')}
+              </th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Gerätetyp</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Seriennummer</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333', cursor: 'pointer' }}
+                  onClick={() => handleSort('nettopreis')}>
+                Nettopreis {sortOrder === 'nettopreis' && (sortOrder === 'asc' ? '↑' : '↓')}
+              </th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Porto</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredRepairOrders.length === 0 ? (
+              <tr>
+                <td colSpan="11" style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
+                  {searchTerm ? 'Keine Reparaturaufträge gefunden.' : 'Noch keine Reparaturaufträge erstellt.'}
+                </td>
+              </tr>
+            ) : (
+              filteredRepairOrders.map((order) => (
+                <tr key={order.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                  <td style={{ padding: '12px', fontSize: '14px' }}>
+                    {formatDate(order.created_at)}
+                  </td>
+                  <td style={{ padding: '12px', fontSize: '14px', fontWeight: '500' }}>
+                    {order.kommission || '-'}
+                  </td>
+                  <td style={{ padding: '12px', fontSize: '14px' }}>
+                    {order.customers?.company || '-'}
+                  </td>
+                  <td style={{ padding: '12px', fontSize: '14px' }}>
+                    {order.customers?.branch || '-'}
+                  </td>
+                  <td style={{ padding: '12px', fontSize: '14px' }}>
+                    {order.hersteller || '-'}
+                  </td>
+                  <td style={{ padding: '12px', fontSize: '14px' }}>
+                    {order.geraetetyp || '-'}
+                  </td>
+                  <td style={{ padding: '12px', fontSize: '14px' }}>
+                    {order.seriennummer || '-'}
+                  </td>
+                  <td style={{ padding: '12px', fontSize: '14px', fontWeight: '600', color: '#1d426a' }}>
+                    {formatPrice(order.nettopreis)}
+                  </td>
+                  <td style={{ padding: '12px', fontSize: '14px' }}>
+                    {formatPrice(order.porto)}
+                  </td>
+                  <td style={{ padding: '12px', fontSize: '14px' }}>
+                    <span style={{
+                      padding: '4px 8px',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      fontWeight: '500',
+                      background: order.status === 'draft' ? '#fff3cd' : '#d1ecf1',
+                      color: order.status === 'draft' ? '#856404' : '#0c5460'
+                    }}>
+                      {order.status === 'draft' ? 'Entwurf' : order.status}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Summary */}
+      <div style={{ 
+        marginTop: '1rem', 
+        padding: '1rem', 
+        background: '#f8f9fa', 
+        borderRadius: '6px',
+        fontSize: '14px',
+        color: '#666'
+      }}>
+        {filteredRepairOrders.length > 0 && (
+          <span>
+            {filteredRepairOrders.length} Reparaturauftrag{filteredRepairOrders.length !== 1 ? 'e' : ''} angezeigt
+            {searchTerm && ` (gefiltert nach "${searchTerm}")`}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Wrapper component that can use useNavigate hook
 function AppContent() {
   const navigate = useNavigate();
@@ -1961,6 +2256,7 @@ function AppContent() {
       <Routes>
         <Route path="/" element={<Dashboard setIsLoggedIn={setIsLoggedIn} navigate={navigate} />} />
         <Route path="/akustiker" element={<AkustikerPage customers={customers} setShowAddAkustikerModal={setShowAddAkustikerModal} showAddAkustikerModal={showAddAkustikerModal} newAkustiker={newAkustiker} setNewAkustiker={setNewAkustiker} handleAddAkustiker={handleAddAkustiker} navigate={navigate} loadCustomers={loadCustomers} />} />
+        <Route path="/erstellte-reperaturauftrage" element={<ErstellteReperaturauftragePage />} />
         <Route path="/reperaturauftrag" element={
             <>
       <header style={{ display: 'flex', alignItems: 'center', padding: '2rem 1rem 1rem 1rem', borderBottom: '1px solid #eee' }}>
