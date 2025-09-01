@@ -990,42 +990,8 @@ function AppContent() {
 
       // Prepare repair order data
       const repairOrderData = {
-        customer_id: selectedCustomer.id,
-        company: selectedCustomer.company,
-        branch: selectedCustomer.branch,
-        nettopreis: parseFloat(net.toFixed(2)),
-        porto: parseFloat(porto.toFixed(2)),
-        version: 1,
-        
-        // Repair Order Details
-        kommission: kommission || null,
-        hersteller: hersteller || null,
-        geraetetyp: geraetetyp || null,
-        seriennummer: seriennummer || null,
-        werkstatteingang: werkstatteingang || null,
-        zubehoer: zubehoer || null,
-        kv_date: kvDate || null,
-        per_method: perMethod || null,
-        werkstatt_notiz: werkstattNotiz || null,
-        werkstatt_date: werkstattDate || null
+        customer_id: selectedCustomer.id
       };
-
-      // Defensive cleanup: ensure no stray keys are sent to Supabase
-      delete repairOrderData.arbeiten;
-      delete repairOrderData.arbeiten_manual;
-      delete repairOrderData.fehler;
-      delete repairOrderData.bottom;
-      delete repairOrderData.freigabe;
-      delete repairOrderData.reklamation_date;
-      delete repairOrderData.kulanz_porto;
-      delete repairOrderData.ido_hdo;
-      delete repairOrderData.country;
-      delete repairOrderData.manual_fehler1;
-      delete repairOrderData.manual_fehler2;
-      delete repairOrderData.manual_fehler3;
-      delete repairOrderData.manual_fehler_checked1;
-      delete repairOrderData.manual_fehler_checked2;
-      delete repairOrderData.manual_fehler_checked3;
 
       // Insert into Supabase
       const { data, error } = await supabase
