@@ -824,6 +824,18 @@ const ErstellteReperaturauftragePage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState('desc');
+  const [expandedRows, setExpandedRows] = useState(new Set());
+  const [viewingOrder, setViewingOrder] = useState(null);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingOrder, setDeletingOrder] = useState(null);
+  const [showArchived, setShowArchived] = useState(false);
+  
+  // Success Modal State
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  // With:
+  // alert('Reparaturauftrag erfolgreich gespeichert!');
 
   // Load repair orders from Supabase
   const loadRepairOrders = async () => {
@@ -841,6 +853,7 @@ const ErstellteReperaturauftragePage = () => {
             country
           )
         `)
+        .eq('archived', showArchived)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -853,9 +866,149 @@ const ErstellteReperaturauftragePage = () => {
     }
   };
 
+  // Reload repair orders when archive toggle changes
+  useEffect(() => {
+    loadRepairOrders();
+  }, [showArchived]);
+
   useEffect(() => {
     loadRepairOrders();
   }, []);
+
+  // Toggle row expansion
+  const toggleRow = (orderId) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(orderId)) {
+      newExpanded.delete(orderId);
+    } else {
+      newExpanded.add(orderId);
+    }
+    setExpandedRows(newExpanded);
+  };
+
+  // View repair order details
+  const handleViewOrder = (order) => {
+    setViewingOrder(order);
+    setShowViewModal(true);
+  };
+
+  // Edit repair order
+  const handleEditOrder = (orderId) => {
+    // Navigate to repair order form with edit parameter
+    window.location.href = `/reperaturauftrag?edit=${orderId}`;
+  };
+
+  // Export PDF for specific order
+  const handleExportPDF = (order) => {
+    try {
+      // Create PDF document
+      const doc = new jsPDF();
+      
+      // Set font
+      doc.setFont('helvetica');
+      
+      // Title
+      doc.setFontSize(20);
+      doc.setTextColor(29, 66, 106); // #1d426a
+      doc.text('Reparaturauftrag', 20, 30);
+      
+      // Customer Information
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0);
+      doc.text('Kundendaten:', 20, 50);
+      doc.setFontSize(12);
+      doc.text(`Firma: ${order.customers?.company || '-'}`, 25, 60);
+      doc.text(`Filiale: ${order.customers?.branch || '-'}`, 25, 70);
+      doc.text(`Adresse: ${order.customers?.street || '-'}, ${order.customers?.location || '-'}, ${order.customers?.country || '-'}`, 25, 80);
+      
+      // Repair Order Details
+      doc.setFontSize(14);
+      doc.text('Reparatur Details:', 20, 100);
+      doc.setFontSize(12);
+      doc.text(`Kommission: ${order.kommission || '-'}`, 25, 110);
+      doc.text(`Hersteller: ${order.hersteller || '-'}`, 25, 120);
+      doc.text(`Gerätetyp: ${order.geraetetyp || '-'}`, 25, 130);
+      doc.text(`Seriennummer: ${order.seriennummer || '-'}`, 25, 140);
+      doc.text(`Zubehör: ${order.zubehoer || '-'}`, 25, 150);
+      
+      // Workshop Details
+      doc.setFontSize(14);
+      doc.text('Werkstatt Details:', 20, 170);
+      doc.setFontSize(12);
+      doc.text(`Werkstatteingang: ${order.werkstatteingang ? formatDate(order.werkstatteingang) : '-'}`, 25, 180);
+      doc.text(`KV am: ${order.kv_date ? formatDate(order.kv_date) : '-'}`, 25, 190);
+      doc.text(`Per: ${order.per_method || '-'}`, 25, 200);
+      doc.text(`Gesendet an Werkstatt: ${order.gesendet_an_werkstatt ? formatDate(order.gesendet_an_werkstatt) : '-'}`, 25, 210);
+      
+      // Prices
+      doc.setFontSize(14);
+      doc.text('Preise:', 20, 230);
+      doc.setFontSize(12);
+      doc.text(`Nettopreis: ${formatPrice(order.nettopreis)}`, 25, 240);
+      doc.text(`Porto: ${formatPrice(order.porto)}`, 25, 250);
+      doc.text(`Gesamt: ${formatPrice((order.nettopreis || 0) + (order.porto || 0))}`, 25, 260);
+      
+      // Timestamps
+      doc.setFontSize(14);
+      doc.text('Zeitstempel:', 20, 280);
+      doc.setFontSize(12);
+      doc.text(`Erstellt: ${formatDateTime(order.created_at)}`, 25, 290);
+      doc.text(`Aktualisiert: ${formatDateTime(order.updated_at)}`, 25, 300);
+      doc.text(`Version: ${order.version || 1}`, 25, 310);
+      
+      // Workshop Notes
+      if (order.werkstatt_notiz) {
+        doc.setFontSize(14);
+        doc.text('Werkstatt Notiz:', 20, 330);
+        doc.setFontSize(12);
+        doc.text(order.werkstatt_notiz, 25, 340);
+      }
+      
+      // Save PDF
+      const filename = `Reparaturauftrag_${order.kommission || 'ohne_Kommission'}_${order.customers?.company || 'unbekannt'}.pdf`;
+      doc.save(filename);
+      
+      // Show success message
+      setSuccessMessage('PDF erfolgreich exportiert!');
+      setShowSuccessModal(true);
+      
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      alert('Fehler beim PDF Export');
+    }
+  };
+
+  // Delete repair order
+  const handleDeleteOrder = (order) => {
+    setDeletingOrder(order);
+    setShowDeleteModal(true);
+  };
+
+  // Confirm delete
+  const confirmDelete = async () => {
+    try {
+      const { error } = await supabase
+        .from('repair_orders')
+        .update({ archived: true })
+        .eq('id', deletingOrder.id);
+
+      if (error) throw error;
+
+      setSuccessMessage('Reparaturauftrag erfolgreich archiviert!');
+      setShowSuccessModal(true);
+      setShowDeleteModal(false);
+      setDeletingOrder(null);
+      loadRepairOrders(); // Refresh the list
+    } catch (error) {
+      console.error('Error archiving repair order:', error);
+      alert('Fehler beim Archivieren des Reparaturauftrags');
+    }
+  };
+
+  // Toggle archived view
+  const toggleArchived = () => {
+    setShowArchived(!showArchived);
+  };
 
   // Filter and sort repair orders
   const filteredRepairOrders = repairOrders
@@ -898,6 +1051,17 @@ const ErstellteReperaturauftragePage = () => {
     return new Date(dateString).toLocaleDateString('de-DE');
   };
 
+  const formatDateTime = (dateString) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleString('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   const formatPrice = (price) => {
     if (price === null || price === undefined) return '-';
     return `${parseFloat(price).toFixed(2).replace('.', ',')} €`;
@@ -913,16 +1077,43 @@ const ErstellteReperaturauftragePage = () => {
 
   return (
     <div style={{ padding: '2rem', maxWidth: 1400, margin: '0 auto' }}>
+      {/* Breadcrumbs */}
+      <div style={{ 
+        marginBottom: '1.5rem', 
+        padding: '0.75rem 1rem', 
+        background: '#f8f9fa', 
+        borderRadius: '6px', 
+        border: '1px solid #e0e0e0',
+        fontSize: '14px',
+        color: '#666'
+      }}>
+        <span style={{ cursor: 'pointer', color: '#1d426a' }} onClick={() => window.location.href = '/'}>
+          Dashboard
+        </span>
+        <span style={{ margin: '0 0.5rem', color: '#999' }}>→</span>
+        <span style={{ color: '#333', fontWeight: '500' }}>
+          {showArchived ? 'Archivierte Reparaturaufträge' : 'Erstellte Reperaturaufträge'}
+        </span>
+      </div>
+
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
-          <h1 style={{ margin: 0, color: '#1d426a', fontSize: '2rem' }}>Erstellte Reperaturaufträge</h1>
+          <h1 style={{ margin: 0, color: '#1d426a', fontSize: '2rem' }}>
+            {showArchived ? 'Archivierte Reparaturaufträge' : 'Erstellte Reperaturaufträge'}
+          </h1>
           <p style={{ margin: '0.5rem 0 0 0', color: '#666' }}>
-            Alle gespeicherten Reparaturaufträge verwalten und einsehen
+            {showArchived 
+              ? 'Alle archivierten Reparaturaufträge anzeigen' 
+              : 'Alle gespeicherten Reparaturaufträge verwalten und einsehen'
+            }
+            <span style={{ marginLeft: '1rem', fontWeight: '500', color: '#1d426a' }}>
+              ({repairOrders.length} {showArchived ? 'archiviert' : 'aktiv'})
+            </span>
           </p>
         </div>
         <button
-          onClick={() => window.history.back()}
+          onClick={() => window.location.href = '/'}
           style={{
             padding: '10px 20px',
             background: '#6c757d',
@@ -933,7 +1124,45 @@ const ErstellteReperaturauftragePage = () => {
             fontSize: '14px'
           }}
         >
-          ← Zurück
+          ← Zurück zum Dashboard
+        </button>
+      </div>
+
+      {/* Archive Button */}
+      <div style={{ 
+        background: 'white', 
+        border: '1px solid #e0e0e0', 
+        borderRadius: 8, 
+        padding: '1rem 1.5rem',
+        marginBottom: '1rem',
+        boxShadow: '0 1px 4px #0001'
+      }}>
+        <button
+          onClick={toggleArchived}
+          style={{
+            padding: '8px 16px',
+            background: showArchived ? '#1d426a' : '#6c757d',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.transform = 'scale(1.05)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.transform = 'scale(1)';
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20,21H4V10H6V19H18V10H20V21M20,3H4V8H20V3M6,5V6H18V5H6Z"/>
+          </svg>
+          {showArchived ? 'Aktive Reparaturaufträge anzeigen' : 'Archiv anzeigen'}
         </button>
       </div>
 
@@ -951,7 +1180,10 @@ const ErstellteReperaturauftragePage = () => {
           <div style={{ flex: 1, minWidth: 300 }}>
             <input
               type="text"
-              placeholder="Suchen nach Kommission, Hersteller, Gerätetyp, Seriennummer, Firma, Filiale..."
+              placeholder={showArchived 
+                ? "Suchen in archivierten Reparaturaufträgen..." 
+                : "Suchen nach Kommission, Hersteller, Gerätetyp, Seriennummer, Firma, Filiale..."
+              }
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
@@ -981,6 +1213,7 @@ const ErstellteReperaturauftragePage = () => {
               <option value="created_at">Erstellt am</option>
               <option value="kommission">Kommission</option>
               <option value="hersteller">Hersteller</option>
+              <option value="werkstatteingang">Werkstatteingang</option>
               <option value="nettopreis">Nettopreis</option>
             </select>
             <button
@@ -1012,6 +1245,7 @@ const ErstellteReperaturauftragePage = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8f9fa', borderBottom: '1px solid #e0e0e0' }}>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333', width: '40px' }}></th>
               <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333', cursor: 'pointer' }}
                   onClick={() => handleSort('created_at')}>
                 Erstellt am {sortBy === 'created_at' && (sortOrder === 'asc' ? '↑' : '↓')}
@@ -1022,70 +1256,283 @@ const ErstellteReperaturauftragePage = () => {
               </th>
               <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Firma</th>
               <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Filiale</th>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333', cursor: 'pointer' }}
-                  onClick={() => handleSort('hersteller')}>
-                Hersteller {sortBy === 'hersteller' && (sortOrder === 'asc' ? '↑' : '↓')}
-              </th>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Gerätetyp</th>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Seriennummer</th>
+              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Werkstatteingang</th>
               <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333', cursor: 'pointer' }}
                   onClick={() => handleSort('nettopreis')}>
-                Nettopreis {sortOrder === 'nettopreis' && (sortOrder === 'asc' ? '↑' : '↓')}
+                Nettopreis {sortBy === 'nettopreis' && (sortOrder === 'asc' ? '↑' : '↓')}
               </th>
               <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Porto</th>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Status</th>
+              <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600', color: '#333', width: '120px' }}>Aktionen</th>
             </tr>
           </thead>
           <tbody>
             {filteredRepairOrders.length === 0 ? (
               <tr>
-                <td colSpan="11" style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
+                <td colSpan="9" style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
                   {searchTerm ? 'Keine Reparaturaufträge gefunden.' : 'Noch keine Reparaturaufträge erstellt.'}
                 </td>
               </tr>
             ) : (
               filteredRepairOrders.map((order) => (
-                <tr key={order.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>
-                    {formatDate(order.created_at)}
-                  </td>
-                  <td style={{ padding: '12px', fontSize: '14px', fontWeight: '500' }}>
-                    {order.kommission || '-'}
-                  </td>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>
-                    {order.customers?.company || '-'}
-                  </td>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>
-                    {order.customers?.branch || '-'}
-                  </td>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>
-                    {order.hersteller || '-'}
-                  </td>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>
-                    {order.geraetetyp || '-'}
-                  </td>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>
-                    {order.seriennummer || '-'}
-                  </td>
-                  <td style={{ padding: '12px', fontSize: '14px', fontWeight: '600', color: '#1d426a' }}>
-                    {formatPrice(order.nettopreis)}
-                  </td>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>
-                    {formatPrice(order.porto)}
-                  </td>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>
-                    <span style={{
-                      padding: '4px 8px',
-                      borderRadius: '12px',
-                      fontSize: '12px',
-                      fontWeight: '500',
-                      background: order.status === 'draft' ? '#fff3cd' : '#d1ecf1',
-                      color: order.status === 'draft' ? '#856404' : '#0c5460'
-                    }}>
-                      {order.status === 'draft' ? 'Entwurf' : order.status}
-                    </span>
-                  </td>
-                </tr>
+                <React.Fragment key={order.id}>
+                  {/* Main Row */}
+                  <tr style={{ borderBottom: '1px solid #f0f0f0' }}>
+                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                      <button
+                        onClick={() => toggleRow(order.id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontSize: '11px',
+                          color: '#666',
+                          padding: '4px',
+                          borderRadius: '4px',
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.target.style.background = '#f0f0f0'}
+                        onMouseLeave={(e) => e.target.style.background = 'none'}
+                      >
+                        {expandedRows.has(order.id) ? '▼' : '▶'}
+                      </button>
+                    </td>
+                    <td style={{ padding: '12px', fontSize: '14px' }}>
+                      {formatDate(order.created_at)}
+                    </td>
+                    <td style={{ padding: '12px', fontSize: '14px', fontWeight: '500' }}>
+                      {order.kommission || '-'}
+                    </td>
+                    <td style={{ padding: '12px', fontSize: '14px' }}>
+                      {order.customers?.company || '-'}
+                    </td>
+                    <td style={{ padding: '12px', fontSize: '14px' }}>
+                      {order.customers?.branch || '-'}
+                    </td>
+                    <td style={{ padding: '12px', fontSize: '14px' }}>
+                      {order.werkstatteingang ? formatDate(order.werkstatteingang) : '-'}
+                    </td>
+                    <td style={{ padding: '12px', fontSize: '14px', fontWeight: '600', color: '#1d426a' }}>
+                      {formatPrice(order.nettopreis)}
+                    </td>
+                    <td style={{ padding: '12px', fontSize: '14px' }}>
+                      {formatPrice(order.porto)}
+                    </td>
+
+                    <td style={{ padding: '12px', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        {/* View Button */}
+                        <button
+                          onClick={() => handleViewOrder(order)}
+                          style={{
+                            background: 'none',
+                            color: '#1d426a',
+                            border: '1px solid #1d426a',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            padding: '6px 8px',
+                            fontSize: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.target.style.transform = 'scale(1.05)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.style.transform = 'scale(1)';
+                          }}
+                          title="Anzeigen"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                          </svg>
+                        </button>
+                        {/* PDF Export Button */}
+                        <button
+                          onClick={() => handleExportPDF(order)}
+                          style={{
+                            background: 'none',
+                            color: '#1d426a',
+                            border: '1px solid #1d426a',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            padding: '6px 8px',
+                            fontSize: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.target.style.transform = 'scale(1.05)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.style.transform = 'scale(1)';
+                          }}
+                          title="PDF Export"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                          </svg>
+                        </button>
+                        {/* Edit Button */}
+                        <button
+                          onClick={() => handleEditOrder(order.id)}
+                          style={{
+                            background: 'none',
+                            color: '#1d426a',
+                            border: '1px solid #1d426a',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            padding: '6px 8px',
+                            fontSize: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.target.style.transform = 'scale(1.05)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.style.transform = 'scale(1)';
+                          }}
+                          title="Bearbeiten"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z"/>
+                          </svg>
+                        </button>
+                        {/* Delete Button - Only show when not in archive view */}
+                        {!showArchived && (
+                          <button 
+                            onClick={() => handleDeleteOrder(order)} 
+                            title="Löschen"
+                            style={{
+                              background: 'none',
+                              color: '#1d426a',
+                              border: '1px solid #1d426a',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              padding: '6px 8px',
+                              fontSize: '12px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.target.style.transform = 'scale(1.05)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.target.style.transform = 'scale(1)';
+                            }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M6,19c0,1.1 0.9,2 2,2h8c1.1,0 2,-0.9 2,-2V7H6V19M8,9h8v10H8V9M15.5,4l-1,-1h-5l-1,1H5V6h14V4H15.5Z"/>
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  
+                  {/* Expanded Row */}
+                  {expandedRows.has(order.id) && (
+                    <tr style={{ background: '#f8f9fa' }}>
+                      <td colSpan="10" style={{ padding: '0' }}>
+                        <div style={{ padding: '1.5rem', borderTop: '1px solid #e0e0e0' }}>
+                          <div style={{ 
+                            display: 'grid', 
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+                            gap: '1.5rem' 
+                          }}>
+                            {/* Left Column */}
+                            <div>
+                              <h4 style={{ margin: '0 0 1rem 0', color: '#1d426a', fontSize: '16px' }}>
+                                Gerätedetails
+                              </h4>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ fontWeight: '500', color: '#666' }}>Hersteller:</span>
+                                  <span>{order.hersteller || '-'}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ fontWeight: '500', color: '#666' }}>Gerätetyp:</span>
+                                  <span>{order.geraetetyp || '-'}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ fontWeight: '500', color: '#666' }}>Seriennummer:</span>
+                                  <span>{order.seriennummer || '-'}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ fontWeight: '500', color: '#666' }}>Zubehör:</span>
+                                  <span>{order.zubehoer || '-'}</span>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Middle Column */}
+                            <div>
+                              <h4 style={{ margin: '0 0 1rem 0', color: '#1d426a', fontSize: '16px' }}>
+                                Werkstatt Details
+                              </h4>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ fontWeight: '500', color: '#666' }}>KV am:</span>
+                                  <span>{order.kv_date ? formatDate(order.kv_date) : '-'}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ fontWeight: '500', color: '#666' }}>Per:</span>
+                                  <span>{order.per_method || '-'}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ fontWeight: '500', color: '#666' }}>Gesendet an Werkstatt:</span>
+                                  <span>{order.gesendet_an_werkstatt ? formatDate(order.gesendet_an_werkstatt) : '-'}</span>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Right Column */}
+                            <div>
+                              <h4 style={{ margin: '0 0 1rem 0', color: '#1d426a', fontSize: '16px' }}>
+                                Zeitstempel
+                              </h4>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ fontWeight: '500', color: '#666' }}>Erstellt:</span>
+                                  <span>{formatDateTime(order.created_at)}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ fontWeight: '500', color: '#666' }}>Aktualisiert:</span>
+                                  <span>{formatDateTime(order.updated_at)}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ fontWeight: '500', color: '#666' }}>Version:</span>
+                                  <span>{order.version || 1}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Workshop Notes */}
+                          {order.werkstatt_notiz && (
+                            <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'white', borderRadius: '6px', border: '1px solid #e0e0e0' }}>
+                              <h4 style={{ margin: '0 0 0.5rem 0', color: '#1d426a', fontSize: '16px' }}>
+                                Werkstatt Notiz
+                              </h4>
+                              <p style={{ margin: 0, color: '#333', fontSize: '14px' }}>
+                                {order.werkstatt_notiz}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))
             )}
           </tbody>
@@ -1108,6 +1555,276 @@ const ErstellteReperaturauftragePage = () => {
           </span>
         )}
       </div>
+
+      {/* View Modal */}
+      {showViewModal && viewingOrder && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '8px',
+            padding: '2rem',
+            maxWidth: '90vw',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            position: 'relative'
+          }}>
+            <button
+              onClick={() => setShowViewModal(false)}
+              style={{
+                position: 'absolute',
+                top: '1rem',
+                right: '1rem',
+                background: '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '50%',
+                width: '32px',
+                height: '32px',
+                cursor: 'pointer',
+                fontSize: '16px'
+              }}
+            >
+              ×
+            </button>
+            
+            <h2 style={{ margin: '0 0 1.5rem 0', color: '#1d426a' }}>
+              Reparaturauftrag Details
+            </h2>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+              <div>
+                <h4 style={{ margin: '0 0 1rem 0', color: '#1d426a', textAlign: 'left' }}>Kundendaten</h4>
+                <div style={{ textAlign: 'left' }}>
+                  <p><strong>Firma:</strong> {viewingOrder.customers?.company || '-'}</p>
+                  <p><strong>Filiale:</strong> {viewingOrder.customers?.branch || '-'}</p>
+                  <p><strong>Adresse:</strong> {viewingOrder.customers?.street}, {viewingOrder.customers?.location}, {viewingOrder.customers?.country}</p>
+                </div>
+              </div>
+              
+              <div>
+                <h4 style={{ margin: '0 0 1rem 0', color: '#1d426a', textAlign: 'left' }}>Reparatur Details</h4>
+                <div style={{ textAlign: 'left' }}>
+                  <p><strong>Kommission:</strong> {viewingOrder.kommission || '-'}</p>
+                  <p><strong>Hersteller:</strong> {viewingOrder.hersteller || '-'}</p>
+                  <p><strong>Gerätetyp:</strong> {viewingOrder.geraetetyp || '-'}</p>
+                  <p><strong>Seriennummer:</strong> {viewingOrder.seriennummer || '-'}</p>
+                </div>
+              </div>
+              
+              <div>
+                <h4 style={{ margin: '0 0 1rem 0', color: '#1d426a', textAlign: 'left' }}>Preise</h4>
+                <div style={{ textAlign: 'left' }}>
+                  <p><strong>Nettopreis:</strong> {formatPrice(viewingOrder.nettopreis)}</p>
+                  <p><strong>Porto:</strong> {formatPrice(viewingOrder.porto)}</p>
+                  <p><strong>Gesamt:</strong> {formatPrice((viewingOrder.nettopreis || 0) + (viewingOrder.porto || 0))}</p>
+                </div>
+              </div>
+            </div>
+            
+                            <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center', gap: '1rem' }}>
+                  <button
+                    onClick={() => handleExportPDF(viewingOrder)}
+                    style={{
+                      padding: '10px 20px',
+                      background: 'none',
+                      color: '#1d426a',
+                      border: '1px solid #1d426a',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.transform = 'scale(1.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.transform = 'scale(1)';
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                    </svg>
+                    PDF Export
+                  </button>
+                  <button
+                    onClick={() => handleEditOrder(viewingOrder.id)}
+                    style={{
+                      padding: '10px 20px',
+                      background: 'none',
+                      color: '#1d426a',
+                      border: '1px solid #1d426a',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.transform = 'scale(1.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.transform = 'scale(1)';
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z"/>
+                    </svg>
+                    Bearbeiten
+                  </button>
+                </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Message Modal */}
+      {showSuccessModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '8px',
+            padding: '2rem',
+            maxWidth: '400px',
+            width: '90%',
+            textAlign: 'center',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)'
+          }}>
+            <div style={{
+              width: '60px',
+              height: '60px',
+              background: '#28a745',
+              borderRadius: '50%',
+              margin: '0 auto 1rem auto',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="white">
+                <path d="M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z"/>
+              </svg>
+            </div>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#333', fontSize: '18px' }}>
+              Erfolgreich!
+            </h3>
+            <p style={{ margin: '0 0 2rem 0', fontSize: '16px', color: '#666', lineHeight: '1.5' }}>
+              {successMessage}
+            </p>
+            <button
+              onClick={() => setShowSuccessModal(false)}
+              style={{
+                padding: '12px 24px',
+                background: '#1d426a',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '500',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.transform = 'scale(1.05)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.transform = 'scale(1)';
+              }}
+            >
+              Verstanden
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && deletingOrder && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '8px',
+            padding: '2rem',
+            maxWidth: '500px',
+            width: '90%',
+            textAlign: 'center'
+          }}>
+            <h3 style={{ margin: '0 0 1.5rem 0', color: '#dc3545' }}>
+              Reparaturauftrag löschen?
+            </h3>
+            <p style={{ margin: '0 0 2rem 0', fontSize: '16px', lineHeight: '1.5' }}>
+              Sind Sie sicher, dass Sie den Reparaturauftrag von <strong>{deletingOrder.kommission || '-'}-{deletingOrder.customers?.company || '-'}</strong> löschen möchten?
+            </p>
+            <p style={{ margin: '0 0 2rem 0', fontSize: '14px', color: '#666' }}>
+              Der Reparaturauftrag wird archiviert und kann nur noch von Administratoren in der Datenbank gelöscht werden.
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                style={{
+                  padding: '10px 20px',
+                  background: 'none',
+                  color: '#666',
+                  border: '1px solid #ccc',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={confirmDelete}
+                style={{
+                  padding: '10px 20px',
+                  background: '#dc3545',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                Ja, löschen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1163,6 +1880,10 @@ function AppContent() {
   // IDO/HDO State for Arbeitszeit pricing
   const [idoHdo, setIdoHdo] = useState('IDO');
   
+  // Additional fields state
+  const [gesaendetAnWerkstatt, setGesaendetAnWerkstatt] = useState('');
+  const [notes, setNotes] = useState('');
+  
   // Add New Akustiker Modal State
   const [showAddAkustikerModal, setShowAddAkustikerModal] = useState(false);
   const [newAkustiker, setNewAkustiker] = useState({
@@ -1172,6 +1893,16 @@ function AppContent() {
     location: '',
     country: 'DE'
   });
+
+  // Edit Repair Order State
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingOrderId, setEditingOrderId] = useState(null);
+  
+  // Success Modal State
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  
+
 
   // Logic for disabling all fields if not 'Reparatur laut KV durchführen' or if Verfahren disables fields
   const verfahrenDisables = bottom === 'garantie' || bottom === 'reklamation' || bottom === 'kulanz';
@@ -1205,15 +1936,129 @@ function AppContent() {
     setReklamationDate('');
     setKulanzPorto('ja');
     setIdoHdo('IDO');
+    setGesaendetAnWerkstatt('');
+    setNotes('');
+    
+    // Reset editing state
+    setIsEditing(false);
+    setEditingOrderId(null);
+    setSelectedCustomer(null);
+    setSelectedCompany(null);
+    setCustomerSearch('');
   };
 
-  // Reset form when entering the repair order route
+  // Load repair order data for editing
+  const loadRepairOrderForEdit = async (orderId) => {
+    try {
+      const { data, error } = await supabase
+        .from('repair_orders')
+        .select(`
+          *,
+          customers (
+            company,
+            branch,
+            street,
+            location,
+            country
+          )
+        `)
+        .eq('id', orderId)
+        .single();
+
+      if (error) throw error;
+
+      const order = data;
+      
+      // Set customer
+      setSelectedCustomer(order.customers);
+      setSelectedCompany(order.customers.company);
+      
+      // Set repair order details
+      setKommission(order.kommission || '');
+      setHersteller(order.hersteller || '');
+      setGeraetetyp(order.geraetetyp || '');
+      setSeriennummer(order.seriennummer || '');
+      setWerkstatteingang(order.werkstatteingang || '');
+      setZubehoer(order.zubehoer || '');
+      setKvDate(order.kv_date || '');
+      setPerMethod(order.per_method || 'Fax');
+      setWerkstattNotiz(order.werkstatt_notiz || '');
+      setWerkstattDate(order.werkstatt_date || '');
+      setGesaendetAnWerkstatt(order.gesendet_an_werkstatt || '');
+      setNotes(order.notes || '');
+      
+      // Set manual fehlerangaben
+      if (order.fehlerangaben) {
+        const fehler = order.fehlerangaben;
+        setManualFehler1(fehler.manual1?.text || '');
+        setManualFehler2(fehler.manual2?.text || '');
+        setManualFehler3(fehler.manual3?.text || '');
+        setManualFehlerChecked1(fehler.manual1?.checked || false);
+        setManualFehlerChecked2(fehler.manual2?.checked || false);
+        setManualFehlerChecked3(fehler.manual3?.checked || false);
+      }
+      
+      // Set form settings
+      setCountry(order.country || 'DE');
+      setFreigabe(order.freigabe || 'Reparatur laut KV durchführen');
+      setBottom(order.bottom || 'kostenpflichtig');
+      setReklamationDate(order.reklamation_date || '');
+      setKulanzPorto(order.kulanz_porto || 'ja');
+      setIdoHdo(order.ido_hdo || 'IDO');
+      
+      // Set arbeiten and fehler
+      if (order['ausgeführte_arbeiten']) {
+        const arbeiten = order['ausgeführte_arbeiten'];
+        const newArbeiten = {};
+        const newArbeitenManual = {};
+        
+        Object.keys(arbeiten).forEach(key => {
+          if (arbeiten[key].checked) {
+            newArbeiten[key] = true;
+            if (arbeiten[key].input) {
+              newArbeitenManual[key] = arbeiten[key].input;
+            }
+          }
+        });
+        
+        setArbeiten(newArbeiten);
+        setArbeitenManual(newArbeitenManual);
+      }
+      
+      if (order.fehlerangaben) {
+        const fehler = order.fehlerangaben;
+        const newFehler = {};
+        
+        Object.keys(fehler).forEach(key => {
+          if (key !== 'manual1' && key !== 'manual2' && key !== 'manual3' && fehler[key]) {
+            newFehler[key] = true;
+          }
+        });
+        
+        setFehler(newFehler);
+      }
+      
+      // Set editing state
+      setIsEditing(true);
+      setEditingOrderId(orderId);
+      
+    } catch (error) {
+      console.error('Error loading repair order for edit:', error);
+      alert('Fehler beim Laden des Reparaturauftrags');
+    }
+  };
+
+  // Check if we're editing on route change
   useEffect(() => {
     if (location.pathname === '/reperaturauftrag') {
-      handleReset();
-      setSelectedCustomer(null);
-      setSelectedCompany(null);
-      setCustomerSearch('');
+      const urlParams = new URLSearchParams(window.location.search);
+      const editId = urlParams.get('edit');
+      
+      if (editId) {
+        loadRepairOrderForEdit(editId);
+      } else {
+        handleReset();
+      }
     }
   }, [location.pathname]);
 
@@ -1319,23 +2164,64 @@ function AppContent() {
         seriennummer: seriennummer || null,
         werkstatteingang: werkstatteingang || null,
         zubehoer: zubehoer || null,
+        kv_date: kvDate || null,
+        per_method: perMethod || null,
+        werkstatt_notiz: werkstattNotiz || null,
+        werkstatt_date: werkstattDate || null,
+        gesendet_an_werkstatt: gesaendetAnWerkstatt || null,
+        notes: notes || null,
         fehlerangaben: fehlerPayload,
         ['ausgeführte_arbeiten']: arbeitenPayload,
         nettopreis: Number.isFinite(net) ? parseFloat(net.toFixed(2)) : null,
         porto: Number.isFinite(porto) ? parseFloat(porto.toFixed(2)) : null
       };
 
-      // Insert into Supabase
-      const { data, error } = await supabase
-        .from('repair_orders')
-        .insert([repairOrderData]);
+      // Add version tracking and timestamp for updates
+      if (isEditing && editingOrderId) {
+        // Get current order data for version tracking
+        const { data: currentOrder } = await supabase
+          .from('repair_orders')
+          .select('version')
+          .eq('id', editingOrderId)
+          .single();
+        
+        repairOrderData.version = (currentOrder?.version || 0) + 1;
+        // Explicitly set updated_at to current timestamp
+        repairOrderData.updated_at = new Date().toISOString();
+      }
 
-      if (error) throw error;
-
-      alert('Reparaturauftrag erfolgreich gespeichert!');
+      let result;
       
-      // Optionally reset form or keep data for PDF export
-      // handleReset(); // Uncomment if you want to reset after save
+      if (isEditing && editingOrderId) {
+        // Update existing repair order
+        const { data, error } = await supabase
+          .from('repair_orders')
+          .update(repairOrderData)
+          .eq('id', editingOrderId);
+
+        if (error) throw error;
+        result = data;
+        setSuccessMessage('Reparaturauftrag erfolgreich aktualisiert!');
+        setShowSuccessModal(true);
+      } else {
+        // Create new repair order
+        const { data, error } = await supabase
+          .from('repair_orders')
+          .insert([repairOrderData]);
+
+        if (error) throw error;
+        result = data;
+        setSuccessMessage('Reparaturauftrag erfolgreich gespeichert!');
+        setShowSuccessModal(true);
+      }
+      
+      // Reset form after successful save/update
+      handleReset();
+      
+      // If we were editing, navigate back to repair orders overview
+      if (isEditing && editingOrderId) {
+        navigate('/erstellte-reperaturauftrage');
+      }
       
     } catch (error) {
       console.error('Error saving repair order:', error);
@@ -2286,7 +3172,32 @@ function AppContent() {
                     Startseite
                   </button>
                   <span style={{ color: '#999' }}>/</span>
-                  <span style={{ color: '#333', fontWeight: '500' }}>Reperaturauftrag erstellen</span>
+                  <span style={{ color: '#333', fontWeight: '500' }}>
+                    {isEditing ? 'Reperaturauftrag bearbeiten' : 'Reperaturauftrag erstellen'}
+                  </span>
+                  {isEditing && (
+                    <>
+                      <span style={{ color: '#999' }}>/</span>
+                      <button 
+                        onClick={() => navigate('/erstellte-reperaturauftrage')}
+                        style={{ 
+                          background: 'none', 
+                          border: 'none', 
+                          color: '#1d426a', 
+                          cursor: 'pointer', 
+                          textDecoration: 'underline',
+                          fontSize: '14px',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          transition: 'background-color 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#f0f0f0'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                      >
+                        Zurück zur Übersicht
+                      </button>
+                    </>
+                  )}
                 </nav>
               </div>
       
@@ -3131,10 +4042,84 @@ function AppContent() {
     </div>
             </>
           } />
-        </Routes>
-      </div>
-  );
-}
+                  </Routes>
+                </div>
+
+        // /* Success Message Modal */
+        // {showSuccessModal && (
+        //   <div style={{
+        //     position: 'fixed',
+        //     top: 0,
+        //     left: 0,
+        //     right: 0,
+        //     bottom: 0,
+        //     background: 'rgba(0, 0, 0, 0.5)',
+        //     display: 'flex',
+        //     justifyContent: 'center',
+        //     alignItems: 'center',
+        //     zIndex: 1000
+        //   }}>
+        //     <div style={{
+        //       background: 'white',
+        //       borderRadius: '8px',
+        //       padding: '2rem',
+        //       maxWidth: '400px',
+        //       width: '90%',
+        //       textAlign: 'center',
+        //       boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)'
+        //     }}>
+        //       <div style={{
+        //         width: '60px',
+        //         height: '60px',
+        //         background: '#28a745',
+        //         borderRadius: '50%',
+        //         margin: '0 auto 1rem auto',
+        //         display: 'flex',
+        //         alignItems: 'center',
+        //         justifyContent: 'center'
+        //       }}>
+        //         <svg width="30" height="30" viewBox="0 0 24 24" fill="white">
+        //           <path d="M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z"/>
+        //         </svg>
+        //       </div>
+        //       <h3 style={{ margin: '0 0 1rem 0', color: '#333', fontSize: '18px' }}>
+        //         Erfolgreich!
+        //       </h3>
+        //       <p style={{ margin: '0 0 2rem 0', fontSize: '16px', color: '#666', lineHeight: '1.5' }}>
+        //         {successMessage}
+        //       </p>
+        //       <button
+        //         onClick={() => setShowSuccessModal(false)}
+        //         style={{
+        //           padding: '12px 24px',
+        //           background: '#1d426a',
+        //           color: 'white',
+        //           border: 'none',
+        //           borderRadius: '6px',
+        //           cursor: 'pointer',
+        //           fontSize: '14px',
+        //           fontWeight: '500',
+        //           transition: 'all 0.2s ease'
+        //         }}
+        //         onMouseEnter={(e) => {
+        //           e.target.style.transform = 'scale(1.05)';
+        //         }}
+        //         onMouseLeave={(e) => {
+        //           e.target.style.transform = 'scale(1)';
+        //         }}
+        //       >
+        //         Verstanden
+        //       </button>
+        //     </div>
+        //   </div>
+        // )}
+
+        )}
+
+
+
+
+
 
 // Main App component that wraps AppContent with Router
 function App() {
