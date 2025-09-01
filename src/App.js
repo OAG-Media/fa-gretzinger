@@ -1023,13 +1023,13 @@ function AppContent() {
         bottom: bottom,
         reklamation_date: reklamationDate || null,
         kulanz_porto: kulanzPorto,
-        ido_hdo: idoHdo,
-        
-        // Arbeitszeit and Fehlerangaben (stored as JSON)
-        arbeiten: arbeiten,
-        arbeiten_manual: arbeitenManual,
-        fehler: fehler
+        ido_hdo: idoHdo
       };
+
+      // Defensive cleanup: ensure no stray keys are sent to Supabase
+      delete repairOrderData.arbeiten;
+      delete repairOrderData.arbeiten_manual;
+      delete repairOrderData.fehler;
 
       // Insert into Supabase
       const { data, error } = await supabase
