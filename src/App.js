@@ -993,7 +993,6 @@ function AppContent() {
         customer_id: selectedCustomer.id,
         company: selectedCustomer.company,
         branch: selectedCustomer.branch,
-        address: `${selectedCustomer.street}, ${selectedCustomer.location}, ${selectedCustomer.country}`,
         nettopreis: parseFloat(net.toFixed(2)),
         porto: parseFloat(porto.toFixed(2)),
         version: 1,
@@ -1911,8 +1910,8 @@ function AppContent() {
       doc.setFont(undefined, 'bold');
       doc.setFontSize(12);
       doc.text('Notizen:', 10, notizenY);
-      doc.setFont(undefined, 'normal');
-      doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(10);
       
       // Draw a text input field border
       doc.setDrawColor(100);
@@ -1955,7 +1954,7 @@ function AppContent() {
     boxShadow: '0 1px 4px #0001',
   };
 
-    return (
+  return (
     <div
       className="App"
       style={{ fontFamily: 'Arial, sans-serif', background: '#fff', minHeight: '100vh' }}
@@ -1965,10 +1964,10 @@ function AppContent() {
         <Route path="/akustiker" element={<AkustikerPage customers={customers} setShowAddAkustikerModal={setShowAddAkustikerModal} showAddAkustikerModal={showAddAkustikerModal} newAkustiker={newAkustiker} setNewAkustiker={setNewAkustiker} handleAddAkustiker={handleAddAkustiker} navigate={navigate} loadCustomers={loadCustomers} />} />
         <Route path="/reperaturauftrag" element={
             <>
-              <header style={{ display: 'flex', alignItems: 'center', padding: '2rem 1rem 1rem 1rem', borderBottom: '1px solid #eee' }}>
-                <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 80, marginRight: 24 }} />
-                <h1 style={{ fontWeight: 400, color: '#1d426a', fontSize: '2rem', margin: 0 }}>Reparaturauftrag</h1>
-              </header>
+      <header style={{ display: 'flex', alignItems: 'center', padding: '2rem 1rem 1rem 1rem', borderBottom: '1px solid #eee' }}>
+        <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 80, marginRight: 24 }} />
+        <h1 style={{ fontWeight: 400, color: '#1d426a', fontSize: '2rem', margin: 0 }}>Reparaturauftrag</h1>
+      </header>
               
               {/* Breadcrumbs */}
               <div style={{ padding: '1rem 1rem 0.5rem 1rem', borderBottom: '1px solid #f0f0f0' }}>
@@ -2825,16 +2824,16 @@ function AppContent() {
             >
               Speichern
             </button>
-            <button
-              type="button"
-              onClick={handlePdfExport}
-              style={{ padding: '8px 18px', fontSize: 15, background: '#1d426a', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
-            >
-              PDF Export
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handlePdfExport}
+            style={{ padding: '8px 18px', fontSize: 15, background: '#1d426a', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+          >
+            PDF Export
+          </button>
         </div>
       </div>
+    </div>
             </>
           } />
         </Routes>
