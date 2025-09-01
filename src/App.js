@@ -1007,29 +1007,25 @@ function AppContent() {
         kv_date: kvDate || null,
         per_method: perMethod || null,
         werkstatt_notiz: werkstattNotiz || null,
-        werkstatt_date: werkstattDate || null,
-        
-        // Manual Fehlerangaben
-        manual_fehler1: manualFehler1 || null,
-        manual_fehler2: manualFehler2 || null,
-        manual_fehler3: manualFehler3 || null,
-        manual_fehler_checked1: manualFehlerChecked1,
-        manual_fehler_checked2: manualFehlerChecked2,
-        manual_fehler_checked3: manualFehlerChecked3,
-        
-        // Form Settings
-        country: country,
-        freigabe: freigabe,
-        bottom: bottom,
-        reklamation_date: reklamationDate || null,
-        kulanz_porto: kulanzPorto,
-        ido_hdo: idoHdo
+        werkstatt_date: werkstattDate || null
       };
 
       // Defensive cleanup: ensure no stray keys are sent to Supabase
       delete repairOrderData.arbeiten;
       delete repairOrderData.arbeiten_manual;
       delete repairOrderData.fehler;
+      delete repairOrderData.bottom;
+      delete repairOrderData.freigabe;
+      delete repairOrderData.reklamation_date;
+      delete repairOrderData.kulanz_porto;
+      delete repairOrderData.ido_hdo;
+      delete repairOrderData.country;
+      delete repairOrderData.manual_fehler1;
+      delete repairOrderData.manual_fehler2;
+      delete repairOrderData.manual_fehler3;
+      delete repairOrderData.manual_fehler_checked1;
+      delete repairOrderData.manual_fehler_checked2;
+      delete repairOrderData.manual_fehler_checked3;
 
       // Insert into Supabase
       const { data, error } = await supabase
