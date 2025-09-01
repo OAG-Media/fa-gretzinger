@@ -107,10 +107,20 @@ const Dashboard = ({ setIsLoggedIn, navigate }) => {
 };
 
 // Akustiker Management Page Component
-const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerModal, newAkustiker, setNewAkustiker, handleAddAkustiker, navigate }) => {
+const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerModal, newAkustiker, setNewAkustiker, handleAddAkustiker, navigate, loadCustomers }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('name'); // 'name', 'street', 'location'
   const [sortOrder, setSortOrder] = useState('asc'); // 'asc', 'desc'
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState(null);
+  const [editForm, setEditForm] = useState({
+    branch: '',
+    company: '',
+    street: '',
+    location: '',
+    country: 'DE',
+    contact_person: ''
+  });
   
   // Filter and sort customers
   const filteredAndSortedCustomers = customers
@@ -151,8 +161,54 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
         return aValue.localeCompare(bValue);
       } else {
         return bValue.localeCompare(aValue);
-      }
+             }
+     });
+
+  // Edit customer handlers
+  const handleEditCustomer = (customer) => {
+    setEditingCustomer(customer);
+    setEditForm({
+      branch: customer.branch || '',
+      company: customer.company || '',
+      street: customer.street || '',
+      location: customer.location || '',
+      country: customer.country === 'Österreich' ? 'AT' : 'DE',
+      contact_person: customer.contact_person || ''
     });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateCustomer = async () => {
+    try {
+      // Update in Supabase
+      const { data, error } = await supabase
+        .from('customers')
+        .update({
+          branch: editForm.branch,
+          company: editForm.company,
+          street: editForm.street,
+          location: editForm.location,
+          country: editForm.country === 'DE' ? 'Deutschland' : 'Österreich',
+          contact_person: editForm.contact_person
+        })
+        .eq('id', editingCustomer.id);
+      
+      if (error) throw error;
+      
+      // Refresh customers list
+      await loadCustomers();
+      
+      // Close modal
+      setShowEditModal(false);
+      setEditingCustomer(null);
+      
+      alert('Akustiker erfolgreich aktualisiert!');
+      
+    } catch (error) {
+      console.error('Error updating customer:', error);
+      alert('Fehler beim Aktualisieren des Akustikers');
+    }
+  };
 
   return (
     <div style={{ fontFamily: 'Arial, sans-serif', background: '#fff', minHeight: '100vh' }}>
@@ -329,24 +385,21 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                     {customer.country || '-'}
                   </td>
                   <td style={{ padding: '16px', textAlign: 'center' }}>
-                    <button
-                      style={{
-                        padding: '6px 12px',
-                        background: '#1d426a',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        marginRight: '8px'
-                      }}
-                      onClick={() => {
-                        // TODO: Navigate to customer detail page
-                        console.log('Edit customer:', customer);
-                      }}
-                    >
-                      ✏️ Bearbeiten
-                    </button>
+                                         <button
+                       style={{
+                         padding: '6px 12px',
+                         background: '#1d426a',
+                         color: 'white',
+                         border: 'none',
+                         borderRadius: '4px',
+                         cursor: 'pointer',
+                         fontSize: '12px',
+                         marginRight: '8px'
+                       }}
+                       onClick={() => handleEditCustomer(customer)}
+                     >
+                       ✏️ Bearbeiten
+                     </button>
                   </td>
                 </tr>
               ))}
@@ -380,6 +433,201 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
         newAkustiker={newAkustiker}
         setNewAkustiker={setNewAkustiker}
       />
+
+      {/* Edit Akustiker Modal */}
+      {showEditModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 2000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '8px',
+            padding: '2rem',
+            width: '90%',
+            maxWidth: '500px',
+            maxHeight: '90vh',
+            overflowY: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ margin: 0, color: '#1d426a' }}>Akustiker bearbeiten</h2>
+              <button
+                onClick={() => setShowEditModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  color: '#666'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            
+            <form onSubmit={(e) => { e.preventDefault(); handleUpdateCustomer(); }}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+                  Filiale *
+                </label>
+                <input
+                  type="text"
+                  value={editForm.branch}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, branch: e.target.value }))}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+                  Firma *
+                </label>
+                <input
+                  type="text"
+                  value={editForm.company}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, company: e.target.value }))}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+                  Straße *
+                </label>
+                <input
+                  type="text"
+                  value={editForm.street}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, street: e.target.value }))}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+                  Ort *
+                </label>
+                <input
+                  type="text"
+                  value={editForm.location}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, location: e.target.value }))}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+                  Ansprechpartner
+                </label>
+                <input
+                  type="text"
+                  value={editForm.contact_person}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, contact_person: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+                  Land *
+                </label>
+                <select
+                  value={editForm.country}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, country: e.target.value }))}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <option value="DE">Deutschland</option>
+                  <option value="AT">Österreich</option>
+                </select>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  style={{
+                    padding: '10px 20px',
+                    background: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    padding: '10px 20px',
+                    background: '#1d426a',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Aktualisieren
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1643,7 +1891,7 @@ function AppContent() {
     >
       <Routes>
         <Route path="/" element={<Dashboard setIsLoggedIn={setIsLoggedIn} navigate={navigate} />} />
-        <Route path="/akustiker" element={<AkustikerPage customers={customers} setShowAddAkustikerModal={setShowAddAkustikerModal} showAddAkustikerModal={showAddAkustikerModal} newAkustiker={newAkustiker} setNewAkustiker={setNewAkustiker} handleAddAkustiker={handleAddAkustiker} navigate={navigate} />} />
+        <Route path="/akustiker" element={<AkustikerPage customers={customers} setShowAddAkustikerModal={setShowAddAkustikerModal} showAddAkustikerModal={showAddAkustikerModal} newAkustiker={newAkustiker} setNewAkustiker={setNewAkustiker} handleAddAkustiker={handleAddAkustiker} navigate={navigate} loadCustomers={loadCustomers} />} />
         <Route path="/reperaturauftrag" element={
             <>
               <header style={{ display: 'flex', alignItems: 'center', padding: '2rem 1rem 1rem 1rem', borderBottom: '1px solid #eee' }}>
