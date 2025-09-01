@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import './App.css';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -820,6 +820,7 @@ const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkus
 // Wrapper component that can use useNavigate hook
 function AppContent() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     // Check localStorage on component mount
     const savedLoginState = localStorage.getItem('isLoggedIn');
@@ -897,18 +898,29 @@ function AppContent() {
     setPerMethod('Fax');
     setWerkstattNotiz('');
     setWerkstattDate('');
-    
-    // Reset manual Fehlerangaben
     setManualFehler1('');
     setManualFehler2('');
     setManualFehler3('');
     setManualFehlerChecked1(false);
     setManualFehlerChecked2(false);
     setManualFehlerChecked3(false);
-    
-    // Reset IDO/HDO to default
+    setFreigabe('Reparatur laut KV durchführen');
+    setFehler({});
+    setBottom('kostenpflichtig');
+    setReklamationDate('');
+    setKulanzPorto('ja');
     setIdoHdo('IDO');
   };
+
+  // Reset form when entering the repair order route
+  useEffect(() => {
+    if (location.pathname === '/reperaturauftrag') {
+      handleReset();
+      setSelectedCustomer(null);
+      setSelectedCompany(null);
+      setCustomerSearch('');
+    }
+  }, [location.pathname]);
 
   // Handlers
   const handleCountry = (e) => setCountry(e.target.value);
@@ -988,9 +1000,34 @@ function AppContent() {
         return;
       }
 
-      // Prepare repair order data
+      // Build JSON payloads matching DB columns
+      const fehlerPayload = {
+        ...fehler,
+        manual1: { checked: !!manualFehlerChecked1, text: manualFehler1 || '' },
+        manual2: { checked: !!manualFehlerChecked2, text: manualFehler2 || '' },
+        manual3: { checked: !!manualFehlerChecked3, text: manualFehler3 || '' }
+      };
+
+      const arbeitenPayload = ARBEITEN.reduce((acc, a) => {
+        const checked = !!arbeiten[a.key];
+        const input = arbeitenManual[a.key] || '';
+        acc[a.key] = { checked, input };
+        return acc;
+      }, {});
+
+      // Prepare repair order data (align to Supabase table columns)
       const repairOrderData = {
-        customer_id: selectedCustomer.id
+        customer_id: selectedCustomer.id,
+        kommission: kommission || null,
+        hersteller: hersteller || null,
+        geraetetyp: geraetetyp || null,
+        seriennummer: seriennummer || null,
+        werkstatteingang: werkstatteingang || null,
+        zubehoer: zubehoer || null,
+        fehlerangaben: fehlerPayload,
+        ['ausgeführte_arbeiten']: arbeitenPayload,
+        nettopreis: Number.isFinite(net) ? parseFloat(net.toFixed(2)) : null,
+        porto: Number.isFinite(porto) ? parseFloat(porto.toFixed(2)) : null
       };
 
       // Insert into Supabase
