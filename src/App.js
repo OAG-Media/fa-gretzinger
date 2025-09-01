@@ -978,6 +978,77 @@ function AppContent() {
       alert('Fehler beim Anlegen des Akustikers');
     }
   };
+
+  // Save Repair Order handler
+  const handleSaveRepairOrder = async () => {
+    try {
+      // Validate that a customer is selected
+      if (!selectedCustomer) {
+        alert('Bitte wählen Sie zuerst einen Kunden aus.');
+        return;
+      }
+
+      // Prepare repair order data
+      const repairOrderData = {
+        customer_id: selectedCustomer.id,
+        company: selectedCustomer.company,
+        branch: selectedCustomer.branch,
+        address: `${selectedCustomer.street}, ${selectedCustomer.location}, ${selectedCustomer.country}`,
+        nettopreis: parseFloat(net.toFixed(2)),
+        porto: parseFloat(porto.toFixed(2)),
+        version: 1,
+        
+        // Repair Order Details
+        kommission: kommission || null,
+        hersteller: hersteller || null,
+        geraetetyp: geraetetyp || null,
+        seriennummer: seriennummer || null,
+        werkstatteingang: werkstatteingang || null,
+        zubehoer: zubehoer || null,
+        kv_date: kvDate || null,
+        per_method: perMethod || null,
+        werkstatt_notiz: werkstattNotiz || null,
+        werkstatt_date: werkstattDate || null,
+        
+        // Manual Fehlerangaben
+        manual_fehler1: manualFehler1 || null,
+        manual_fehler2: manualFehler2 || null,
+        manual_fehler3: manualFehler3 || null,
+        manual_fehler_checked1: manualFehlerChecked1,
+        manual_fehler_checked2: manualFehlerChecked2,
+        manual_fehler_checked3: manualFehlerChecked3,
+        
+        // Form Settings
+        country: country,
+        freigabe: freigabe,
+        bottom: bottom,
+        reklamation_date: reklamationDate || null,
+        kulanz_porto: kulanzPorto,
+        ido_hdo: idoHdo,
+        
+        // Arbeitszeit and Fehlerangaben (stored as JSON)
+        arbeiten: arbeiten,
+        arbeiten_manual: arbeitenManual,
+        fehler: fehler
+      };
+
+      // Insert into Supabase
+      const { data, error } = await supabase
+        .from('repair_orders')
+        .insert([repairOrderData]);
+
+      if (error) throw error;
+
+      alert('Reparaturauftrag erfolgreich gespeichert!');
+      
+      // Optionally reset form or keep data for PDF export
+      // handleReset(); // Uncomment if you want to reset after save
+      
+    } catch (error) {
+      console.error('Error saving repair order:', error);
+      alert('Fehler beim Speichern des Reparaturauftrags');
+    }
+  };
   
   // Manual Fehlerangaben handlers
   const handleManualFehler1 = (checked) => setManualFehlerChecked1(checked);
@@ -2727,7 +2798,7 @@ function AppContent() {
           setNewAkustiker={setNewAkustiker}
         />
         
-        {/* Bottom row: PDF Export button right-aligned */}
+        {/* Bottom row: Save and PDF Export buttons */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <button
             type="button"
@@ -2736,13 +2807,32 @@ function AppContent() {
           >
             Abmelden
           </button>
-          <button
-            type="button"
-            onClick={handlePdfExport}
-            style={{ padding: '8px 18px', fontSize: 15, background: '#1d426a', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
-          >
-            PDF Export
-          </button>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <button
+              type="button"
+              onClick={handleSaveRepairOrder}
+              disabled={!selectedCustomer}
+              style={{ 
+                padding: '8px 18px', 
+                fontSize: 15, 
+                background: selectedCustomer ? '#28a745' : '#6c757d', 
+                color: '#fff', 
+                border: 'none', 
+                borderRadius: 6, 
+                cursor: selectedCustomer ? 'pointer' : 'not-allowed',
+                opacity: selectedCustomer ? 1 : 0.6
+              }}
+            >
+              Speichern
+            </button>
+            <button
+              type="button"
+              onClick={handlePdfExport}
+              style={{ padding: '8px 18px', fontSize: 15, background: '#1d426a', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+            >
+              PDF Export
+            </button>
+          </div>
         </div>
       </div>
             </>
