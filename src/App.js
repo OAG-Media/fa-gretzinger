@@ -2706,10 +2706,11 @@ function AppContent() {
     // Customer Information Section
     const customerInfo = zeile+20;
     if (selectedCustomer) {
-      doc.setFontSize(10);
+      doc.setFontSize(8);
       doc.setFont(undefined, 'bold');
-      doc.text('Akustikername / Absender bzw. Firmenstempel:', 10, customerInfo);
+      doc.text('Akustikername / Absender bzw. Firmenstempel:',10, customerInfo);
       doc.setFont(undefined, 'normal');
+      doc.setFontSize(11);
       doc.text(selectedCustomer.company, 10, customerInfo+4);
       doc.text(selectedCustomer.street, 10, customerInfo+8);
       doc.text(`${selectedCustomer.location}, ${selectedCustomer.country}`, 10, customerInfo+12);
@@ -2811,8 +2812,8 @@ function AppContent() {
 
                 // Werkstattausgang Section (Top Right)
                 const werkstattausgangY = 262;
-                const werkstattausgangX = 150;
-                doc.setFontSize(8);
+                const werkstattausgangX = 144;
+                doc.setFontSize(10);
                 doc.setFont(undefined, 'bold');
                 doc.text('Werkstattausgang:', werkstattausgangX, werkstattausgangY);
                 doc.setFont(undefined, 'normal');
@@ -2820,8 +2821,9 @@ function AppContent() {
                 if (werkstattausgang) {
                   // Format date as DD.MM.YYYY
                   const [yyyy, mm, dd] = werkstattausgang.split('-');
-                  doc.setFontSize(8);
-                  doc.text(`${dd}.${mm}.${yyyy}`, werkstattausgangX + 24, werkstattausgangY);
+                  doc.setFontSize(10);
+                  doc.setFont(undefined, 'bold');
+                  doc.text(`${dd}.${mm}.${yyyy}`, werkstattausgangX + 30, werkstattausgangY);
                 } else {
                   doc.text('-', 175, notesY-15);
                 }
