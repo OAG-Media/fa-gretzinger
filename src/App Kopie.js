@@ -11,7 +11,6 @@ const COUNTRY_OPTIONS = [
 ];
 
 const FREIGABE_OPTIONS = [
-  'Keine angabe',
   'Reparatur laut KV durchführen',
   'Unrepariert zurückschicken',
   'Verschrotten',
@@ -60,18 +59,6 @@ const ARBEITEN = [
   { key: 'endkontrolle', label: 'Endkontrolle', price: 3.0 },
 ];
 
-// Global helper function to draw checkboxes in PDF
-const drawCheckbox = (doc, x, y, checked) => {
-  doc.setDrawColor(50);
-  doc.rect(x, y, 4, 4);
-  if (checked) {
-    doc.setLineWidth(0.6);
-    doc.line(x + 0.7, y + 0.7, x + 3.3, y + 3.3);
-    doc.line(x + 3.3, y + 0.7, x + 0.7, y + 3.3);
-    doc.setLineWidth(0.2);
-  }
-};
-
 // Dashboard Component - You'll actually see this!
 const Dashboard = ({ setIsLoggedIn, navigate }) => {
   return (
@@ -90,13 +77,13 @@ const Dashboard = ({ setIsLoggedIn, navigate }) => {
           </button>
         </div>
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '1.2rem 1.5rem', boxShadow: '0 1px 4px #0001' }}>
-          <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Reparaturauftrag erstellen</h3>
+          <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Reperaturauftrag erstellen</h3>
           <p style={{ color: '#666', marginBottom: '1rem' }}>Neuen Reparaturauftrag anlegen</p>
           <button 
             onClick={() => navigate('/reperaturauftrag')}
             style={{ padding: '10px 20px', background: '#1d426a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
           >
-            Reparaturauftrag erstellen
+            Reperaturauftrag erstellen
           </button>
         </div>
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '1.2rem 1.5rem', boxShadow: '0 1px 4px #0001' }}>
@@ -153,31 +140,23 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
     .sort((a, b) => {
       let aValue, bValue;
       
-              switch (sortBy) {
-          case 'company':
-            aValue = a.company || '';
-            bValue = b.company || '';
-            break;
-          case 'branch':
-            aValue = a.branch || '';
-            bValue = b.branch || '';
-            break;
-          case 'contact_person':
-            aValue = a.contact_person || '';
-            bValue = b.contact_person || '';
-            break;
-          case 'street':
-            aValue = a.street || '';
-            bValue = b.street || '';
-            break;
-          case 'location':
-            aValue = a.location || '';
-            bValue = b.location || '';
-            break;
-          default:
-            aValue = a.company || '';
-            bValue = b.company || '';
-        }
+      switch (sortBy) {
+        case 'name':
+          aValue = (a.company || '') + (a.branch || '');
+          bValue = (b.company || '') + (b.branch || '');
+          break;
+        case 'street':
+          aValue = a.street || '';
+          bValue = b.street || '';
+          break;
+        case 'location':
+          aValue = a.location || '';
+          bValue = b.location || '';
+          break;
+        default:
+          aValue = (a.company || '') + (a.branch || '');
+          bValue = (b.company || '') + (b.branch || '');
+      }
       
       if (sortOrder === 'asc') {
         return aValue.localeCompare(bValue);
@@ -302,9 +281,7 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                   fontSize: '14px'
                 }}
               >
-                <option value="company">Firma</option>
-                <option value="branch">Filiale</option>
-                <option value="contact_person">Ansprechpartner</option>
+                <option value="name">Name</option>
                 <option value="street">Straße</option>
                 <option value="location">Ort</option>
               </select>
@@ -409,31 +386,21 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                     {customer.country || '-'}
                   </td>
                   <td style={{ padding: '16px', textAlign: 'center' }}>
-                                                             <button
-                      onClick={() => handleEditCustomer(customer)}
-                      style={{
-                        background: 'none',
-                        color: '#1d426a',
-                        border: 'none',
-                        cursor: 'pointer',
-                        padding: '8px',
-                        borderRadius: '4px',
-                        transition: 'all 0.2s ease',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.target.style.transform = 'scale(1.05)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.target.style.transform = 'scale(1)';
-                      }}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-                      </svg>
-                    </button>
+                                         <button
+                       style={{
+                         padding: '6px 12px',
+                         background: '#1d426a',
+                         color: 'white',
+                         border: 'none',
+                         borderRadius: '4px',
+                         cursor: 'pointer',
+                         fontSize: '12px',
+                         marginRight: '8px'
+                       }}
+                       onClick={() => handleEditCustomer(customer)}
+                     >
+                       ✏️ Bearbeiten
+                     </button>
                   </td>
                 </tr>
               ))}
@@ -509,8 +476,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
             
             <form onSubmit={(e) => { e.preventDefault(); handleUpdateCustomer(); }}>
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
-                  Filiale*
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+                  Filiale *
                 </label>
                 <input
                   type="text"
@@ -529,8 +496,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
               </div>
               
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
-                  Firma*
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+                  Firma *
                 </label>
                 <input
                   type="text"
@@ -549,8 +516,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
               </div>
               
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
-                  Straße*
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+                  Straße *
                 </label>
                 <input
                   type="text"
@@ -569,8 +536,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
               </div>
               
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
-                  Ort*
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+                  Ort *
                 </label>
                 <input
                   type="text"
@@ -589,7 +556,7 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
               </div>
               
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
                   Ansprechpartner
                 </label>
                 <input
@@ -608,8 +575,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
               </div>
               
               <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
-                  Land*
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+                  Land *
                 </label>
                 <select
                   value={editForm.country}
@@ -974,54 +941,28 @@ const ErstellteReperaturauftragePage = () => {
       doc.text(`Per: ${order.per_method || '-'}`, 25, 200);
       doc.text(`Gesendet an Werkstatt: ${order.gesendet_an_werkstatt ? formatDate(order.gesendet_an_werkstatt) : '-'}`, 25, 210);
       
-      // Kostenvoranschlag
-      doc.setFontSize(14);
-      doc.text('Kostenvoranschlag:', 20, 220);
-      doc.setFontSize(12);
-      if (order.kostenvoranschlag_checked) {
-        doc.text(`ab ${order.kostenvoranschlag_amount || '_____'} € - netto`, 25, 230);
-      } else {
-        doc.text('Nicht angegeben', 25, 230);
-      }
-      
       // Prices
       doc.setFontSize(14);
-      doc.text('Preise:', 20, 250);
+      doc.text('Preise:', 20, 230);
       doc.setFontSize(12);
-      doc.text(`Nettopreis: ${formatPrice(order.nettopreis)}`, 25, 260);
-      doc.text(`Porto: ${formatPrice(order.porto)}`, 25, 270);
-      doc.text(`Gesamt: ${formatPrice((order.nettopreis || 0) + (order.porto || 0))}`, 25, 280);
+      doc.text(`Nettopreis: ${formatPrice(order.nettopreis)}`, 25, 240);
+      doc.text(`Porto: ${formatPrice(order.porto)}`, 25, 250);
+      doc.text(`Gesamt: ${formatPrice((order.nettopreis || 0) + (order.porto || 0))}`, 25, 260);
       
       // Timestamps
       doc.setFontSize(14);
-      doc.text('Zeitstempel:', 20, 300);
+      doc.text('Zeitstempel:', 20, 280);
       doc.setFontSize(12);
-      doc.text(`Erstellt: ${formatDateTime(order.created_at)}`, 25, 310);
-      doc.text(`Aktualisiert: ${formatDateTime(order.updated_at)}`, 25, 320);
-      doc.text(`Version: ${order.version || 1}`, 25, 330);
-      
-      // Bei Freigabe bitte ankreuzen
-      doc.setFontSize(14);
-      doc.text('Bei Freigabe bitte ankreuzen:', 20, 350);
-      doc.setFontSize(12);
-      // Only show the actual repair options in PDF, not "Keine angabe"
-      const pdfOptions = ['Reparatur laut KV durchführen', 'Unrepariert zurückschicken', 'Verschrotten'];
-      let yPos = 360;
-      pdfOptions.forEach(opt => {
-        // If "Keine angabe" is selected, show "Reparatur laut KV durchführen" as unchecked
-        // If "Reparatur laut KV durchführen" is selected, show it as checked
-        const checked = order.freigabe === opt;
-        drawCheckbox(doc, 21, yPos - 2.5, checked);
-        doc.text(opt, 28, yPos);
-        yPos += 10;
-      });
+      doc.text(`Erstellt: ${formatDateTime(order.created_at)}`, 25, 290);
+      doc.text(`Aktualisiert: ${formatDateTime(order.updated_at)}`, 25, 300);
+      doc.text(`Version: ${order.version || 1}`, 25, 310);
       
       // Workshop Notes
       if (order.werkstatt_notiz) {
         doc.setFontSize(14);
-        doc.text('Werkstatt Notiz:', 20, yPos + 10);
+        doc.text('Werkstatt Notiz:', 20, 330);
         doc.setFontSize(12);
-        doc.text(order.werkstatt_notiz, 25, yPos + 20);
+        doc.text(order.werkstatt_notiz, 25, 340);
       }
       
       // Save PDF
@@ -1903,7 +1844,7 @@ function AppContent() {
   const [loginError, setLoginError] = useState('');
   
   const [country, setCountry] = useState('DE');
-  const [freigabe, setFreigabe] = useState('Keine angabe');
+  const [freigabe, setFreigabe] = useState('Reparatur laut KV durchführen');
   const [fehler, setFehler] = useState({});
   const [arbeiten, setArbeiten] = useState({});
   const [arbeitenManual, setArbeitenManual] = useState({});
@@ -1944,10 +1885,6 @@ function AppContent() {
   const [gesaendetAnWerkstatt, setGesaendetAnWerkstatt] = useState('');
   const [notes, setNotes] = useState('');
   
-  // Kostenvoranschlag State
-  const [kostenvoranschlagChecked, setKostenvoranschlagChecked] = useState(false);
-  const [kostenvoranschlagAmount, setKostenvoranschlagAmount] = useState('');
-
   // Add New Akustiker Modal State
   const [showAddAkustikerModal, setShowAddAkustikerModal] = useState(false);
   const [newAkustiker, setNewAkustiker] = useState({
@@ -1968,15 +1905,10 @@ function AppContent() {
   
 
 
-  // Logic for disabling all fields if not 'Keine angabe' or 'Reparatur laut KV durchführen' or if Verfahren disables fields
+  // Logic for disabling all fields if not 'Reparatur laut KV durchführen' or if Verfahren disables fields
   const verfahrenDisables = bottom === 'garantie' || bottom === 'reklamation' || bottom === 'kulanz';
-  const isDisabled = (freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen') || verfahrenDisables;
+  const isDisabled = freigabe !== 'Reparatur laut KV durchführen' || verfahrenDisables;
   const hideFields = isDisabled || verfahrenDisables;
-
-  // Load customers when component mounts
-  useEffect(() => {
-    loadCustomers();
-  }, []);
 
   // Reset handler
   const handleReset = () => {
@@ -1999,7 +1931,7 @@ function AppContent() {
     setManualFehlerChecked1(false);
     setManualFehlerChecked2(false);
     setManualFehlerChecked3(false);
-          setFreigabe('Keine angabe');
+    setFreigabe('Reparatur laut KV durchführen');
     setFehler({});
     setBottom('kostenpflichtig');
     setReklamationDate('');
@@ -2007,10 +1939,6 @@ function AppContent() {
     setIdoHdo('IDO');
     setGesaendetAnWerkstatt('');
     setNotes('');
-    
-    // Reset Kostenvoranschlag
-    setKostenvoranschlagChecked(false);
-    setKostenvoranschlagAmount('');
     
     // Reset editing state
     setIsEditing(false);
@@ -2073,15 +2001,11 @@ function AppContent() {
       
       // Set form settings
       setCountry(order.country || 'DE');
-      setFreigabe(order.freigabe || 'Keine angabe');
+      setFreigabe(order.freigabe || 'Reparatur laut KV durchführen');
       setBottom(order.bottom || 'kostenpflichtig');
       setReklamationDate(order.reklamation_date || '');
       setKulanzPorto(order.kulanz_porto || 'ja');
       setIdoHdo(order.ido_hdo || 'IDO');
-      
-      // Set Kostenvoranschlag
-      setKostenvoranschlagChecked(order.kostenvoranschlag_checked || false);
-      setKostenvoranschlagAmount(order.kostenvoranschlag_amount || '');
       
       // Set arbeiten and fehler
       if (order['ausgeführte_arbeiten']) {
@@ -2249,18 +2173,8 @@ function AppContent() {
         notes: notes || null,
         fehlerangaben: fehlerPayload,
         ['ausgeführte_arbeiten']: arbeitenPayload,
-        kostenvoranschlag_checked: kostenvoranschlagChecked || false,
-        kostenvoranschlag_amount: kostenvoranschlagAmount || null,
         nettopreis: Number.isFinite(net) ? parseFloat(net.toFixed(2)) : null,
-        porto: Number.isFinite(porto) ? parseFloat(porto.toFixed(2)) : null,
-        // Add all the missing fields that were not being saved
-        freigabe: freigabe || 'Keine angabe',
-        bottom: bottom || 'kostenpflichtig',
-        reklamation_date: reklamationDate || null,
-        kulanz_porto: kulanzPorto || 'ja',
-        ido_hdo: idoHdo || 'IDO',
-        country: country || 'DE'
-
+        porto: Number.isFinite(porto) ? parseFloat(porto.toFixed(2)) : null
       };
 
       // Add version tracking and timestamp for updates
@@ -2421,32 +2335,215 @@ function AppContent() {
 
   // Load customers from Supabase
   const loadCustomers = async () => {
-    try {
-      console.log('Loading customers from Supabase...');
-      console.log('Supabase client:', supabase);
-      
-      const { data, error } = await supabase.from('customers').select('*');
-      console.log('Supabase response:', { data, error });
-      
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
+      try {
+        // Load all customers from Supabase
+        const { data, error } = await supabase.from('customers').select('*');
+        if (error) {
+          console.error('Supabase error:', error);
+          throw error;
+        }
+        if (data && data.length > 0) {
+          console.log(`Loaded ${data.length} customers from Supabase`);
+          setCustomers(data);
+        } else {
+          // Fallback to hardcoded data for now
+          const fallbackCustomers = [
+            {
+              id: '1',
+              branch: 'Altes Land Hörgeräte',
+              company: 'Hörgeräte Altes Land',
+              contact_person: 'Nina Bastein',
+              street: 'Hinterstr. 14a',
+              location: '21723 Hollern-Twielenfleth',
+              country: 'Deutschland'
+            },
+            {
+              id: '2',
+              branch: 'Hörgeräte Langer Ingolstadt (Am Westpark)',
+              company: 'Hörgeräte LANGER GmbH & Co. KG',
+              contact_person: '',
+              street: 'Am Westpark 1',
+              location: '85057 Ingolstadt',
+              country: 'Deutschland'
+            },
+            {
+              id: '3',
+              branch: 'Ihr Ohr',
+              company: 'Ihr Ohr',
+              contact_person: 'Simone Weyand-Fink e.U.',
+              street: 'Postgasse 13',
+              location: '1010 Wien',
+              country: 'Österreich'
+            },
+            {
+              id: '4',
+              branch: 'KUNO',
+              company: 'KUNO',
+              contact_person: 'Augenoptik und Hörakustik GmbH',
+              street: 'Karlstr. 20-22',
+              location: '74564 Crailsheim',
+              country: 'Deutschland'
+            },
+            {
+              id: '5',
+              branch: 'Hörgeräte Langer Adelsheim',
+              company: 'Hörgeräte LANGER GmbH & Co. KG',
+              contact_person: '',
+              street: 'Marktstraße 6',
+              location: '74740 Adelsheim',
+              country: 'Deutschland'
+            },
+            {
+              id: '6',
+              branch: 'Hörgeräte Langer Asperg',
+              company: 'Hörgeräte LANGER GmbH & Co. KG',
+              contact_person: '',
+              street: 'Markgröninger Straße 14',
+              location: '71679 Asperg',
+              country: 'Deutschland'
+            },
+            {
+              id: '7',
+              branch: 'Hörgeräte Dölle',
+              company: 'Hörgeräte Dölle',
+              contact_person: 'Augenoptik und Hörakustik',
+              street: 'Große Str. 50',
+              location: '49565 Bramsche',
+              country: 'Deutschland'
+            },
+            {
+              id: '8',
+              branch: 'Dölle Hörgeräte Mettingen',
+              company: 'Hörgeräte Dölle',
+              contact_person: 'Augenoptik und Hörakustik',
+              street: 'Clemensstrasse 5b',
+              location: '49497 Mettingen',
+              country: 'Deutschland'
+            },
+            {
+              id: '9',
+              branch: 'Helgert & Rieger',
+              company: 'Helgert & Rieger',
+              contact_person: 'Hörgeräteakustik',
+              street: 'Innerer Laufer Platz 6-8',
+              location: '90403 Nürnberg',
+              country: 'Deutschland'
+            },
+            {
+              id: '10',
+              branch: 'Hörberatung Nürnberg',
+              company: 'Hörberatung',
+              contact_person: '',
+              street: 'Hallplatz 2, in der Mauthalle',
+              location: '90402 Nürnberg',
+              country: 'Deutschland'
+            }
+          ];
+          setCustomers(fallbackCustomers);
+        }
+      } catch (error) {
+        console.error('Error loading customers:', error);
+        // Use fallback data on error
+        const fallbackCustomers = [
+          {
+            id: '1',
+            branch: 'Altes Land Hörgeräte',
+            company: 'Hörgeräte Altes Land',
+            contact_person: 'Nina Bastein',
+            street: 'Hinterstr. 14a',
+            location: '21723 Hollern-Twielenfleth',
+            country: 'Deutschland'
+          },
+          {
+            id: '2',
+            branch: 'Hörgeräte Langer Ingolstadt (Am Westpark)',
+            company: 'Hörgeräte LANGER GmbH & Co. KG',
+            contact_person: '',
+            street: 'Am Westpark 1',
+            location: '85057 Ingolstadt',
+            country: 'Deutschland'
+          },
+          {
+            id: '3',
+            branch: 'Ihr Ohr',
+            company: 'Ihr Ohr',
+            contact_person: 'Simone Weyand-Fink e.U.',
+            street: 'Postgasse 13',
+            location: '1010 Wien',
+            country: 'Österreich'
+          },
+          {
+            id: '4',
+            branch: 'KUNO',
+            company: 'KUNO',
+            contact_person: 'Augenoptik und Hörakustik GmbH',
+            street: 'Karlstr. 20-22',
+            location: '74564 Crailsheim',
+            country: 'Deutschland'
+          },
+          {
+            id: '5',
+            branch: 'Hörgeräte Langer Adelsheim',
+            company: 'Hörgeräte LANGER GmbH & Co. KG',
+            contact_person: '',
+            street: 'Marktstraße 6',
+            location: '74740 Adelsheim',
+            country: 'Deutschland'
+          },
+          {
+            id: '6',
+            branch: 'Hörgeräte Langer Asperg',
+            company: 'Hörgeräte LANGER GmbH & Co. KG',
+            contact_person: '',
+            street: 'Markgröninger Straße 14',
+            location: '71679 Asperg',
+            country: 'Deutschland'
+          },
+          {
+            id: '7',
+            branch: 'Hörgeräte Dölle',
+            company: 'Hörgeräte Dölle',
+            contact_person: 'Augenoptik und Hörakustik',
+            street: 'Große Str. 50',
+            location: '49565 Bramsche',
+            country: 'Deutschland'
+          },
+          {
+            id: '8',
+            branch: 'Dölle Hörgeräte Mettingen',
+            company: 'Hörgeräte Dölle',
+            contact_person: 'Augenoptik und Hörakustik',
+            street: 'Clemensstrasse 5b',
+            location: '49497 Mettingen',
+            country: 'Deutschland'
+          },
+          {
+            id: '9',
+            branch: 'Helgert & Rieger',
+            company: 'Helgert & Rieger',
+            contact_person: 'Hörgeräteakustik',
+            street: 'Innerer Laufer Platz 6-8',
+            location: '90403 Nürnberg',
+            country: 'Deutschland'
+          },
+          {
+            id: '10',
+            branch: 'Hörberatung Nürnberg',
+            company: 'Hörberatung',
+            contact_person: '',
+            street: 'Hallplatz 2, in der Mauthalle',
+            location: '90402 Nürnberg',
+            country: 'Deutschland'
+          }
+        ];
+        setCustomers(fallbackCustomers);
       }
-      
-      if (data && data.length > 0) {
-        console.log(`Successfully loaded ${data.length} customers from Supabase`);
-        console.log('First customer:', data[0]);
-        setCustomers(data);
-        console.log('Customers state set to:', data);
-      } else {
-        console.log('No customers found in Supabase');
-        setCustomers([]);
-      }
-    } catch (error) {
-      console.error('Error loading customers:', error);
-      setCustomers([]);
-    }
-  };
+    };
+    
+    // Load customers on component mount
+    useEffect(() => {
+      loadCustomers();
+    }, []);
 
   // Click outside handler for dropdowns
   useEffect(() => {
@@ -2658,13 +2755,14 @@ function AppContent() {
         }
       }
     });
-    // net is now the base price only - DO NOT add porto here
+    net += porto;
   } else if (bottom === 'garantie' || bottom === 'reklamation') {
     net = 0;
     // Porto can still be applied if enabled via toggle
   } else if (bottom === 'kulanz') {
     net = 0;
-    // For kulanz, net remains 0, porto is handled separately
+    // Porto is already handled above for all types
+    net = porto;
   }
 
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2672,6 +2770,7 @@ function AppContent() {
 //--------------------------------------------------------------------- PDF - Export ---------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
   // PDF Export function
   const handlePdfExport = () => {
@@ -2697,7 +2796,7 @@ function AppContent() {
     // Customer Information Section
     const customerInfo = zeile+20;
     if (selectedCustomer) {
-      doc.setFontSize(10);
+      doc.setFontSize(8);
       doc.setFont(undefined, 'bold');
       doc.text('Akustikername / Absender bzw. Firmenstempel:', 10, customerInfo);
       doc.setFont(undefined, 'normal');
@@ -2762,9 +2861,6 @@ function AppContent() {
       doc.text(geraetetyp || '-', startX + colWidth * 2, tableY + 8);
       doc.text(seriennummer || '-', startX + colWidth * 3, tableY + 8);
       
-      const repWerkstattNotiz = 125
-      const perFaxMail = repWerkstattNotiz +52
-
       // Format date for Werkstatteingang
       let werkstatteingangFormatted = '-';
       if (werkstatteingang) {
@@ -2779,32 +2875,32 @@ function AppContent() {
         doc.setFontSize(8);
         let notesY = tableY + 15;
         doc.setFont(undefined, 'bold');
-        doc.text('Rep. werkstatt Notiz: KV am:', repWerkstattNotiz, notesY);
+        doc.text('Rep. werkstatt Notiz: KV am:', startX-1, notesY);
         doc.setFont(undefined, 'normal');
         
         if (kvDate) {
           const [yyyy, mm, dd] = kvDate.split('-');
-          doc.text(` ${dd}.${mm}.${yyyy}`, repWerkstattNotiz+37, notesY);
+          doc.text(` ${dd}.${mm}.${yyyy}`, startX + 35, notesY);
         }
 
                 // Workshop Date Section (Top Right)
                 if (werkstattDate) {
                   doc.setFontSize(8);
                   doc.setFont(undefined, 'bold');
-                  doc.text('gesendet an die Werkstatt:', 142, notesY-20);
+                  doc.text('gesendet an die Werkstatt:', 140, notesY);
                   doc.setFont(undefined, 'normal');
                   
                   // Format date as DD.MM.YYYY
                   const [yyyy, mm, dd] = werkstattDate.split('-');
                   doc.setFontSize(8);
-                  doc.text(`${dd}.${mm}.${yyyy}`, 175, notesY-20);
+                  doc.text(`${dd}.${mm}.${yyyy}`, 175, notesY);
                 }
         
         doc.setFontSize(8);
         doc.setFont(undefined, 'bold');
-        doc.text('per:', perFaxMail, notesY);
+        doc.text('per:', startX + 55, notesY);
         doc.setFont(undefined, 'normal');
-        doc.text(perMethod || '', perFaxMail+6, notesY);
+        doc.text(perMethod || '', startX + 61, notesY);
         
         //if (werkstattNotiz) {
         //  doc.text(werkstattNotiz, startX + 100, notesY);
@@ -2837,13 +2933,9 @@ function AppContent() {
     doc.setFont(undefined, 'normal');
     yLeft += linePad + 1;
     
-    // Only show the actual repair options in PDF, not "Keine angabe"
-    const pdfOptions = FREIGABE_OPTIONS.filter(opt => opt !== 'Keine angabe');
-    pdfOptions.forEach(opt => {
-      // If "Keine angabe" is selected, show "Reparatur laut KV durchführen" as unchecked
-      // If "Reparatur laut KV durchführen" is selected, show it as checked
+    FREIGABE_OPTIONS.forEach(opt => {
       const checked = freigabe === opt;
-      drawCheckbox(doc, leftX + 1, yLeft - 2.5, checked);
+    drawCheckbox(doc, leftX + 1, yLeft - 2.5, checked);
       doc.text(opt, leftX + 8, yLeft);
       yLeft += linePad;
     });
@@ -2862,30 +2954,32 @@ function AppContent() {
       }
     });
     
-    // Manual Fehlerangaben in PDF - Only show checked items
-    if (manualFehlerChecked1 || manualFehlerChecked2 || manualFehlerChecked3) {
+    // Manual Fehlerangaben in PDF
+    if (manualFehler1 || manualFehler2 || manualFehler3) {
       yLeft += 2; // Add some space before manual entries
       doc.setFont(undefined, 'normal');
       
-      if (manualFehlerChecked1 && manualFehler1) {
+      //if (manualFehler1) {
         drawCheckbox(doc, leftX+1, yLeft - 8, manualFehlerChecked1);
         doc.text(manualFehler1, leftX + 8, yLeft - 5);
         yLeft += linePad;
-      }
+      //}
       
-      if (manualFehlerChecked2 && manualFehler2) {
+      //if (manualFehler2) {
         drawCheckbox(doc, leftX + 1, yLeft - 8, manualFehlerChecked2);
         doc.text(manualFehler2, leftX + 8, yLeft - 5);
         yLeft += linePad;
-      }
+      //}
       
-      if (manualFehlerChecked3 && manualFehler3) {
+      //if (manualFehler3) {
         drawCheckbox(doc, leftX + 1, yLeft - 8, manualFehlerChecked3);
         doc.text(manualFehler3, leftX + 8, yLeft - 5);
-        yLeft += linePad;
-      }
+        //yLeft += linePad;
+      //}
       
+      //yLeft += sectionPad;
       yLeft += 2;
+
     }
 
 
@@ -2929,26 +3023,6 @@ function AppContent() {
       doc.text('Porto nein', leftX + 44, yLeft);
       yLeft += linePad;
     }
-    const kvYabNetto = 73
-    const kvXabNetto = 35
-    // Kostenvoranschlag Section
-    yLeft += sectionPad;
-    doc.setFont(undefined, 'bold');
-    doc.text('Kostenvoranschlag:', leftX, kvYabNetto);
-    doc.setFont(undefined, 'normal');
-    yLeft += linePad + 1;
-    
-    // Kostenvoranschlag checkbox and amount
-    drawCheckbox(doc, kvXabNetto, kvYabNetto - 2.5, kostenvoranschlagChecked);
-    doc.text('ab', kvXabNetto + 6, kvYabNetto);
-    
-    // Add amount text field (if checked and has amount)
-    if (kostenvoranschlagChecked && kostenvoranschlagAmount) {
-      doc.text(`${kostenvoranschlagAmount} € - netto`, kvXabNetto + 10, kvYabNetto);
-    } else {
-      doc.text('_____ € - netto', kvXabNetto + 10, kvYabNetto);
-    }
-    yLeft += linePad;
 
     // Right column: Ausgeführte Arbeiten (true 3-column grid)
     let yRight = CheckBoxbereich;
@@ -3009,7 +3083,7 @@ function AppContent() {
     doc.text(`Nettopreis: ${net.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 35, pricingY, { align: 'right' });
     doc.setFont(undefined, 'normal');
     doc.setFontSize(8);
-    doc.text(`zzgl. Porto & Verpackung: ${porto.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 35, pricingY + 6, { align: 'right' });
+    doc.text(`inkl. Porto & Verpackung: ${porto.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 35, pricingY + 6, { align: 'right' });
 
     // Notizen section at the bottom (only if there are notes)
     //if (werkstattNotiz && werkstattNotiz.trim() !== '') {
@@ -3030,6 +3104,17 @@ function AppContent() {
     //}
 
     doc.save('reparaturauftrag.pdf');
+  };
+
+  const drawCheckbox = (doc, x, y, checked) => {
+    doc.setDrawColor(50);
+    doc.rect(x, y, 4, 4);
+    if (checked) {
+      doc.setLineWidth(0.6);
+      doc.line(x + 0.7, y + 0.7, x + 3.3, y + 3.3);
+      doc.line(x + 3.3, y + 0.7, x + 0.7, y + 3.3);
+      doc.setLineWidth(0.2);
+    }
   };
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3637,36 +3722,6 @@ function AppContent() {
         <form style={{ display: 'flex', flexDirection: 'row', gap: '2rem' }}>
           {/* Left column */}
           <div style={{ flex: 1, minWidth: 260 }}>
-            {/* Kostenvoranschlag Section - Moved above Freigabe */}
-            <div style={boxStyle}>
-              <div style={{ fontWeight: 600, marginBottom: 8, textAlign: 'left' }}>Kostenvoranschlag:</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input 
-                  type="checkbox" 
-                  checked={kostenvoranschlagChecked} 
-                  onChange={(e) => setKostenvoranschlagChecked(e.target.checked)}
-                  style={{ margin: 0 }}
-                />
-                <span>ab</span>
-                <input 
-                  type="text" 
-                  value={kostenvoranschlagAmount} 
-                  onChange={(e) => setKostenvoranschlagAmount(e.target.value)}
-                  placeholder="0,00"
-                  style={{
-                    width: '80px',
-                    padding: '4px 8px',
-                    border: '1px solid #e1e5e9',
-                    borderRadius: '4px',
-                    fontSize: '14px',
-                    fontFamily: 'Arial, sans-serif',
-                    textAlign: 'center'
-                  }}
-                />
-                <span>€ - netto</span>
-              </div>
-            </div>
-            
             <div style={boxStyle}>
               <div style={{ fontWeight: 600, marginBottom: 8, textAlign: 'left' }}>Bei Freigabe bitte ankreuzen:</div>
               {FREIGABE_OPTIONS.map((opt) => (
@@ -3767,26 +3822,26 @@ function AppContent() {
                   <input type="radio" name="bottom" checked={bottom === 'kostenpflichtig'} onChange={() => handleBottom('kostenpflichtig')} /> Kostenpflichtige Reparatur
                 </label>
                 <label>
-                  <input type="radio" name="bottom" checked={bottom === 'garantie'} onChange={() => handleBottom('garantie')} disabled={freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen'} /> Garantie
+                  <input type="radio" name="bottom" checked={bottom === 'garantie'} onChange={() => handleBottom('garantie')} disabled={freigabe !== 'Reparatur laut KV durchführen'} /> Garantie
                 </label>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
                   <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                    <input type="radio" name="bottom" checked={bottom === 'reklamation'} onChange={() => handleBottom('reklamation')} disabled={freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen'} style={{ marginTop: 2 }} />
+                    <input type="radio" name="bottom" checked={bottom === 'reklamation'} onChange={() => handleBottom('reklamation')} disabled={freigabe !== 'Reparatur laut KV durchführen'} style={{ marginTop: 2 }} />
                     <span>Reklamation auf Reparatur von</span>
                   </label>
                   {bottom === 'reklamation' && (
-                    <input type="date" value={reklamationDate} onChange={handleReklamationDate} style={{ fontSize: 15, marginLeft: 28, marginTop: 2 }} disabled={freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen'} />
+                    <input type="date" value={reklamationDate} onChange={handleReklamationDate} style={{ fontSize: 15, marginLeft: 28, marginTop: 2 }} disabled={freigabe !== 'Reparatur laut KV durchführen'} />
                   )}
                 </div>
                 <label>
-                  <input type="radio" name="bottom" checked={bottom === 'kulanz'} onChange={() => handleBottom('kulanz')} disabled={freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen'} /> Kulanz
+                  <input type="radio" name="bottom" checked={bottom === 'kulanz'} onChange={() => handleBottom('kulanz')} disabled={freigabe !== 'Reparatur laut KV durchführen'} /> Kulanz
                 </label>
-                <div style={{ marginLeft: 24, marginTop: 4, opacity: bottom === 'kulanz' && (freigabe === 'Keine angabe' || freigabe === 'Reparatur laut KV durchführen') ? 1 : 0.5, pointerEvents: bottom === 'kulanz' && (freigabe === 'Keine angabe' || freigabe === 'Reparatur laut KV durchführen') ? 'auto' : 'none' }}>
+                <div style={{ marginLeft: 24, marginTop: 4, opacity: bottom === 'kulanz' && freigabe === 'Reparatur laut KV durchführen' ? 1 : 0.5, pointerEvents: bottom === 'kulanz' && freigabe === 'Reparatur laut KV durchführen' ? 'auto' : 'none' }}>
                   <label style={{ marginRight: 16 }}>
-                    <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'ja'} disabled={bottom !== 'kulanz' || (freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen')} onChange={() => handleKulanzPorto('ja')} /> Porto ja
+                    <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'ja'} disabled={bottom !== 'kulanz' || freigabe !== 'Reparatur laut KV durchführen'} onChange={() => handleKulanzPorto('ja')} /> Porto ja
                   </label>
                   <label>
-                    <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'nein'} disabled={bottom !== 'kulanz' || (freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen')} onChange={() => handleKulanzPorto('nein')} /> Porto nein
+                    <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'nein'} disabled={bottom !== 'kulanz' || freigabe !== 'Reparatur laut KV durchführen'} onChange={() => handleKulanzPorto('nein')} /> Porto nein
                   </label>
                 </div>
               </div>
@@ -3840,7 +3895,7 @@ function AppContent() {
                       onChange={() => handleIdoHdo('IDO')}
                       style={{ margin: 0 }}
                     /> 
-                    <span style={{ fontSize: 14 }}>HDO (22,00 €)</span>
+                    <span style={{ fontSize: 14 }}>IDO (22,00 €)</span>
                   </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <input 
@@ -3850,7 +3905,7 @@ function AppContent() {
                       onChange={() => handleIdoHdo('HDO')}
                       style={{ margin: 0 }}
                     /> 
-                    <span style={{ fontSize: 14 }}>IDO (26,00 €)</span>
+                    <span style={{ fontSize: 14 }}>HDO (26,00 €)</span>
                   </label>
                 </div>
               </div>
@@ -3921,18 +3976,18 @@ function AppContent() {
               
               <div style={{ width: '100%', display: 'grid', gridTemplateColumns: 'max-content max-content', gridTemplateRows: 'max-content max-content', justifyContent: 'end', alignItems: 'center', gap: '0 32px' }}>
                 
-                <div style={{ fontSize: 20, fontWeight: 700, color: '#1d426a', textAlign: 'right', gridColumn: 1, gridRow: 1 }}>
-                  Nettopreis:
-                </div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: '#1d426a', textAlign: 'right', gridColumn: 2, gridRow: 1 }}>
-                  {net.toFixed(2).replace('.', ',')} €
-                </div>
-                
-                <div style={{ fontSize: 16, fontWeight: 500, color: '#222', textAlign: 'right', gridColumn: 1, gridRow: 2 }}>
+              <div style={{ fontSize: 16, fontWeight: 500, color: '#222', textAlign: 'right', gridColumn: 1, gridRow: 1 }}>
                   + Porto & Verpackung:
                 </div>
-                <div style={{ fontSize: 16, fontWeight: 500, color: '#222', textAlign: 'right', gridColumn: 2, gridRow: 2 }}>
+                <div style={{ fontSize: 16, fontWeight: 500, color: '#222', textAlign: 'right', gridColumn: 2, gridRow: 1 }}>
                   {porto.toFixed(2).replace('.', ',')} €
+                </div>
+                
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#1d426a', textAlign: 'right', gridColumn: 1, gridRow: 2 }}>
+                  Nettopreis:
+                </div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#1d426a', textAlign: 'right', gridColumn: 2, gridRow: 2 }}>
+                  {net.toFixed(2).replace('.', ',')} €
                 </div>
 
               </div>
