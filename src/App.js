@@ -62,9 +62,10 @@ const ARBEITEN = [
 // Dashboard Component - You'll actually see this!
 const Dashboard = ({ setIsLoggedIn, navigate }) => {
   return (
-    <div style={{ padding: '2rem', textAlign: 'center' }}>
-      <h1 style={{ color: '#1d426a', marginBottom: '2rem' }}>Gretzinger Hörgeräte Dashboard</h1>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '2rem', maxWidth: '800px', margin: '0 auto' }}>
+    <div style={{ padding: '2rem', textAlign: 'center', height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+      {/* <h1 style={{ color: '#1d426a', marginBottom: '2rem' }}>Gretzinger Hörgeräte Dashboard</h1> */}
+      <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 80, marginBottom: '2rem' }} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '2rem', maxWidth: '800px', margin: '0 auto', width: '100%' }}>
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '1.2rem 1.5rem', boxShadow: '0 1px 4px #0001' }}>
           <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Akustiker</h3>
           <p style={{ color: '#666', marginBottom: '1rem' }}>Kunden verwalten und bearbeiten</p>
@@ -109,7 +110,7 @@ const Dashboard = ({ setIsLoggedIn, navigate }) => {
 // Akustiker Management Page Component
 const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerModal, newAkustiker, setNewAkustiker, handleAddAkustiker, navigate, loadCustomers }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('name'); // 'name', 'street', 'location'
+  const [sortBy, setSortBy] = useState('company'); // 'company', 'branch', 'contact_person', 'street', 'location'
   const [sortOrder, setSortOrder] = useState('asc'); // 'asc', 'desc'
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
@@ -139,23 +140,31 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
     .sort((a, b) => {
       let aValue, bValue;
       
-      switch (sortBy) {
-        case 'name':
-          aValue = (a.company || '') + (a.branch || '');
-          bValue = (b.company || '') + (b.branch || '');
-          break;
-        case 'street':
-          aValue = a.street || '';
-          bValue = b.street || '';
-          break;
-        case 'location':
-          aValue = a.location || '';
-          bValue = b.location || '';
-          break;
-        default:
-          aValue = (a.company || '') + (a.branch || '');
-          bValue = (b.company || '') + (b.branch || '');
-      }
+              switch (sortBy) {
+          case 'company':
+            aValue = a.company || '';
+            bValue = b.company || '';
+            break;
+          case 'branch':
+            aValue = a.branch || '';
+            bValue = b.branch || '';
+            break;
+          case 'contact_person':
+            aValue = a.contact_person || '';
+            bValue = b.contact_person || '';
+            break;
+          case 'street':
+            aValue = a.street || '';
+            bValue = b.street || '';
+            break;
+          case 'location':
+            aValue = a.location || '';
+            bValue = b.location || '';
+            break;
+          default:
+            aValue = a.company || '';
+            bValue = b.company || '';
+        }
       
       if (sortOrder === 'asc') {
         return aValue.localeCompare(bValue);
@@ -280,7 +289,9 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                   fontSize: '14px'
                 }}
               >
-                <option value="name">Name</option>
+                <option value="company">Firma</option>
+                <option value="branch">Filiale</option>
+                <option value="contact_person">Ansprechpartner</option>
                 <option value="street">Straße</option>
                 <option value="location">Ort</option>
               </select>
@@ -385,21 +396,31 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                     {customer.country || '-'}
                   </td>
                   <td style={{ padding: '16px', textAlign: 'center' }}>
-                                         <button
-                       style={{
-                         padding: '6px 12px',
-                         background: '#1d426a',
-                         color: 'white',
-                         border: 'none',
-                         borderRadius: '4px',
-                         cursor: 'pointer',
-                         fontSize: '12px',
-                         marginRight: '8px'
-                       }}
-                       onClick={() => handleEditCustomer(customer)}
-                     >
-                       ✏️ Bearbeiten
-                     </button>
+                                                             <button
+                      onClick={() => handleEditCustomer(customer)}
+                      style={{
+                        background: 'none',
+                        color: '#1d426a',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '8px',
+                        borderRadius: '4px',
+                        transition: 'all 0.2s ease',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.transform = 'scale(1.05)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.transform = 'scale(1)';
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                      </svg>
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -475,8 +496,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
             
             <form onSubmit={(e) => { e.preventDefault(); handleUpdateCustomer(); }}>
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
-                  Filiale *
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+                  Filiale*
                 </label>
                 <input
                   type="text"
@@ -495,8 +516,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
               </div>
               
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
-                  Firma *
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+                  Firma*
                 </label>
                 <input
                   type="text"
@@ -515,8 +536,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
               </div>
               
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
-                  Straße *
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+                  Straße*
                 </label>
                 <input
                   type="text"
@@ -535,8 +556,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
               </div>
               
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
-                  Ort *
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+                  Ort*
                 </label>
                 <input
                   type="text"
@@ -555,7 +576,7 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
               </div>
               
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
                   Ansprechpartner
                 </label>
                 <input
@@ -574,8 +595,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
               </div>
               
               <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
-                  Land *
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+                  Land*
                 </label>
                 <select
                   value={editForm.country}
@@ -1909,6 +1930,11 @@ function AppContent() {
   const isDisabled = freigabe !== 'Reparatur laut KV durchführen' || verfahrenDisables;
   const hideFields = isDisabled || verfahrenDisables;
 
+  // Load customers when component mounts
+  useEffect(() => {
+    loadCustomers();
+  }, []);
+
   // Reset handler
   const handleReset = () => {
     setArbeiten({});
@@ -2334,215 +2360,32 @@ function AppContent() {
 
   // Load customers from Supabase
   const loadCustomers = async () => {
-      try {
-        // Load all customers from Supabase
-        const { data, error } = await supabase.from('customers').select('*');
-        if (error) {
-          console.error('Supabase error:', error);
-          throw error;
-        }
-        if (data && data.length > 0) {
-          console.log(`Loaded ${data.length} customers from Supabase`);
-          setCustomers(data);
-        } else {
-          // Fallback to hardcoded data for now
-          const fallbackCustomers = [
-            {
-              id: '1',
-              branch: 'Altes Land Hörgeräte',
-              company: 'Hörgeräte Altes Land',
-              contact_person: 'Nina Bastein',
-              street: 'Hinterstr. 14a',
-              location: '21723 Hollern-Twielenfleth',
-              country: 'Deutschland'
-            },
-            {
-              id: '2',
-              branch: 'Hörgeräte Langer Ingolstadt (Am Westpark)',
-              company: 'Hörgeräte LANGER GmbH & Co. KG',
-              contact_person: '',
-              street: 'Am Westpark 1',
-              location: '85057 Ingolstadt',
-              country: 'Deutschland'
-            },
-            {
-              id: '3',
-              branch: 'Ihr Ohr',
-              company: 'Ihr Ohr',
-              contact_person: 'Simone Weyand-Fink e.U.',
-              street: 'Postgasse 13',
-              location: '1010 Wien',
-              country: 'Österreich'
-            },
-            {
-              id: '4',
-              branch: 'KUNO',
-              company: 'KUNO',
-              contact_person: 'Augenoptik und Hörakustik GmbH',
-              street: 'Karlstr. 20-22',
-              location: '74564 Crailsheim',
-              country: 'Deutschland'
-            },
-            {
-              id: '5',
-              branch: 'Hörgeräte Langer Adelsheim',
-              company: 'Hörgeräte LANGER GmbH & Co. KG',
-              contact_person: '',
-              street: 'Marktstraße 6',
-              location: '74740 Adelsheim',
-              country: 'Deutschland'
-            },
-            {
-              id: '6',
-              branch: 'Hörgeräte Langer Asperg',
-              company: 'Hörgeräte LANGER GmbH & Co. KG',
-              contact_person: '',
-              street: 'Markgröninger Straße 14',
-              location: '71679 Asperg',
-              country: 'Deutschland'
-            },
-            {
-              id: '7',
-              branch: 'Hörgeräte Dölle',
-              company: 'Hörgeräte Dölle',
-              contact_person: 'Augenoptik und Hörakustik',
-              street: 'Große Str. 50',
-              location: '49565 Bramsche',
-              country: 'Deutschland'
-            },
-            {
-              id: '8',
-              branch: 'Dölle Hörgeräte Mettingen',
-              company: 'Hörgeräte Dölle',
-              contact_person: 'Augenoptik und Hörakustik',
-              street: 'Clemensstrasse 5b',
-              location: '49497 Mettingen',
-              country: 'Deutschland'
-            },
-            {
-              id: '9',
-              branch: 'Helgert & Rieger',
-              company: 'Helgert & Rieger',
-              contact_person: 'Hörgeräteakustik',
-              street: 'Innerer Laufer Platz 6-8',
-              location: '90403 Nürnberg',
-              country: 'Deutschland'
-            },
-            {
-              id: '10',
-              branch: 'Hörberatung Nürnberg',
-              company: 'Hörberatung',
-              contact_person: '',
-              street: 'Hallplatz 2, in der Mauthalle',
-              location: '90402 Nürnberg',
-              country: 'Deutschland'
-            }
-          ];
-          setCustomers(fallbackCustomers);
-        }
-      } catch (error) {
-        console.error('Error loading customers:', error);
-        // Use fallback data on error
-        const fallbackCustomers = [
-          {
-            id: '1',
-            branch: 'Altes Land Hörgeräte',
-            company: 'Hörgeräte Altes Land',
-            contact_person: 'Nina Bastein',
-            street: 'Hinterstr. 14a',
-            location: '21723 Hollern-Twielenfleth',
-            country: 'Deutschland'
-          },
-          {
-            id: '2',
-            branch: 'Hörgeräte Langer Ingolstadt (Am Westpark)',
-            company: 'Hörgeräte LANGER GmbH & Co. KG',
-            contact_person: '',
-            street: 'Am Westpark 1',
-            location: '85057 Ingolstadt',
-            country: 'Deutschland'
-          },
-          {
-            id: '3',
-            branch: 'Ihr Ohr',
-            company: 'Ihr Ohr',
-            contact_person: 'Simone Weyand-Fink e.U.',
-            street: 'Postgasse 13',
-            location: '1010 Wien',
-            country: 'Österreich'
-          },
-          {
-            id: '4',
-            branch: 'KUNO',
-            company: 'KUNO',
-            contact_person: 'Augenoptik und Hörakustik GmbH',
-            street: 'Karlstr. 20-22',
-            location: '74564 Crailsheim',
-            country: 'Deutschland'
-          },
-          {
-            id: '5',
-            branch: 'Hörgeräte Langer Adelsheim',
-            company: 'Hörgeräte LANGER GmbH & Co. KG',
-            contact_person: '',
-            street: 'Marktstraße 6',
-            location: '74740 Adelsheim',
-            country: 'Deutschland'
-          },
-          {
-            id: '6',
-            branch: 'Hörgeräte Langer Asperg',
-            company: 'Hörgeräte LANGER GmbH & Co. KG',
-            contact_person: '',
-            street: 'Markgröninger Straße 14',
-            location: '71679 Asperg',
-            country: 'Deutschland'
-          },
-          {
-            id: '7',
-            branch: 'Hörgeräte Dölle',
-            company: 'Hörgeräte Dölle',
-            contact_person: 'Augenoptik und Hörakustik',
-            street: 'Große Str. 50',
-            location: '49565 Bramsche',
-            country: 'Deutschland'
-          },
-          {
-            id: '8',
-            branch: 'Dölle Hörgeräte Mettingen',
-            company: 'Hörgeräte Dölle',
-            contact_person: 'Augenoptik und Hörakustik',
-            street: 'Clemensstrasse 5b',
-            location: '49497 Mettingen',
-            country: 'Deutschland'
-          },
-          {
-            id: '9',
-            branch: 'Helgert & Rieger',
-            company: 'Helgert & Rieger',
-            contact_person: 'Hörgeräteakustik',
-            street: 'Innerer Laufer Platz 6-8',
-            location: '90403 Nürnberg',
-            country: 'Deutschland'
-          },
-          {
-            id: '10',
-            branch: 'Hörberatung Nürnberg',
-            company: 'Hörberatung',
-            contact_person: '',
-            street: 'Hallplatz 2, in der Mauthalle',
-            location: '90402 Nürnberg',
-            country: 'Deutschland'
-          }
-        ];
-        setCustomers(fallbackCustomers);
+    try {
+      console.log('Loading customers from Supabase...');
+      console.log('Supabase client:', supabase);
+      
+      const { data, error } = await supabase.from('customers').select('*');
+      console.log('Supabase response:', { data, error });
+      
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
       }
-    };
-    
-    // Load customers on component mount
-    useEffect(() => {
-      loadCustomers();
-    }, []);
+      
+      if (data && data.length > 0) {
+        console.log(`Successfully loaded ${data.length} customers from Supabase`);
+        console.log('First customer:', data[0]);
+        setCustomers(data);
+        console.log('Customers state set to:', data);
+      } else {
+        console.log('No customers found in Supabase');
+        setCustomers([]);
+      }
+    } catch (error) {
+      console.error('Error loading customers:', error);
+      setCustomers([]);
+    }
+  };
 
   // Click outside handler for dropdowns
   useEffect(() => {
