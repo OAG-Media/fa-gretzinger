@@ -2451,20 +2451,7 @@ function AppContent() {
                 margin: '0 auto 20px auto'
               }}
             />
-            <div style={{
-              fontSize: '24px',
-              fontWeight: '600',
-              color: '#1d426a',
-              marginBottom: '8px'
-            }}>
-              GRETZINGER
-            </div>
-            <div style={{
-              fontSize: '16px',
-              color: '#666'
-            }}>
-              Hörgeräteservice
-            </div>
+
           </div>
 
           {/* Login Form */}
