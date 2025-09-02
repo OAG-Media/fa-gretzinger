@@ -2597,14 +2597,13 @@ function AppContent() {
         }
       }
     });
-    net += porto;
+    // net is now the base price only - DO NOT add porto here
   } else if (bottom === 'garantie' || bottom === 'reklamation') {
     net = 0;
     // Porto can still be applied if enabled via toggle
   } else if (bottom === 'kulanz') {
     net = 0;
-    // Porto is already handled above for all types
-    net = porto;
+    // For kulanz, net remains 0, porto is handled separately
   }
 
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------
