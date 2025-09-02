@@ -973,40 +973,41 @@ const ErstellteReperaturauftragePage = () => {
       doc.text(`KV am: ${order.kv_date ? formatDate(order.kv_date) : '-'}`, 25, 190);
       doc.text(`Per: ${order.per_method || '-'}`, 25, 200);
       doc.text(`Gesendet an Werkstatt: ${order.gesendet_an_werkstatt ? formatDate(order.gesendet_an_werkstatt) : '-'}`, 25, 210);
+      doc.text(`Werkstattausgang: ${order.werkstattausgang ? formatDate(order.werkstattausgang) : '-'}`, 25, 220);
       
       // Kostenvoranschlag
       doc.setFontSize(14);
-      doc.text('Kostenvoranschlag:', 20, 220);
+      doc.text('Kostenvoranschlag:', 20, 230);
       doc.setFontSize(12);
       if (order.kostenvoranschlag_checked) {
-        doc.text(`ab ${order.kostenvoranschlag_amount || '_____'} € - netto`, 25, 230);
+        doc.text(`ab ${order.kostenvoranschlag_amount || '_____'} € - netto`, 25, 240);
       } else {
-        doc.text('Nicht angegeben', 25, 230);
+        doc.text('Nicht angegeben', 25, 240);
       }
       
       // Prices
       doc.setFontSize(14);
-      doc.text('Preise:', 20, 250);
+      doc.text('Preise:', 20, 260);
       doc.setFontSize(12);
-      doc.text(`Nettopreis: ${formatPrice(order.nettopreis)}`, 25, 260);
-      doc.text(`Porto: ${formatPrice(order.porto)}`, 25, 270);
-      doc.text(`Gesamt: ${formatPrice((order.nettopreis || 0) + (order.porto || 0))}`, 25, 280);
+      doc.text(`Nettopreis: ${formatPrice(order.nettopreis)}`, 25, 270);
+      doc.text(`Porto: ${formatPrice(order.porto)}`, 25, 280);
+      doc.text(`Gesamt: ${formatPrice((order.nettopreis || 0) + (order.porto || 0))}`, 25, 290);
       
       // Timestamps
       doc.setFontSize(14);
-      doc.text('Zeitstempel:', 20, 300);
+      doc.text('Zeitstempel:', 20, 310);
       doc.setFontSize(12);
-      doc.text(`Erstellt: ${formatDateTime(order.created_at)}`, 25, 310);
-      doc.text(`Aktualisiert: ${formatDateTime(order.updated_at)}`, 25, 320);
-      doc.text(`Version: ${order.version || 1}`, 25, 330);
+      doc.text(`Erstellt: ${formatDateTime(order.created_at)}`, 25, 320);
+      doc.text(`Aktualisiert: ${formatDateTime(order.updated_at)}`, 25, 330);
+      doc.text(`Version: ${order.version || 1}`, 25, 340);
       
       // Bei Freigabe bitte ankreuzen
       doc.setFontSize(14);
-      doc.text('Bei Freigabe bitte ankreuzen:', 20, 350);
+      doc.text('Bei Freigabe bitte ankreuzen:', 20, 360);
       doc.setFontSize(12);
       // Only show the actual repair options in PDF, not "Keine angabe"
       const pdfOptions = ['Reparatur laut KV durchführen', 'Unrepariert zurückschicken', 'Verschrotten'];
-      let yPos = 360;
+      let yPos = 370;
       pdfOptions.forEach(opt => {
         // If "Keine angabe" is selected, show "Reparatur laut KV durchführen" as unchecked
         // If "Reparatur laut KV durchführen" is selected, show it as checked
@@ -1552,6 +1553,10 @@ const ErstellteReperaturauftragePage = () => {
                                   <span style={{ fontWeight: '500', color: '#666' }}>Gesendet an Werkstatt:</span>
                                   <span>{order.gesendet_an_werkstatt ? formatDate(order.gesendet_an_werkstatt) : '-'}</span>
                                 </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ fontWeight: '500', color: '#666' }}>Werkstattausgang:</span>
+                                  <span>{order.werkstattausgang ? formatDate(order.werkstattausgang) : '-'}</span>
+                                </div>
                               </div>
                             </div>
                             
@@ -1928,6 +1933,7 @@ function AppContent() {
   const [perMethod, setPerMethod] = useState('Fax');
   const [werkstattNotiz, setWerkstattNotiz] = useState('');
   const [werkstattDate, setWerkstattDate] = useState('');
+  const [werkstattausgang, setWerkstattausgang] = useState('');
   
   // Manual Fehlerangaben State
   const [manualFehler1, setManualFehler1] = useState('');
@@ -1993,6 +1999,7 @@ function AppContent() {
     setPerMethod('Fax');
     setWerkstattNotiz('');
     setWerkstattDate('');
+    setWerkstattausgang('');
     setManualFehler1('');
     setManualFehler2('');
     setManualFehler3('');
@@ -2057,6 +2064,7 @@ function AppContent() {
       setPerMethod(order.per_method || 'Fax');
       setWerkstattNotiz(order.werkstatt_notiz || '');
       setWerkstattDate(order.werkstatt_date || '');
+      setWerkstattausgang(order.werkstattausgang || '');
       setGesaendetAnWerkstatt(order.gesendet_an_werkstatt || '');
       setNotes(order.notes || '');
       
@@ -2245,6 +2253,7 @@ function AppContent() {
         per_method: perMethod || null,
         werkstatt_notiz: werkstattNotiz || null,
         werkstatt_date: werkstattDate || null,
+        werkstattausgang: werkstattausgang || null,
         gesendet_an_werkstatt: gesaendetAnWerkstatt || null,
         notes: notes || null,
         fehlerangaben: fehlerPayload,
@@ -2798,6 +2807,23 @@ function AppContent() {
                   const [yyyy, mm, dd] = werkstattDate.split('-');
                   doc.setFontSize(8);
                   doc.text(`${dd}.${mm}.${yyyy}`, 175, notesY-20);
+                }
+
+                // Werkstattausgang Section (Top Right)
+                const werkstattausgangY = 262;
+                const werkstattausgangX = 150;
+                doc.setFontSize(8);
+                doc.setFont(undefined, 'bold');
+                doc.text('Werkstattausgang:', werkstattausgangX, werkstattausgangY);
+                doc.setFont(undefined, 'normal');
+                
+                if (werkstattausgang) {
+                  // Format date as DD.MM.YYYY
+                  const [yyyy, mm, dd] = werkstattausgang.split('-');
+                  doc.setFontSize(8);
+                  doc.text(`${dd}.${mm}.${yyyy}`, werkstattausgangX + 24, werkstattausgangY);
+                } else {
+                  doc.text('-', 175, notesY-15);
                 }
         
         doc.setFontSize(8);
@@ -3790,6 +3816,24 @@ function AppContent() {
                   </label>
                 </div>
               </div>
+            </div>
+            
+            {/* Werkstattausgang Section - Above Notizen */}
+            <div style={boxStyle}>
+              <div style={{ fontWeight: 600, marginBottom: 8, textAlign: 'left' }}>Werkstattausgang:</div>
+              <input
+                type="date"
+                value={werkstattausgang}
+                onChange={(e) => setWerkstattausgang(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #e1e5e9',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  fontFamily: 'Arial, sans-serif'
+                }}
+              />
             </div>
             
             {/* Notizen Section - Moved below Verfahren */}
