@@ -2451,7 +2451,20 @@ function AppContent() {
                 margin: '0 auto 20px auto'
               }}
             />
-
+            <div style={{
+              fontSize: '24px',
+              fontWeight: '600',
+              color: '#1d426a',
+              marginBottom: '8px'
+            }}>
+              GRETZINGER
+            </div>
+            <div style={{
+              fontSize: '16px',
+              color: '#666'
+            }}>
+              Hörgeräteservice
+            </div>
           </div>
 
           {/* Login Form */}
@@ -3805,18 +3818,18 @@ function AppContent() {
               
               <div style={{ width: '100%', display: 'grid', gridTemplateColumns: 'max-content max-content', gridTemplateRows: 'max-content max-content', justifyContent: 'end', alignItems: 'center', gap: '0 32px' }}>
                 
-              <div style={{ fontSize: 16, fontWeight: 500, color: '#222', textAlign: 'right', gridColumn: 1, gridRow: 1 }}>
-                  + Porto & Verpackung:
-                </div>
-                <div style={{ fontSize: 16, fontWeight: 500, color: '#222', textAlign: 'right', gridColumn: 2, gridRow: 1 }}>
-                  {porto.toFixed(2).replace('.', ',')} €
-                </div>
-                
-                <div style={{ fontSize: 20, fontWeight: 700, color: '#1d426a', textAlign: 'right', gridColumn: 1, gridRow: 2 }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#1d426a', textAlign: 'right', gridColumn: 1, gridRow: 1 }}>
                   Nettopreis:
                 </div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: '#1d426a', textAlign: 'right', gridColumn: 2, gridRow: 2 }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#1d426a', textAlign: 'right', gridColumn: 2, gridRow: 1 }}>
                   {net.toFixed(2).replace('.', ',')} €
+                </div>
+                
+                <div style={{ fontSize: 16, fontWeight: 500, color: '#222', textAlign: 'right', gridColumn: 1, gridRow: 2 }}>
+                  + Porto & Verpackung:
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 500, color: '#222', textAlign: 'right', gridColumn: 2, gridRow: 2 }}>
+                  {porto.toFixed(2).replace('.', ',')} €
                 </div>
 
               </div>
