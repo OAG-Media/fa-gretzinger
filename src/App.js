@@ -2688,6 +2688,7 @@ function AppContent() {
     const zeile = 12;
     const leftX = 20;
     const leftxRow = 65;
+    const rightYstop = 192;
     // Header
     doc.setFont('helvetica', '');
     doc.setFontSize(8);
@@ -2697,9 +2698,9 @@ function AppContent() {
     doc.text('Homepage: www.Fa-Gretzinger.de', leftxRow, zeile);
     doc.text('E-Mail: Fa.Gretzinger@t-online.de', leftxRow, zeile+4);
     doc.text('Tel. +49 (0)911 / 540 49 44, Fax.: 540 49 46', leftxRow, zeile +8);
-    doc.addImage('https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png', 'PNG', 165, 8, 33, 14);
+    doc.addImage('https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png', 'PNG', rightYstop-35, 8, 33, 14);
     doc.setLineWidth(0.2);
-    doc.line(leftX, zeile+14, 200, zeile+14);
+    doc.line(leftX, zeile+14, rightYstop, zeile+14);
 
 
 
@@ -2745,8 +2746,8 @@ function AppContent() {
       doc.setLineWidth(0.3); // Thicker lines for table borders
       
       // Draw horizontal lines with minimal padding
-      doc.line(startX - 1, tableY - 3, startX + colWidth * 6 - 1, tableY - 3); // Top border
-      doc.line(startX - 1, tableY + 11, startX + colWidth * 6 - 1, tableY + 11); // Bottom border
+      doc.line(startX - 1, tableY - 3, startX + colWidth * 5.75 - 1, tableY - 3); // Top border
+      doc.line(startX - 1, tableY + 11, startX + colWidth * 5.75 - 1, tableY + 11); // Bottom border
       
       // Draw vertical lines with minimal padding
       doc.line(startX - 1, tableY - 3, startX - 1, tableY + 11); // Left border
@@ -2755,7 +2756,7 @@ function AppContent() {
       doc.line(startX + colWidth * 3 - 1, tableY - 3, startX + colWidth * 3 - 1, tableY + 11); // Column 3
       doc.line(startX + colWidth * 4 - 1, tableY - 3, startX + colWidth * 4 - 1, tableY + 11); // Column 4
       doc.line(startX + colWidth * 5 - 1, tableY - 3, startX + colWidth * 5 - 1, tableY + 11); // Column 5
-      doc.line(startX + colWidth * 6 - 1, tableY - 3, startX + colWidth * 6 - 1, tableY + 11); // Right border
+      doc.line(startX + colWidth * 5.75 - 1, tableY - 3, startX + colWidth * 5.75 - 1, tableY +11); // Right border
       
       // Headers with padding
       doc.text('Kommission', startX, tableY);
@@ -2772,8 +2773,8 @@ function AppContent() {
       doc.text(geraetetyp || '-', startX + colWidth * 2, tableY + 8);
       doc.text(seriennummer || '-', startX + colWidth * 3, tableY + 8);
       
-      const repWerkstattNotiz = 125
-      const perFaxMail = repWerkstattNotiz +52
+      const repWerkstattNotiz = leftX+112
+      const perFaxMail = repWerkstattNotiz +50
 
       // Format date for Werkstatteingang
       let werkstatteingangFormatted = '-';
@@ -2796,18 +2797,19 @@ function AppContent() {
           const [yyyy, mm, dd] = kvDate.split('-');
           doc.text(` ${dd}.${mm}.${yyyy}`, repWerkstattNotiz+37, notesY);
         }
+        const gesendetanwerkstattX = leftX+127;
 
                 // Workshop Date Section (Top Right)
                 if (werkstattDate) {
                   doc.setFontSize(8);
                   doc.setFont(undefined, 'bold');
-                  doc.text('gesendet an die Werkstatt:', 142, notesY-20);
+                  doc.text('gesendet an die Werkstatt:', gesendetanwerkstattX, notesY-20);
                   doc.setFont(undefined, 'normal');
                   
                   // Format date as DD.MM.YYYY
                   const [yyyy, mm, dd] = werkstattDate.split('-');
                   doc.setFontSize(8);
-                  doc.text(`${dd}.${mm}.${yyyy}`, 175, notesY-20);
+                  doc.text(`${dd}.${mm}.${yyyy}`, gesendetanwerkstattX +33, notesY-20);
                 }
 
                 // Werkstattausgang Section (Top Right)
@@ -3051,7 +3053,7 @@ function AppContent() {
       // Draw a text input field border
       doc.setDrawColor(100);
       doc.setLineWidth(0.2);
-      doc.rect(leftX, notizenY + 5, 180, 20); // Smaller rectangle for notes
+      doc.rect(leftX, notizenY + 5, rightYstop-leftX, 20); // Smaller rectangle for notes
       
       // Add the actual note text
       doc.text(werkstattNotiz, leftX+5, notizenY+10);
