@@ -2918,11 +2918,11 @@ function AppContent() {
       yLeft += 2;
     }
 
-
+    var verfahrenY = 228;
     doc.setFont(undefined, 'bold');
-    doc.text('Verfahren:', leftX, yLeft);
+    doc.text('Verfahren:', leftX, verfahrenY);
     doc.setFont(undefined, 'normal');
-    yLeft += linePad + 1;
+    verfahrenY += linePad + 1;
     const verfahrenOptions = [
       { label: 'Kostenpflichtige Reparatur', value: 'kostenpflichtig' },
       { label: 'Garantie', value: 'garantie' },
@@ -2937,27 +2937,27 @@ function AppContent() {
         const [yyyy, mm, dd] = reklamationDate.split('-');
         label += ' ';
         doc.setFont(undefined, checked ? 'bold' : 'normal');
-        drawCheckbox(doc, leftX + 2, yLeft - 3.5, checked);
-        doc.text(label, leftX + 8, yLeft);
+        drawCheckbox(doc, leftX + 1, verfahrenY - 3.5, checked);
+        doc.text(label, leftX + 8, verfahrenY);
         if (reklamationDate) {
-          doc.text(`${dd}.${mm}.${yyyy}`, leftX + 8 + doc.getTextWidth(label) + 2, yLeft, { font: 'helvetica', fontStyle: 'bold' });
+          doc.text(`${dd}.${mm}.${yyyy}`, leftX + 8 + doc.getTextWidth(label) + 2, verfahrenY, { font: 'helvetica', fontStyle: 'bold' });
         }
         doc.setFont(undefined, 'normal');
       } else {
-        drawCheckbox(doc, leftX + 2, yLeft - 3.5, checked);
-        doc.text(label, leftX + 8, yLeft);
+        drawCheckbox(doc, leftX + 1, verfahrenY - 3.5, checked);
+        doc.text(label, leftX + 8, verfahrenY);
       }
-      yLeft += linePad;
+      verfahrenY += linePad;
       
 
     });
     if (bottom === 'kulanz') {
-      yLeft += 1;
-      drawCheckbox(doc, leftX + 10, yLeft - 3.5, kulanzPorto === 'ja');
-      doc.text('Porto ja', leftX + 16, yLeft);
-      drawCheckbox(doc, leftX + 38, yLeft - 3.5, kulanzPorto === 'nein');
-      doc.text('Porto nein', leftX + 44, yLeft);
-      yLeft += linePad;
+      verfahrenY += 1;
+      drawCheckbox(doc, leftX + 10, verfahrenY - 3.5, kulanzPorto === 'ja');
+      doc.text('Porto ja', leftX + 16, verfahrenY);
+      drawCheckbox(doc, leftX + 38, verfahrenY - 3.5, kulanzPorto === 'nein');
+      doc.text('Porto nein', leftX + 44, verfahrenY);
+      verfahrenY += linePad;
     }
     const kvYabNetto = 73
     const kvXabNetto = leftX + 25
