@@ -2759,6 +2759,7 @@ function AppContent() {
       doc.line(startX + colWidth * 5.75 - 1, tableY - 3, startX + colWidth * 5.75 - 1, tableY +11); // Right border
       
       // Headers with padding
+      
       doc.text('Kommission', startX, tableY);
       doc.text('Hersteller', startX + colWidth, tableY);
       doc.text('Gerätetyp', startX + colWidth * 2, tableY);
@@ -2768,6 +2769,7 @@ function AppContent() {
       
       // Data row with padding - always show with fixed length and dashes for empty fields
       doc.setFont(undefined, 'normal');
+      doc.setFontSize(8);
       doc.text(kommission || '-', startX, tableY + 8);
       doc.text(hersteller || '-', startX + colWidth, tableY + 8);
       doc.text(geraetetyp || '-', startX + colWidth * 2, tableY + 8);
