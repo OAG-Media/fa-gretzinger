@@ -100,7 +100,7 @@ const Dashboard = ({ setIsLoggedIn, navigate }) => {
           </button>
         </div>
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '1.2rem 1.5rem', boxShadow: '0 1px 4px #0001' }}>
-          <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Erstellte Reperaturaufträge</h3>
+          <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Erstellte Reparaturaufträge</h3>
           <p style={{ color: '#666', marginBottom: '1rem' }}>Alle Reparaturaufträge anzeigen</p>
           <button 
             onClick={() => navigate('/erstellte-reperaturauftrage')}
@@ -1153,15 +1153,15 @@ const ErstellteReperaturauftragePage = () => {
         </span>
         <span style={{ margin: '0 0.5rem', color: '#999' }}>→</span>
         <span style={{ color: '#333', fontWeight: '500' }}>
-          {showArchived ? 'Archivierte Reparaturaufträge' : 'Erstellte Reperaturaufträge'}
+          {showArchived ? 'Archivierte Reparaturaufträge' : 'Erstellte Reparaturaufträge'}
         </span>
       </div>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'left', marginBottom: '2rem' }}>
         <div>
           <h1 style={{ margin: 0, color: '#1d426a', fontSize: '2rem' }}>
-            {showArchived ? 'Archivierte Reparaturaufträge' : 'Erstellte Reperaturaufträge'}
+            {showArchived ? 'Archivierte Reparaturaufträge' : 'Erstellte Reparaturaufträge'}
           </h1>
           <p style={{ margin: '0.5rem 0 0 0', color: '#666' }}>
             {showArchived 
@@ -2686,7 +2686,7 @@ function AppContent() {
   const handlePdfExport = () => {
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
     const zeile = 12;
-    const leftX = 10;
+    const leftX = 20;
     const leftxRow = 65;
     // Header
     doc.setFont('helvetica', '');
@@ -2704,24 +2704,24 @@ function AppContent() {
 
 
     // Customer Information Section
-    const customerInfo = zeile+20;
+    const customerInfo = zeile+18;
     if (selectedCustomer) {
       doc.setFontSize(8);
       doc.setFont(undefined, 'bold');
-      doc.text('Akustikername / Absender bzw. Firmenstempel:',10, customerInfo);
+      doc.text('Akustikername / Absender bzw. Firmenstempel:',leftX, customerInfo);
       doc.setFont(undefined, 'normal');
       doc.setFontSize(11);
-      doc.text(selectedCustomer.company, 10, customerInfo+4);
-      doc.text(selectedCustomer.street, 10, customerInfo+8);
-      doc.text(`${selectedCustomer.location}, ${selectedCustomer.country}`, 10, customerInfo+12);
+      doc.text(selectedCustomer.company, leftX, customerInfo+5);
+      doc.text(selectedCustomer.street, leftX, customerInfo+9);
+      doc.text(`${selectedCustomer.location}, ${selectedCustomer.country}`, leftX, customerInfo+13);
     }
 
     // Title
-    const repauftrag = customerInfo+17;
+    const repauftrag = customerInfo+19;
 
     doc.setFontSize(22);
     doc.setFont(undefined, 'bold');
-    doc.text('Reparaturauftrag', 105, repauftrag, { align: 'center' });
+    doc.text('Reparaturauftrag', leftX+85, repauftrag+3, { align: 'center' });
     doc.setFontSize(12);
     doc.setFont(undefined, 'normal');
 
@@ -2738,7 +2738,7 @@ function AppContent() {
       // Table headers with 1px padding
       const tableY = y + 1; // Reduced to 1px top padding
       const colWidth = 30;
-      const startX = 11; // Reduced to 1px left padding (10 + 1)
+      const startX = leftX+1; // Reduced to 1px left padding (10 + 1)
       
       // Draw table borders with minimal padding
       doc.setDrawColor(0); // Black color
@@ -2825,7 +2825,7 @@ function AppContent() {
                   doc.setFont(undefined, 'bold');
                   doc.text(`${dd}.${mm}.${yyyy}`, werkstattausgangX + 30, werkstattausgangY);
                 } else {
-                  doc.text('-', 175, notesY-15);
+                  doc.text('-', werkstattausgangX + 30, werkstattausgangY);
                 }
         
         doc.setFontSize(8);
@@ -2958,7 +2958,7 @@ function AppContent() {
       yLeft += linePad;
     }
     const kvYabNetto = 73
-    const kvXabNetto = 35
+    const kvXabNetto = leftX + 25
     // Kostenvoranschlag Section
     yLeft += sectionPad;
     doc.setFont(undefined, 'bold');
@@ -3044,17 +3044,17 @@ function AppContent() {
       const notizenY = pricingY + 30; // Position below pricing
       doc.setFont(undefined, 'bold');
       doc.setFontSize(12);
-      doc.text('Notizen:', 10, notizenY);
+      doc.text('Notizen:', leftX, notizenY);
     doc.setFont(undefined, 'normal');
     doc.setFontSize(10);
       
       // Draw a text input field border
       doc.setDrawColor(100);
       doc.setLineWidth(0.2);
-      doc.rect(10, notizenY + 5, 180, 20); // Smaller rectangle for notes
+      doc.rect(leftX, notizenY + 5, 180, 20); // Smaller rectangle for notes
       
       // Add the actual note text
-      doc.text(werkstattNotiz, 15, notizenY+10);
+      doc.text(werkstattNotiz, leftX+5, notizenY+10);
     //}
 
     doc.save('reparaturauftrag.pdf');
