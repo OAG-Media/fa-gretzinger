@@ -296,7 +296,7 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
                 style={{
-                  padding: '8px 12px',
+                  padding: '8px 24px 8px 12px',
                   border: '2px solid #e1e5e9',
                   borderRadius: '6px',
                   fontSize: '14px'
@@ -358,22 +358,22 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #dee2e6' }}>
-                <th style={{ padding: '16px', textAlign: 'left', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
+                <th style={{ padding: '16px', textAlign: 'center', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
                   Filiale
                 </th>
-                <th style={{ padding: '16px', textAlign: 'left', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
+                <th style={{ padding: '16px', textAlign: 'center', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
                   Firma
                 </th>
-                <th style={{ padding: '16px', textAlign: 'left', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
+                <th style={{ padding: '16px', textAlign: 'center', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
                   Ansprechpartner
                 </th>
-                <th style={{ padding: '16px', textAlign: 'left', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
+                <th style={{ padding: '16px', textAlign: 'center', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
                   Straße
                 </th>
-                <th style={{ padding: '16px', textAlign: 'left', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
+                <th style={{ padding: '16px', textAlign: 'center', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
                   Ort
                 </th>
-                <th style={{ padding: '16px', textAlign: 'left', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
+                <th style={{ padding: '16px', textAlign: 'center', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
                   Land
                 </th>
                 <th style={{ padding: '16px', textAlign: 'center', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
@@ -932,112 +932,6 @@ const ErstellteReperaturauftragePage = () => {
     window.location.href = `/reperaturauftrag?edit=${orderId}`;
   };
 
-  // Export PDF for specific order
-  const handleExportPDF = (order) => {
-    try {
-      // Create PDF document
-      const doc = new jsPDF();
-      
-      // Set font
-      doc.setFont('helvetica');
-      
-      // Title
-      doc.setFontSize(20);
-      doc.setTextColor(29, 66, 106); // #1d426a
-      doc.text('Reparaturauftrag', 20, 30);
-      
-      // Customer Information
-      doc.setFontSize(14);
-      doc.setTextColor(0, 0, 0);
-      doc.text('Kundendaten:', 20, 50);
-      doc.setFontSize(12);
-      doc.text(`Firma: ${order.customers?.company || '-'}`, 25, 60);
-      doc.text(`Filiale: ${order.customers?.branch || '-'}`, 25, 70);
-      doc.text(`Adresse: ${order.customers?.street || '-'}, ${order.customers?.location || '-'}, ${order.customers?.country || '-'}`, 25, 80);
-      
-      // Repair Order Details
-      doc.setFontSize(14);
-      doc.text('Reparatur Details:', 20, 100);
-      doc.setFontSize(12);
-      doc.text(`Kommission: ${order.kommission || '-'}`, 25, 110);
-      doc.text(`Hersteller: ${order.hersteller || '-'}`, 25, 120);
-      doc.text(`Gerätetyp: ${order.geraetetyp || '-'}`, 25, 130);
-      doc.text(`Seriennummer: ${order.seriennummer || '-'}`, 25, 140);
-      doc.text(`Zubehör: ${order.zubehoer || '-'}`, 25, 150);
-      
-      // Workshop Details
-      doc.setFontSize(14);
-      doc.text('Werkstatt Details:', 20, 170);
-      doc.setFontSize(12);
-      doc.text(`Werkstatteingang: ${order.werkstatteingang ? formatDate(order.werkstatteingang) : '-'}`, 25, 180);
-      doc.text(`KV am: ${order.kv_date ? formatDate(order.kv_date) : '-'}`, 25, 190);
-      doc.text(`Per: ${order.per_method || '-'}`, 25, 200);
-      doc.text(`Gesendet an Werkstatt: ${order.gesendet_an_werkstatt ? formatDate(order.gesendet_an_werkstatt) : '-'}`, 25, 210);
-      doc.text(`Werkstattausgang: ${order.werkstattausgang ? formatDate(order.werkstattausgang) : '-'}`, 25, 220);
-      
-      // Kostenvoranschlag
-      doc.setFontSize(14);
-      doc.text('Kostenvoranschlag:', 20, 230);
-      doc.setFontSize(12);
-      if (order.kostenvoranschlag_checked) {
-        doc.text(`ab ${order.kostenvoranschlag_amount || '_____'} € - netto`, 25, 240);
-      } else {
-        doc.text('Nicht angegeben', 25, 240);
-      }
-      
-      // Prices
-      doc.setFontSize(14);
-      doc.text('Preise:', 20, 260);
-      doc.setFontSize(12);
-      doc.text(`Nettopreis: ${formatPrice(order.nettopreis)}`, 25, 270);
-      doc.text(`Porto: ${formatPrice(order.porto)}`, 25, 280);
-      doc.text(`Gesamt: ${formatPrice((order.nettopreis || 0) + (order.porto || 0))}`, 25, 290);
-      
-      // Timestamps
-      doc.setFontSize(14);
-      doc.text('Zeitstempel:', 20, 310);
-      doc.setFontSize(12);
-      doc.text(`Erstellt: ${formatDateTime(order.created_at)}`, 25, 320);
-      doc.text(`Aktualisiert: ${formatDateTime(order.updated_at)}`, 25, 330);
-      doc.text(`Version: ${order.version || 1}`, 25, 340);
-      
-      // Bei Freigabe bitte ankreuzen
-      doc.setFontSize(14);
-      doc.text('Bei Freigabe bitte ankreuzen:', 20, 360);
-      doc.setFontSize(12);
-      // Only show the actual repair options in PDF, not "Keine angabe"
-      const pdfOptions = ['Reparatur laut KV durchführen', 'Unrepariert zurückschicken', 'Verschrotten'];
-      let yPos = 370;
-      pdfOptions.forEach(opt => {
-        // If "Keine angabe" is selected, show "Reparatur laut KV durchführen" as unchecked
-        // If "Reparatur laut KV durchführen" is selected, show it as checked
-        const checked = order.freigabe === opt;
-        drawCheckbox(doc, 21, yPos - 2.5, checked);
-        doc.text(opt, 28, yPos);
-        yPos += 10;
-      });
-      
-      // Workshop Notes
-      if (order.werkstatt_notiz) {
-        doc.setFontSize(14);
-        doc.text('Werkstatt Notiz:', 20, yPos + 10);
-        doc.setFontSize(12);
-        doc.text(order.werkstatt_notiz, 25, yPos + 20);
-      }
-      
-      // Save PDF
-      const filename = `Reparaturauftrag_${order.kommission || 'ohne_Kommission'}_${order.customers?.company || 'unbekannt'}.pdf`;
-      doc.save(filename);
-      
-      // Show success message
-      setSuccessMessage('PDF erfolgreich exportiert!');
-      setShowSuccessModal(true);
-      
-    } catch (error) {
-      console.error('Error exporting PDF:', error);
-      alert('Fehler beim PDF Export');
-    }
-  };
 
   // Delete repair order
   const handleDeleteOrder = (order) => {
@@ -1177,6 +1071,10 @@ const ErstellteReperaturauftragePage = () => {
           onClick={() => window.location.href = '/'}
           style={{
             padding: '10px 20px',
+            height: '40px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             background: '#6c757d',
             color: 'white',
             border: 'none',
@@ -1185,7 +1083,7 @@ const ErstellteReperaturauftragePage = () => {
             fontSize: '14px'
           }}
         >
-          ← Zurück zum Dashboard
+          Zurück zum Hauptmenü
         </button>
       </div>
 
@@ -1265,7 +1163,7 @@ const ErstellteReperaturauftragePage = () => {
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
               style={{
-                padding: '8px 12px',
+                padding: '8px 24px 8px 12px',
                 border: '1px solid #e1e5e9',
                 borderRadius: '4px',
                 fontSize: '14px'
@@ -1275,6 +1173,7 @@ const ErstellteReperaturauftragePage = () => {
               <option value="kommission">Kommission</option>
               <option value="hersteller">Hersteller</option>
               <option value="werkstatteingang">Werkstatteingang</option>
+              <option value="werkstattausgang">Werkstattausgang</option>
               <option value="nettopreis">Nettopreis</option>
             </select>
             <button
@@ -1289,7 +1188,7 @@ const ErstellteReperaturauftragePage = () => {
                 fontSize: '14px'
               }}
             >
-              {sortOrder === 'asc' ? '↑' : '↓'}
+              {sortOrder === 'asc' ? ' ↑ ' : ' ↓ '}
             </button>
           </div>
         </div>
@@ -1306,24 +1205,24 @@ const ErstellteReperaturauftragePage = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8f9fa', borderBottom: '1px solid #e0e0e0' }}>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333', width: '40px' }}></th>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333', cursor: 'pointer' }}
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '40px' }}></th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
                   onClick={() => handleSort('created_at')}>
                 Erstellt am {sortBy === 'created_at' && (sortOrder === 'asc' ? '↑' : '↓')}
               </th>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333', cursor: 'pointer' }}
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
                   onClick={() => handleSort('kommission')}>
                 Kommission {sortBy === 'kommission' && (sortOrder === 'asc' ? '↑' : '↓')}
               </th>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Firma</th>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Filiale</th>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Werkstatteingang</th>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333', cursor: 'pointer' }}
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333' }}>Firma</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333' }}>Filiale</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333' }}>Wkst. Eingang</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
                   onClick={() => handleSort('nettopreis')}>
                 Nettopreis {sortBy === 'nettopreis' && (sortOrder === 'asc' ? '↑' : '↓')}
               </th>
-              <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Porto</th>
-              <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600', color: '#333', width: '120px' }}>Aktionen</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333' }}>Porto</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '120px' }}>Aktionen</th>
             </tr>
           </thead>
           <tbody>
@@ -1407,34 +1306,6 @@ const ErstellteReperaturauftragePage = () => {
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
-                          </svg>
-                        </button>
-                        {/* PDF Export Button */}
-                        <button
-                          onClick={() => handleExportPDF(order)}
-                          style={{
-                            background: 'none',
-                            color: '#1d426a',
-                            border: '1px solid #1d426a',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            padding: '6px 8px',
-                            fontSize: '12px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            transition: 'all 0.2s ease'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.target.style.transform = 'scale(1.05)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.target.style.transform = 'scale(1)';
-                          }}
-                          title="PDF Export"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
                           </svg>
                         </button>
                         {/* Edit Button */}
@@ -1698,33 +1569,6 @@ const ErstellteReperaturauftragePage = () => {
             </div>
             
                             <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center', gap: '1rem' }}>
-                  <button
-                    onClick={() => handleExportPDF(viewingOrder)}
-                    style={{
-                      padding: '10px 20px',
-                      background: 'none',
-                      color: '#1d426a',
-                      border: '1px solid #1d426a',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.target.style.transform = 'scale(1.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.transform = 'scale(1)';
-                    }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
-                    </svg>
-                    PDF Export
-                  </button>
                   <button
                     onClick={() => handleEditOrder(viewingOrder.id)}
                     style={{
@@ -2821,6 +2665,7 @@ function AppContent() {
       const zubehoerTextX = zubehoerx1 + txtdistancetable;
       const zubehoerwidth = 25;
       const zubehoerx2 = zubehoerx1 + zubehoerwidth;
+      
 
 
       
@@ -4099,7 +3944,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                   /> 
                   <span style={{ fontSize: 14 }}>Porto nein</span>
                 </label>
-              </div>
+                </div>
               
               <div style={{ width: '100%', display: 'grid', gridTemplateColumns: 'max-content max-content', gridTemplateRows: 'max-content max-content', justifyContent: 'end', alignItems: 'center', gap: '0 32px' }}>
                 
@@ -4109,10 +3954,10 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                 <div style={{ fontSize: 20, fontWeight: 700, color: '#1d426a', textAlign: 'right', gridColumn: 2, gridRow: 1 }}>
                   {net.toFixed(2).replace('.', ',')} €
                 </div>
-                
+
                 <div style={{ fontSize: 16, fontWeight: 500, color: '#222', textAlign: 'right', gridColumn: 1, gridRow: 2 }}>
                   + Porto & Verpackung:
-                </div>
+              </div>
                 <div style={{ fontSize: 16, fontWeight: 500, color: '#222', textAlign: 'right', gridColumn: 2, gridRow: 2 }}>
                   {porto.toFixed(2).replace('.', ',')} €
                 </div>
