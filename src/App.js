@@ -1894,6 +1894,40 @@ const ErstellteReperaturauftragePage = () => {
   );
 };
 
+// Helper function to create warning triangle icon
+const WarningTriangle = ({ show, message }) => {
+  if (!show) return null;
+  
+  return (
+    <div 
+      style={{
+        position: 'absolute',
+        right: '8px',
+        top: '50%',
+        transform: 'translateY(-50%)',
+        cursor: 'pointer',
+        zIndex: 10
+      }}
+      title={message}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="#dc3545">
+        <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+      </svg>
+    </div>
+  );
+};
+
+// Helper function to get input style with character limit validation
+const getInputStyleWithValidation = (currentValue, maxLength, baseStyle) => {
+  const isAtLimit = currentValue && currentValue.length >= maxLength;
+  return {
+    ...baseStyle,
+    border: isAtLimit ? '1px solid #dc3545' : baseStyle.border,
+    position: 'relative',
+    paddingRight: isAtLimit ? '30px' : baseStyle.paddingRight || '12px'
+  };
+};
+
 // Wrapper component that can use useNavigate hook
 function AppContent() {
   const navigate = useNavigate();
@@ -3522,89 +3556,113 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
               {/* Kommission */}
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333', fontSize: '14px' }}>
-                  Kommission:
+                  Kommission ({kommission?.length || 0}/15):
                 </label>
-                <input
-                  type="text"
-                  value={kommission}
-                  onChange={(e) => setKommission(e.target.value)}
-                  placeholder="z.B. 020-5031"
-                  maxLength={15}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #e1e5e9',
-                    borderRadius: '4px',
-                    fontSize: '14px',
-                    boxSizing: 'border-box'
-                  }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    value={kommission}
+                    onChange={(e) => setKommission(e.target.value)}
+                    placeholder="z.B. 020-5031"
+                    maxLength={15}
+                    style={getInputStyleWithValidation(kommission, 15, {
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #e1e5e9',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      boxSizing: 'border-box'
+                    })}
+                  />
+                  <WarningTriangle 
+                    show={kommission && kommission.length >= 15} 
+                    message="Maximale Zeicheneingabe erreicht" 
+                  />
+                </div>
               </div>
               
               {/* Hersteller */}
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333', fontSize: '14px' }}>
-                  Hersteller:
+                  Hersteller ({hersteller?.length || 0}/12):
                 </label>
-                <input
-                  type="text"
-                  value={hersteller}
-                  onChange={(e) => setHersteller(e.target.value)}
-                  placeholder="z.B. HHM"
-                  maxLength={12}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #e1e5e9',
-                    borderRadius: '4px',
-                    fontSize: '14px',
-                    boxSizing: 'border-box'
-                  }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    value={hersteller}
+                    onChange={(e) => setHersteller(e.target.value)}
+                    placeholder="z.B. HHM"
+                    maxLength={12}
+                    style={getInputStyleWithValidation(hersteller, 12, {
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #e1e5e9',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      boxSizing: 'border-box'
+                    })}
+                  />
+                  <WarningTriangle 
+                    show={hersteller && hersteller.length >= 12} 
+                    message="Maximale Zeicheneingabe erreicht" 
+                  />
+                </div>
               </div>
               
               {/* Gerätetyp */}
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333', fontSize: '14px' }}>
-                  Gerätetyp:
+                  Gerätetyp ({geraetetyp?.length || 0}/23):
                 </label>
-                <input
-                  type="text"
-                  value={geraetetyp}
-                  onChange={(e) => setGeraetetyp(e.target.value)}
-                  placeholder="z.B. G400 Mini"
-                  maxLength={31}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #e1e5e9',
-                    borderRadius: '4px',
-                    fontSize: '14px',
-                    boxSizing: 'border-box'
-                  }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    value={geraetetyp}
+                    onChange={(e) => setGeraetetyp(e.target.value)}
+                    placeholder="z.B. G400 Mini"
+                    maxLength={23}
+                    style={getInputStyleWithValidation(geraetetyp, 23, {
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #e1e5e9',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      boxSizing: 'border-box'
+                    })}
+                  />
+                  <WarningTriangle 
+                    show={geraetetyp && geraetetyp.length >= 23} 
+                    message="Maximale Zeicheneingabe erreicht" 
+                  />
+                </div>
               </div>
               
               {/* Seriennummer */}
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333', fontSize: '14px' }}>
-                  Seriennummer:
+                  Serien Nr. ({seriennummer?.length || 0}/13):
                 </label>
-                <input
-                  type="text"
-                  value={seriennummer}
-                  onChange={(e) => setSeriennummer(e.target.value)}
-                  placeholder="z.B. 53742513"
-                  maxLength={13}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #e1e5e9',
-                    borderRadius: '4px',
-                    fontSize: '14px',
-                    boxSizing: 'border-box'
-                  }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    value={seriennummer}
+                    onChange={(e) => setSeriennummer(e.target.value)}
+                    placeholder="z.B. 53742513"
+                    maxLength={13}
+                    style={getInputStyleWithValidation(seriennummer, 13, {
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #e1e5e9',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      boxSizing: 'border-box'
+                    })}
+                  />
+                  <WarningTriangle 
+                    show={seriennummer && seriennummer.length >= 13} 
+                    message="Maximale Zeicheneingabe erreicht" 
+                  />
+                </div>
               </div>
               
               {/* Werkstatteingang */}
@@ -3630,23 +3688,29 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
               {/* Zubehör */}
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333', fontSize: '14px' }}>
-                  Zubehör:
+                  Zubehör ({zubehoer?.length || 0}/10):
                 </label>
-                <input
-                  type="text"
-                  value={zubehoer}
-                  onChange={(e) => setZubehoer(e.target.value)}
-                  placeholder="z.B. ex Hörer"
-                  maxLength={10}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #e1e5e9',
-                    borderRadius: '4px',
-                    fontSize: '14px',
-                    boxSizing: 'border-box'
-                  }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    value={zubehoer}
+                    onChange={(e) => setZubehoer(e.target.value)}
+                    placeholder="z.B. ex Hörer"
+                    maxLength={10}
+                    style={getInputStyleWithValidation(zubehoer, 10, {
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #e1e5e9',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      boxSizing: 'border-box'
+                    })}
+                  />
+                  <WarningTriangle 
+                    show={zubehoer && zubehoer.length >= 10} 
+                    message="Maximale Zeicheneingabe erreicht" 
+                  />
+                </div>
               </div>
             </div>
             
