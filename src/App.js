@@ -1158,7 +1158,7 @@ const ErstellteReperaturauftragePage = () => {
       </div>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'left', marginBottom: '2rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'left', marginBottom: '2rem', textAlign: 'left' }}>
         <div>
           <h1 style={{ margin: 0, color: '#1d426a', fontSize: '2rem' }}>
             {showArchived ? 'Archivierte Reparaturaufträge' : 'Erstellte Reparaturaufträge'}
@@ -2894,20 +2894,20 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
           const [yyyy, mm, dd] = kvDate.split('-');
           doc.text(` ${dd}.${mm}.${yyyy}`, repWerkstattNotiz+37, notesY);
         }
-        const gesendetanwerkstattX = leftX+126;
-        const gesendetanwerkstattY = tableContentY-12.5;
+        const gesendetanwerkstattX = leftX+142;
+        const gesendetanwerkstattY = customerInfo;
 
                 // Workshop Date Section (Top Right)
                 if (werkstattDate) {
                   doc.setFontSize(8);
                   doc.setFont(undefined, 'bold');
-                  doc.text('gesendet an die Werkstatt:', gesendetanwerkstattX, gesendetanwerkstattY);
+                  doc.text('Sendedatum:', gesendetanwerkstattX, gesendetanwerkstattY);
                   doc.setFont(undefined, 'normal');
                   
                   // Format date as DD.MM.YYYY
                   const [yyyy, mm, dd] = werkstattDate.split('-');
                   doc.setFontSize(8);
-                  doc.text(`${dd}.${mm}.${yyyy}`, gesendetanwerkstattX +33, gesendetanwerkstattY);
+                  doc.text(`${dd}.${mm}.${yyyy}`, gesendetanwerkstattX +17, gesendetanwerkstattY);
                 }
 
                 // Werkstattausgang Section (Top Right)
