@@ -2688,7 +2688,7 @@ function AppContent() {
     const zeile = 12;
     const leftX = 20;
     const leftxRow = 65;
-    const rightXstop = 192;
+    const rightYstop = 192;
     // Header
     doc.setFont('helvetica', '');
     doc.setFontSize(8);
@@ -2698,9 +2698,9 @@ function AppContent() {
     doc.text('Homepage: www.Fa-Gretzinger.de', leftxRow, zeile);
     doc.text('E-Mail: Fa.Gretzinger@t-online.de', leftxRow, zeile+4);
     doc.text('Tel. +49 (0)911 / 540 49 44, Fax.: 540 49 46', leftxRow, zeile +8);
-    doc.addImage('https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png', 'PNG', rightXstop-35, 8, 33, 14);
+    doc.addImage('https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png', 'PNG', rightYstop-35, 8, 33, 14);
     doc.setLineWidth(0.2);
-    doc.line(leftX, zeile+14, rightXstop, zeile+14);
+    doc.line(leftX, zeile+14, rightYstop, zeile+14);
 
 
 
@@ -2745,96 +2745,35 @@ function AppContent() {
       doc.setDrawColor(0); // Black color
       doc.setLineWidth(0.3); // Thicker lines for table borders
       
-
+      // Draw horizontal lines with minimal padding
+      doc.line(startX - 1, tableY - 3, startX + colWidth * 5.75 - 1, tableY - 3); // Top border
+      doc.line(startX - 1, tableY + 11, startX + colWidth * 5.75 - 1, tableY + 11); // Bottom border
       
       // Draw vertical lines with minimal padding
-      const tableY1 = tableY - 3;
-      const tableheight = 12.5;
-      const tableY2 = tableY1 + tableheight;
-      const tablestartX = startX-1;
-      const tablenEndX = rightXstop
-      const tableHeadingY = tableY1 + 3;
-      const tableContentY = tableY2 -2;
-      const txtdistancetable = 1.5;
+      doc.line(startX - 1, tableY - 3, startX - 1, tableY + 11); // Left border
+      doc.line(startX + colWidth - 1, tableY - 3, startX + colWidth - 1, tableY + 11); // Column 1
+      doc.line(startX + colWidth * 2 - 1, tableY - 3, startX + colWidth * 2 - 1, tableY + 11); // Column 2
+      doc.line(startX + colWidth * 3 - 1, tableY - 3, startX + colWidth * 3 - 1, tableY + 11); // Column 3
+      doc.line(startX + colWidth * 4 - 1, tableY - 3, startX + colWidth * 4 - 1, tableY + 11); // Column 4
+      doc.line(startX + colWidth * 5 - 1, tableY - 3, startX + colWidth * 5 - 1, tableY + 11); // Column 5
+      doc.line(startX + colWidth * 5.75 - 1, tableY - 3, startX + colWidth * 5.75 - 1, tableY +11); // Right border
       
-      const komissionx1 = tablestartX;
-      const komissionwidth = 30;
-      const komissionx2 = startX + komissionwidth;
-      const komissionTextX = komissionx1 + txtdistancetable;
-     
-
-      const herstellerx1 = komissionx2;
-      const herstellerTextX = herstellerx1 + txtdistancetable;
-      const herstellerwidth = 25;
-      const herstellerx2 = herstellerx1 + herstellerwidth;
-
-      const geraetetypx1 = herstellerx2;
-      const geraetetypTextX = geraetetypx1 + txtdistancetable;
-      const geraetetypwidth = 42;
-      const geraetetypx2 = geraetetypx1 + geraetetypwidth;
-
-      const seriennummerx1 = geraetetypx2;
-      const seriennummerTextX = seriennummerx1 + txtdistancetable;
-      const seriennummerwidth = 27;
-      const seriennummerx2 = seriennummerx1 + seriennummerwidth;
-
-      const werkstatteingangx1 = seriennummerx2;
-      const werkstatteingangTextX = werkstatteingangx1 + txtdistancetable;
-      const werkstatteingangwidth = 26;
-      const werkstatteingangx2 = werkstatteingangx1 + werkstatteingangwidth;
-
-      const zubehoerx1 = werkstatteingangx2;
-      const zubehoerTextX = zubehoerx1 + txtdistancetable;
-      const zubehoerwidth = 25;
-      const zubehoerx2 = zubehoerx1 + zubehoerwidth;
-
-
+      // Headers with padding
       
-
-      // vertical lines
-
-      // Linienstärke anpassen
-doc.setLineWidth(0.25); // Die Linie wird etwas dicker
-
-// Linienfarbe auf hellgrau setzen
-// doc.setDrawColor('#353839');
-      doc.line(tablestartX, tableY1, tablestartX, tableY2); // first vertical line - left border
-
-      doc.line(komissionx2, tableY1, komissionx2, tableY2); // second vertical line - komission endline
-      doc.line(herstellerx2, tableY1, herstellerx2, tableY2); // third vertical line - hersteller endline
-      doc.line(geraetetypx2, tableY1, geraetetypx2, tableY2); // fourth vertical line - geraetetyp endline
-      doc.line(seriennummerx2, tableY1, seriennummerx2, tableY2); // fifth vertical line - seriennummer endline
-      doc.line(werkstatteingangx2, tableY1, werkstatteingangx2, tableY2); // sixth vertical line - werkstatteingang endline
-
-      doc.line(tablenEndX, tableY1, tablenEndX, tableY2); // last vertical line - right border
-
-      // horizontal lines
-      doc.line(tablestartX, tableY1, tablenEndX, tableY1); // top horizontal line
-      doc.line(tablestartX, tableY2, tablenEndX, tableY2); // bottom horizontal line
-
-
-
-            // Headers with padding
+      doc.text('Kommission', startX, tableY);
+      doc.text('Hersteller', startX + colWidth, tableY);
+      doc.text('Gerätetyp', startX + colWidth * 2, tableY);
+      doc.text('Seriennummer', startX + colWidth * 3, tableY);
+      doc.text('Werkstatteingang', startX + colWidth * 4, tableY);
+      doc.text('Zubehör', startX + colWidth * 5, tableY);
       
-            doc.text('Kommission', komissionTextX, tableHeadingY);
-            doc.text('Hersteller', herstellerTextX, tableHeadingY);
-            doc.text('Gerätetyp', geraetetypTextX, tableHeadingY);
-            doc.text('Seriennummer', seriennummerTextX, tableHeadingY);
-            doc.text('Wkst. Eingang', werkstatteingangTextX, tableHeadingY);
-            doc.text('Zubehör', zubehoerTextX, tableHeadingY);
-            
-            // Data row with padding - always show with fixed length and dashes for empty fields
-            doc.setFont(undefined, 'normal');
-            doc.setFontSize(10.5);
-            doc.text(kommission || '-', komissionTextX, tableContentY);
-            doc.text(hersteller || '-', herstellerTextX, tableContentY);
-            doc.text(geraetetyp || '-', geraetetypTextX, tableContentY);
-            doc.text(seriennummer || '-', seriennummerTextX, tableContentY);
-
-
-
-      
-
+      // Data row with padding - always show with fixed length and dashes for empty fields
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(9);
+      doc.text(kommission || '-', startX, tableY + 8);
+      doc.text(hersteller || '-', startX + colWidth, tableY + 8);
+      doc.text(geraetetyp || '-', startX + colWidth * 2, tableY + 8);
+      doc.text(seriennummer || '-', startX + colWidth * 3, tableY + 8);
       
       const repWerkstattNotiz = leftX+110
       const perFaxMail = repWerkstattNotiz +52
@@ -2845,8 +2784,8 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
         const [yyyy, mm, dd] = werkstatteingang.split('-');
         werkstatteingangFormatted = `${dd}.${mm}.${yyyy}`;
       }
-      doc.text(werkstatteingangFormatted, werkstatteingangTextX, tableContentY);
-      doc.text(zubehoer || '-', zubehoerTextX, tableContentY);
+      doc.text(werkstatteingangFormatted, startX + colWidth * 4, tableY + 8);
+      doc.text(zubehoer || '-', startX + colWidth * 5, tableY + 8);
       
       // Workshop Notes
       if (kvDate || perMethod || werkstattNotiz) {
@@ -2860,20 +2799,19 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
           const [yyyy, mm, dd] = kvDate.split('-');
           doc.text(` ${dd}.${mm}.${yyyy}`, repWerkstattNotiz+37, notesY);
         }
-        const gesendetanwerkstattX = leftX+126;
-        const gesendetanwerkstattY = tableContentY-12.5;
+        const gesendetanwerkstattX = leftX+127;
 
                 // Workshop Date Section (Top Right)
                 if (werkstattDate) {
                   doc.setFontSize(8);
                   doc.setFont(undefined, 'bold');
-                  doc.text('gesendet an die Werkstatt:', gesendetanwerkstattX, gesendetanwerkstattY);
+                  doc.text('gesendet an die Werkstatt:', gesendetanwerkstattX, notesY-20);
                   doc.setFont(undefined, 'normal');
                   
                   // Format date as DD.MM.YYYY
                   const [yyyy, mm, dd] = werkstattDate.split('-');
                   doc.setFontSize(8);
-                  doc.text(`${dd}.${mm}.${yyyy}`, gesendetanwerkstattX +33, gesendetanwerkstattY);
+                  doc.text(`${dd}.${mm}.${yyyy}`, gesendetanwerkstattX +33, notesY-20);
                 }
 
                 // Werkstattausgang Section (Top Right)
@@ -3117,7 +3055,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
       // Draw a text input field border
       doc.setDrawColor(100);
       doc.setLineWidth(0.2);
-      doc.rect(leftX, notizenY + 5, rightXstop-leftX, 20); // Smaller rectangle for notes
+      doc.rect(leftX, notizenY + 5, rightYstop-leftX, 20); // Smaller rectangle for notes
       
       // Add the actual note text
       doc.text(werkstattNotiz, leftX+5, notizenY+10);
@@ -3529,7 +3467,6 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                   value={kommission}
                   onChange={(e) => setKommission(e.target.value)}
                   placeholder="z.B. 020-5031"
-                  maxLength={15}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
@@ -3551,7 +3488,6 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                   value={hersteller}
                   onChange={(e) => setHersteller(e.target.value)}
                   placeholder="z.B. HHM"
-                  maxLength={12}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
@@ -3573,7 +3509,6 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                   value={geraetetyp}
                   onChange={(e) => setGeraetetyp(e.target.value)}
                   placeholder="z.B. G400 Mini"
-                  maxLength={31}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
@@ -3595,7 +3530,6 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                   value={seriennummer}
                   onChange={(e) => setSeriennummer(e.target.value)}
                   placeholder="z.B. 53742513"
-                  maxLength={13}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
@@ -3637,7 +3571,6 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                   value={zubehoer}
                   onChange={(e) => setZubehoer(e.target.value)}
                   placeholder="z.B. ex Hörer"
-                  maxLength={10}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
