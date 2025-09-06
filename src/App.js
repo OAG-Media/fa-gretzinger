@@ -43,8 +43,10 @@ const ARBEITEN = [
   { key: 'poti', label: 'Poti / LS-Wippe' },
   { key: 'batterie', label: 'Batterie / Akku' },
   { key: 'gehaeuse', label: 'Gehäuse / IDO Schale' },
+  { key: 'schale_repariert', label: 'Schale repariert' },
   { key: 'gehaeuseteil', label: 'Gehäuseteil / Faceplate' },
   { key: 'winkel', label: 'Winkel' },
+  { key: 'zugfaden', label: 'Zugfaden' },
   { key: 'batteriekontakte', label: 'Batteriekontakte' },
   { key: 'bluetooth', label: 'Bluetooth-Board' },
   { key: 'noahlink', label: 'NOAHlink Buchse' },
@@ -74,6 +76,8 @@ const drawCheckbox = (doc, x, y, checked) => {
 
 // Dashboard Component - You'll actually see this!
 const Dashboard = ({ setIsLoggedIn, navigate }) => {
+  const [hoveredButton, setHoveredButton] = useState(null);
+  
   return (
     <div style={{ padding: '2rem', textAlign: 'center', height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
       {/* <h1 style={{ color: '#1d426a', marginBottom: '2rem' }}>Gretzinger Hörgeräte Dashboard</h1> */}
@@ -84,7 +88,23 @@ const Dashboard = ({ setIsLoggedIn, navigate }) => {
           <p style={{ color: '#666', marginBottom: '1rem' }}>Kunden verwalten und bearbeiten</p>
           <button 
             onClick={() => navigate('/akustiker')}
-            style={{ padding: '10px 20px', background: '#1d426a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'scale(1.05)';
+              setHoveredButton('akustiker');
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'scale(1)';
+              setHoveredButton(null);
+            }}
+            style={{ 
+              padding: '10px 20px', 
+              background: hoveredButton === 'akustiker' ? '#2a5a8a' : '#1d426a', 
+              color: 'white', 
+              border: 'none', 
+              borderRadius: '6px', 
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
           >
             Akustiker öffnen
           </button>
@@ -94,7 +114,23 @@ const Dashboard = ({ setIsLoggedIn, navigate }) => {
           <p style={{ color: '#666', marginBottom: '1rem' }}>Neuen Reparaturauftrag anlegen</p>
           <button 
             onClick={() => navigate('/reperaturauftrag')}
-            style={{ padding: '10px 20px', background: '#1d426a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'scale(1.05)';
+              setHoveredButton('erstellen');
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'scale(1)';
+              setHoveredButton(null);
+            }}
+            style={{ 
+              padding: '10px 20px', 
+              background: hoveredButton === 'erstellen' ? '#2a5a8a' : '#1d426a', 
+              color: 'white', 
+              border: 'none', 
+              borderRadius: '6px', 
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
           >
             Reparaturauftrag erstellen
           </button>
@@ -104,15 +140,48 @@ const Dashboard = ({ setIsLoggedIn, navigate }) => {
           <p style={{ color: '#666', marginBottom: '1rem' }}>Alle Reparaturaufträge anzeigen</p>
           <button 
             onClick={() => navigate('/erstellte-reperaturauftrage')}
-            style={{ padding: '10px 20px', background: '#1d426a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'scale(1.05)';
+              setHoveredButton('anzeigen');
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'scale(1)';
+              setHoveredButton(null);
+            }}
+            style={{ 
+              padding: '10px 20px', 
+              background: hoveredButton === 'anzeigen' ? '#2a5a8a' : '#1d426a', 
+              color: 'white', 
+              border: 'none', 
+              borderRadius: '6px', 
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
           >
-            Reperaturaufträge anzeigen
+            Reparaturaufträge anzeigen
           </button>
         </div>
       </div>
       <button 
         onClick={() => setIsLoggedIn(false)} 
-        style={{ marginTop: '2rem', padding: '8px 18px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+        onMouseEnter={(e) => {
+          e.target.style.transform = 'scale(1.05)';
+          setHoveredButton('abmelden');
+        }}
+        onMouseLeave={(e) => {
+          e.target.style.transform = 'scale(1)';
+          setHoveredButton(null);
+        }}
+        style={{ 
+          marginTop: '2rem', 
+          padding: '8px 18px', 
+          background: hoveredButton === 'abmelden' ? '#c82333' : '#dc3545', 
+          color: 'white', 
+          border: 'none', 
+          borderRadius: '6px', 
+          cursor: 'pointer',
+          transition: 'all 0.2s ease'
+        }}
       >
         Abmelden
       </button>
@@ -872,8 +941,9 @@ const ErstellteReperaturauftragePage = () => {
   // Success Modal State
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
-  // With:
-  // alert('Reparaturauftrag erfolgreich gespeichert!');
+  
+  // Hover State
+  const [hoveredButton, setHoveredButton] = useState(null);
 
   // Load repair orders from Supabase
   const loadRepairOrders = async () => {
@@ -1136,8 +1206,8 @@ const ErstellteReperaturauftragePage = () => {
               ? 'Alle archivierten Reparaturaufträge anzeigen' 
               : 'Alle gespeicherten Reparaturaufträge verwalten und einsehen'
             }
-            <span style={{ marginLeft: '1rem', fontWeight: '500', color: '#1d426a' }}>
-              ({repairOrders.length} {showArchived ? 'archiviert' : 'aktiv'})
+            <span style={{ marginLeft: '0.25rem', fontWeight: '500', color: '#1d426a' }}>
+              ({repairOrders.length} {showArchived ? 'archiviert' : 'aktiv'}).
             </span>
           </p>
         </div>
@@ -1147,7 +1217,9 @@ const ErstellteReperaturauftragePage = () => {
             style={{
               padding: '8px 16px',
               height: '40px',
-              background: showArchived ? '#1d426a' : '#6c757d',
+              background: hoveredButton === 'archiv' 
+                ? (showArchived ? '#2a5a8a' : '#5a6268')
+                : (showArchived ? '#1d426a' : '#6c757d'),
               color: 'white',
               border: 'none',
               borderRadius: '6px',
@@ -1160,9 +1232,11 @@ const ErstellteReperaturauftragePage = () => {
             }}
             onMouseEnter={(e) => {
               e.target.style.transform = 'scale(1.05)';
+              setHoveredButton('archiv');
             }}
             onMouseLeave={(e) => {
               e.target.style.transform = 'scale(1)';
+              setHoveredButton(null);
             }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -1172,18 +1246,27 @@ const ErstellteReperaturauftragePage = () => {
           </button>
           <button
             onClick={() => window.location.href = '/'}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'scale(1.05)';
+              setHoveredButton('hauptmenu');
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'scale(1)';
+              setHoveredButton(null);
+            }}
             style={{
               padding: '10px 20px',
               height: '40px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: '#6c757d',
+              background: hoveredButton === 'hauptmenu' ? '#5a6268' : '#6c757d',
               color: 'white',
               border: 'none',
               borderRadius: '6px',
               cursor: 'pointer',
-              fontSize: '14px'
+              fontSize: '14px',
+              transition: 'all 0.2s ease'
             }}
           >
             Zurück zum Hauptmenü
@@ -2223,6 +2306,14 @@ function AppContent() {
         
         setArbeiten(newArbeiten);
         setArbeitenManual(newArbeitenManual);
+        
+        // Check if all 5 standard services are selected and update selectAllStandard accordingly
+        const standardServices = ['fehlerdiagnose', 'reinigung', 'kleinmaterial', 'arbeitszeit', 'endkontrolle'];
+        const allStandardSelected = standardServices.every(service => newArbeiten[service] === true);
+        setSelectAllStandard(allStandardSelected);
+      } else {
+        // No arbeiten data, so selectAllStandard should be false
+        setSelectAllStandard(false);
       }
       
       if (order.fehlerangaben) {
@@ -3253,7 +3344,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
 
     // Notizen section at the bottom (only if there are notes)
     //if (werkstattNotiz && werkstattNotiz.trim() !== '') {
-      const notizenY = pricingY + 30; // Position below pricing
+      const notizenY = pricingY + 20; // Position below pricing
       doc.setFont(undefined, 'bold');
       doc.setFontSize(12);
       doc.text('Notizen:', leftX, notizenY);
