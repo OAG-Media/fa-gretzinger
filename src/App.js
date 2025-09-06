@@ -49,6 +49,7 @@ const ARBEITEN = [
   { key: 'zugfaden', label: 'Zugfaden' },
   { key: 'batteriekontakte', label: 'Batteriekontakte' },
   { key: 'bluetooth', label: 'Bluetooth-Board' },
+  { key: 'cerumenschutz', label: 'Cerumenschutz' },
   { key: 'noahlink', label: 'NOAHlink Buchse' },
   { key: 'verstaerker', label: 'Verstärker' },
   { key: 'hoerspule', label: 'Hörspule/ Funkspule' },
@@ -1648,7 +1649,7 @@ const ErstellteReperaturauftragePage = () => {
           color: '#666',
           textAlign: 'center'
         }}>
-          {totalItems} Reparaturaufträge angezeigt
+          {totalItems} Reparaturaufträge gefunden
           {searchTerm && ` (gefiltert nach "${searchTerm}")`}
         </div>
       )}
@@ -2103,6 +2104,8 @@ function AppContent() {
   
   const [country, setCountry] = useState('DE');
   const [freigabe, setFreigabe] = useState('Keine angabe');
+  const [kvMethod, setKvMethod] = useState('keine Angabe');
+  const [kvFreigabeDate, setKvFreigabeDate] = useState('');
   const [fehler, setFehler] = useState({});
   const [arbeiten, setArbeiten] = useState({});
   const [arbeitenManual, setArbeitenManual] = useState({});
@@ -2204,6 +2207,8 @@ function AppContent() {
     setManualFehlerChecked2(false);
     setManualFehlerChecked3(false);
           setFreigabe('Keine angabe');
+    setKvMethod('keine Angabe');
+    setKvFreigabeDate('');
     setFehler({});
     setBottom('kostenpflichtig');
     setReklamationDate('');
@@ -2280,6 +2285,8 @@ function AppContent() {
       // Set form settings
       setCountry(order.country || 'DE');
       setFreigabe(order.freigabe || 'Keine angabe');
+      setKvMethod(order.kv_method || 'keine Angabe');
+      setKvFreigabeDate(order.kv_date_freigabe || '');
       setBottom(order.bottom || 'kostenpflichtig');
       setReklamationDate(order.reklamation_date || '');
       setKulanzPorto(order.kulanz_porto || 'ja');
@@ -2484,6 +2491,8 @@ function AppContent() {
         porto: Number.isFinite(porto) ? parseFloat(porto.toFixed(2)) : null,
         // Add all the missing fields that were not being saved
         freigabe: freigabe || 'Keine angabe',
+        kv_method: kvMethod || 'keine Angabe',
+        kv_date_freigabe: kvFreigabeDate || null,
         bottom: bottom || 'kostenpflichtig',
         reklamation_date: reklamationDate || null,
         kulanz_porto: kulanzPorto || 'ja',
@@ -3073,7 +3082,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
       
 
       
-      const repWerkstattNotiz = leftX+110
+      const repWerkstattNotiz = leftX+108
       const perFaxMail = repWerkstattNotiz +52
 
       // Format date for Werkstatteingang
@@ -3114,7 +3123,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                 }
 
                 // Werkstattausgang Section (Top Right)
-                const werkstattausgangY = 262;
+                const werkstattausgangY = 265;
                 const werkstattausgangX = 144;
                 doc.setFontSize(10);
                 doc.setFont(undefined, 'bold');
@@ -3175,7 +3184,14 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
       // If "Reparatur laut KV durchführen" is selected, show it as checked
       const checked = freigabe === opt;
       drawCheckbox(doc, leftX + 1, yLeft - 2.5, checked);
-      doc.text(opt, leftX + 8, yLeft);
+      
+      // For "Reparatur laut KV durchführen", show method and date if selected and not "keine Angabe"
+      if (opt === 'Reparatur laut KV durchführen' && checked && kvMethod && kvMethod !== 'keine Angabe' && kvFreigabeDate) {
+        const formattedDate = new Date(kvFreigabeDate).toLocaleDateString('de-DE');
+        doc.text(`${opt} -  ${kvMethod} am ${formattedDate}`, leftX + 8, yLeft);
+      } else {
+        doc.text(opt, leftX + 8, yLeft);
+      }
       yLeft += linePad;
     });
     yLeft += sectionPad;
@@ -3344,10 +3360,10 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
 
     // Notizen section at the bottom (only if there are notes)
     //if (werkstattNotiz && werkstattNotiz.trim() !== '') {
-      const notizenY = pricingY + 20; // Position below pricing
+      const notizenY = pricingY + 15; // Position below pricing
       doc.setFont(undefined, 'bold');
       doc.setFontSize(12);
-      doc.text('Notizen:', leftX, notizenY);
+      doc.text('Notizen:', leftX, notizenY+2);
     doc.setFont(undefined, 'normal');
     doc.setFontSize(10);
       
@@ -4036,9 +4052,64 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
             <div style={boxStyle}>
               <div style={{ fontWeight: 600, marginBottom: 8, textAlign: 'left' }}>Bei Freigabe bitte ankreuzen:</div>
               {FREIGABE_OPTIONS.map((opt) => (
-                <label key={opt} style={{ display: 'block', marginBottom: 4, textAlign: 'left' }}>
-                  <input type="radio" name="freigabe" checked={freigabe === opt} onChange={() => handleFreigabe(opt)} /> {opt}
-                </label>
+                <div key={opt} style={{ marginBottom: 4, textAlign: 'left' }}>
+                  <label style={{ display: 'block', marginBottom: '4px' }}>
+                    <input type="radio" name="freigabe" checked={freigabe === opt} onChange={() => handleFreigabe(opt)} />
+                    <span style={{ marginLeft: '8px' }}>{opt}</span>
+                  </label>
+                  {opt === 'Reparatur laut KV durchführen' && freigabe === opt && (
+                    <div style={{ 
+                      marginLeft: '24px', 
+                      marginTop: '8px',
+                      display: 'flex', 
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '14px', minWidth: '30px' }}>per:</span>
+                        <select 
+                          value={kvMethod} 
+                          onChange={(e) => {
+                            setKvMethod(e.target.value);
+                            if (e.target.value === 'keine Angabe') {
+                              setKvFreigabeDate('');
+                            }
+                          }}
+                          style={{ 
+                            padding: '4px 8px', 
+                            borderRadius: '4px', 
+                            border: '1px solid #ccc',
+                            fontSize: '14px',
+                            minWidth: '100px'
+                          }}
+                        >
+                          <option value="keine Angabe">keine Angabe</option>
+                          <option value="Mail">Mail</option>
+                          <option value="Tel">Tel</option>
+                          <option value="Fax">Fax</option>
+                          <option value="Brief">Brief</option>
+                        </select>
+                      </div>
+                      {kvMethod !== 'keine Angabe' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '14px', minWidth: '30px' }}>am:</span>
+                          <input 
+                            type="date" 
+                            value={kvFreigabeDate}
+                            onChange={(e) => setKvFreigabeDate(e.target.value)}
+                            style={{ 
+                              padding: '4px 8px', 
+                              borderRadius: '4px', 
+                              border: '1px solid #ccc',
+                              fontSize: '14px',
+                              minWidth: '140px'
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
             <div style={boxStyle}>
