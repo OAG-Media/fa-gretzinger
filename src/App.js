@@ -856,7 +856,7 @@ const ErstellteReperaturauftragePage = () => {
   const [repairOrders, setRepairOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('created_at');
+  const [sortBy, setSortBy] = useState('werkstattausgang');
   const [sortOrder, setSortOrder] = useState('desc');
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [viewingOrder, setViewingOrder] = useState(null);
@@ -982,7 +982,13 @@ const ErstellteReperaturauftragePage = () => {
       let aValue = a[sortBy];
       let bValue = b[sortBy];
 
-      if (sortBy === 'created_at') {
+      // Handle date fields
+      if (sortBy === 'created_at' || sortBy === 'werkstattausgang') {
+        // Handle null/empty values for date fields
+        if (!aValue && !bValue) return 0;
+        if (!aValue) return sortOrder === 'asc' ? 1 : -1; // null values go to end when asc, start when desc
+        if (!bValue) return sortOrder === 'asc' ? -1 : 1;
+        
         aValue = new Date(aValue);
         bValue = new Date(bValue);
       }
@@ -1207,8 +1213,8 @@ const ErstellteReperaturauftragePage = () => {
             <tr style={{ background: '#f8f9fa', borderBottom: '1px solid #e0e0e0' }}>
               <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '40px' }}></th>
               <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
-                  onClick={() => handleSort('created_at')}>
-                Erstellt am {sortBy === 'created_at' && (sortOrder === 'asc' ? '↑' : '↓')}
+                  onClick={() => handleSort('werkstattausgang')}>
+                Wkst. Ausgang {sortBy === 'werkstattausgang' && (sortOrder === 'asc' ? '↑' : '↓')}
               </th>
               <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
                   onClick={() => handleSort('kommission')}>
@@ -1257,7 +1263,7 @@ const ErstellteReperaturauftragePage = () => {
                       </button>
                     </td>
                     <td style={{ padding: '12px', fontSize: '14px' }}>
-                      {formatDate(order.created_at)}
+                      {order.werkstattausgang ? formatDate(order.werkstattausgang) : '-'}
                     </td>
                     <td style={{ padding: '12px', fontSize: '14px', fontWeight: '500' }}>
                       {order.kommission || '-'}
@@ -1824,6 +1830,9 @@ function AppContent() {
   // IDO/HDO State for Arbeitszeit pricing
   const [idoHdo, setIdoHdo] = useState('IDO');
   
+  // State for "Alle 5 standard Arbeitspositionen anwählen" checkbox
+  const [selectAllStandard, setSelectAllStandard] = useState(false);
+  
   // Additional fields state
   const [gesaendetAnWerkstatt, setGesaendetAnWerkstatt] = useState('');
   const [notes, setNotes] = useState('');
@@ -1890,6 +1899,7 @@ function AppContent() {
     setReklamationDate('');
     setKulanzPorto('ja');
     setIdoHdo('IDO');
+    setSelectAllStandard(false);
     setGesaendetAnWerkstatt('');
     setNotes('');
     
@@ -2029,7 +2039,21 @@ function AppContent() {
   const handleCountry = (e) => setCountry(e.target.value);
   const handleFreigabe = (val) => setFreigabe(val);
   const handleFehler = (key) => setFehler((prev) => ({ ...prev, [key]: !prev[key] }));
-  const handleArbeiten = (key) => setArbeiten((prev) => ({ ...prev, [key]: !prev[key] }));
+  const handleArbeiten = (key) => {
+    setArbeiten((prev) => {
+      const newValue = !prev[key];
+      const newArbeiten = { ...prev, [key]: newValue };
+      
+      // Check if this is one of the 5 standard services and it's being unchecked
+      const standardServices = ['fehlerdiagnose', 'reinigung', 'kleinmaterial', 'arbeitszeit', 'endkontrolle'];
+      if (standardServices.includes(key) && !newValue) {
+        // If any standard service is unchecked, uncheck the "alle 5 standard" checkbox
+        setSelectAllStandard(false);
+      }
+      
+      return newArbeiten;
+    });
+  };
   const handleArbeitenManual = (key, value) => {
     value = value.replace(/[^0-9,]/g, '');
     value = value.replace(/(,.*),/g, '$1');
@@ -2210,6 +2234,20 @@ function AppContent() {
   
   // IDO/HDO handler
   const handleIdoHdo = (val) => setIdoHdo(val);
+  
+  // Handler for "Alle 5 standard Arbeitspositionen anwählen"
+  const handleSelectAllStandard = (checked) => {
+    setSelectAllStandard(checked);
+    
+    const standardServices = ['fehlerdiagnose', 'reinigung', 'kleinmaterial', 'arbeitszeit', 'endkontrolle'];
+    const newArbeiten = { ...arbeiten };
+    
+    standardServices.forEach(service => {
+      newArbeiten[service] = checked; // Set to checked (true) or unchecked (false)
+    });
+    
+    setArbeiten(newArbeiten);
+  };
 
   // Customer handlers
   const handleCustomerSelect = (customer) => {
@@ -2510,13 +2548,15 @@ function AppContent() {
   let net = 0;
   let porto = countryObj ? countryObj.porto : 0;
   let arbeitszeit = countryObj ? countryObj.arbeitszeit : 0;
-  
+
   // Apply IDO/HDO pricing for Germany only
   if (country === 'DE') {
     if (idoHdo === 'IDO') {
       arbeitszeit = 22.0;
     } else if (idoHdo === 'HDO') {
       arbeitszeit = 26.0;
+    } else if (idoHdo === 'SCHWIERIG') {
+      arbeitszeit = 32.0;
     }
   }
   // Austria always uses 26.0 (unchanged)
@@ -2527,8 +2567,8 @@ function AppContent() {
   }
 
   if (freigabe === 'Unrepariert zurückschicken') {
-    net = 14.95;
-    porto = 0;
+    net = 14.50;
+    // Keep porto calculation from country settings - don't override to 0
   } else if (freigabe === 'Verschrotten') {
     net = 0;
     porto = 0;
@@ -3879,9 +3919,54 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                     /> 
                     <span style={{ fontSize: 14 }}>IDO (26,00 €)</span>
                   </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input 
+                      type="radio" 
+                      name="idoHdo" 
+                      checked={idoHdo === 'SCHWIERIG'} 
+                      onChange={() => handleIdoHdo('SCHWIERIG')}
+                      style={{ margin: 0 }}
+                    /> 
+                    <span style={{ fontSize: 14 }}>Schwierigere Fälle (32,00 €)</span>
+                  </label>
                 </div>
               </div>
             )}
+            
+            {/* Alle 5 standard Arbeitspositionen anwählen */}
+            <div style={boxStyle}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={selectAllStandard}
+                    onChange={(e) => handleSelectAllStandard(e.target.checked)}
+                    style={{ margin: 0 }}
+                  />
+                  <span style={{ fontSize: 14, fontWeight: 500 }}>Alle 5 standard Arbeitspositionen anwählen</span>
+                </label>
+                <div 
+                  style={{
+                    width: 14,
+                    height: 14,
+                    borderRadius: '50%',
+                    backgroundColor: '#1d426a',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 10,
+                    fontWeight: 'bold',
+                    cursor: 'help',
+                    position: 'relative'
+                  }}
+                  title="Fehlerdiagnose (3,50€) • Reinigung (5,00€) • Kleinmaterial (2,00€) • Arbeitszeit (je nach Typ) • Endkontrolle (3,00€)"
+                >
+                  i
+                </div>
+              </div>
+            </div>
+            
             <div style={boxStyle}>
               <div style={{ fontWeight: 600, marginBottom: 8, textAlign: 'left' }}>Ausgeführte Arbeiten:</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
