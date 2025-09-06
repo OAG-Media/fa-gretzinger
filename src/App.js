@@ -3190,7 +3190,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
         const formattedDate = new Date(kvFreigabeDate).toLocaleDateString('de-DE');
         doc.text(`${opt} -  ${kvMethod} am ${formattedDate}`, leftX + 8, yLeft);
       } else {
-        doc.text(opt, leftX + 8, yLeft);
+      doc.text(opt, leftX + 8, yLeft);
       }
       yLeft += linePad;
     });
@@ -4056,7 +4056,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                   <label style={{ display: 'block', marginBottom: '4px' }}>
                     <input type="radio" name="freigabe" checked={freigabe === opt} onChange={() => handleFreigabe(opt)} />
                     <span style={{ marginLeft: '8px' }}>{opt}</span>
-                  </label>
+                </label>
                   {opt === 'Reparatur laut KV durchführen' && freigabe === opt && (
                     <div style={{ 
                       marginLeft: '24px', 
