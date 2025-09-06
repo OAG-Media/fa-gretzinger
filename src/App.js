@@ -865,6 +865,10 @@ const ErstellteReperaturauftragePage = () => {
   const [deletingOrder, setDeletingOrder] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(8);
+  
   // Success Modal State
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -908,6 +912,11 @@ const ErstellteReperaturauftragePage = () => {
   useEffect(() => {
     loadRepairOrders();
   }, []);
+
+  // Reset pagination when search term changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   // Toggle row expansion
   const toggleRow = (orderId) => {
@@ -966,7 +975,7 @@ const ErstellteReperaturauftragePage = () => {
   };
 
   // Filter and sort repair orders
-  const filteredRepairOrders = repairOrders
+  const filteredAndSortedOrders = repairOrders
     .filter(order => {
       const searchLower = searchTerm.toLowerCase();
       return (
@@ -979,11 +988,22 @@ const ErstellteReperaturauftragePage = () => {
       );
     })
     .sort((a, b) => {
-      let aValue = a[sortBy];
-      let bValue = b[sortBy];
+      let aValue, bValue;
+
+      // Handle nested customer fields
+      if (sortBy === 'customers.company') {
+        aValue = a.customers?.company;
+        bValue = b.customers?.company;
+      } else if (sortBy === 'customers.branch') {
+        aValue = a.customers?.branch;
+        bValue = b.customers?.branch;
+      } else {
+        aValue = a[sortBy];
+        bValue = b[sortBy];
+      }
 
       // Handle date fields
-      if (sortBy === 'created_at' || sortBy === 'werkstattausgang') {
+      if (sortBy === 'created_at' || sortBy === 'werkstattausgang' || sortBy === 'werkstatteingang') {
         // Handle null/empty values for date fields
         if (!aValue && !bValue) return 0;
         if (!aValue) return sortOrder === 'asc' ? 1 : -1; // null values go to end when asc, start when desc
@@ -993,10 +1013,26 @@ const ErstellteReperaturauftragePage = () => {
         bValue = new Date(bValue);
       }
 
+      // Handle null/empty values for text fields
+      if (!aValue && !bValue) return 0;
+      if (!aValue) return sortOrder === 'asc' ? 1 : -1;
+      if (!bValue) return sortOrder === 'asc' ? -1 : 1;
+
+      // Convert to lowercase for text comparison
+      if (typeof aValue === 'string') aValue = aValue.toLowerCase();
+      if (typeof bValue === 'string') bValue = bValue.toLowerCase();
+
       if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
       if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
       return 0;
     });
+
+  // Pagination calculations
+  const totalItems = filteredAndSortedOrders.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const filteredRepairOrders = filteredAndSortedOrders.slice(startIndex, endIndex);
 
   const handleSort = (field) => {
     if (sortBy === field) {
@@ -1005,6 +1041,56 @@ const ErstellteReperaturauftragePage = () => {
       setSortBy(field);
       setSortOrder('asc');
     }
+    setCurrentPage(1); // Reset to first page when sorting changes
+  };
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1); // Reset to first page when changing items per page
+  };
+
+  // Smart pagination logic with ellipsis
+  const getPaginationItems = () => {
+    const items = [];
+    
+    if (totalPages <= 5) {
+      // Show all pages if 5 or fewer
+      for (let i = 1; i <= totalPages; i++) {
+        items.push(i);
+      }
+    } else {
+      // Always show first page
+      items.push(1);
+      
+      if (currentPage > 3) {
+        items.push('...');
+      }
+      
+      // Show pages around current page
+      const start = Math.max(2, currentPage - 1);
+      const end = Math.min(totalPages - 1, currentPage + 1);
+      
+      for (let i = start; i <= end; i++) {
+        if (i !== 1 && i !== totalPages) {
+          items.push(i);
+        }
+      }
+      
+      if (currentPage < totalPages - 2) {
+        items.push('...');
+      }
+      
+      // Always show last page
+      if (totalPages > 1) {
+        items.push(totalPages);
+      }
+    }
+    
+    return items;
   };
 
   const formatDate = (dateString) => {
@@ -1038,24 +1124,6 @@ const ErstellteReperaturauftragePage = () => {
 
   return (
     <div style={{ padding: '2rem', maxWidth: 1400, margin: '0 auto' }}>
-      {/* Breadcrumbs */}
-      <div style={{ 
-        marginBottom: '1.5rem', 
-        padding: '0.75rem 1rem', 
-        background: '#f8f9fa', 
-        borderRadius: '6px', 
-        border: '1px solid #e0e0e0',
-        fontSize: '14px',
-        color: '#666'
-      }}>
-        <span style={{ cursor: 'pointer', color: '#1d426a' }} onClick={() => window.location.href = '/'}>
-          Dashboard
-        </span>
-        <span style={{ margin: '0 0.5rem', color: '#999' }}>→</span>
-        <span style={{ color: '#333', fontWeight: '500' }}>
-          {showArchived ? 'Archivierte Reparaturaufträge' : 'Erstellte Reparaturaufträge'}
-        </span>
-      </div>
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'left', marginBottom: '2rem', textAlign: 'left' }}>
@@ -1073,63 +1141,56 @@ const ErstellteReperaturauftragePage = () => {
             </span>
           </p>
         </div>
-        <button
-          onClick={() => window.location.href = '/'}
-          style={{
-            padding: '10px 20px',
-            height: '40px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#6c757d',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '14px'
-          }}
-        >
-          Zurück zum Hauptmenü
-        </button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            onClick={toggleArchived}
+            style={{
+              padding: '8px 16px',
+              height: '40px',
+              background: showArchived ? '#1d426a' : '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'scale(1.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'scale(1)';
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20,21H4V10H6V19H18V10H20V21M20,3H4V8H20V3M6,5V6H18V5H6Z"/>
+            </svg>
+            {showArchived ? 'Aktive Reparaturaufträge anzeigen' : 'Archiv anzeigen'}
+          </button>
+          <button
+            onClick={() => window.location.href = '/'}
+            style={{
+              padding: '10px 20px',
+              height: '40px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            Zurück zum Hauptmenü
+          </button>
+        </div>
       </div>
 
-      {/* Archive Button */}
-      <div style={{ 
-        background: 'white', 
-        border: '1px solid #e0e0e0', 
-        borderRadius: 8, 
-        padding: '1rem 1.5rem',
-        marginBottom: '1rem',
-        boxShadow: '0 1px 4px #0001'
-      }}>
-        <button
-          onClick={toggleArchived}
-          style={{
-            padding: '8px 16px',
-            background: showArchived ? '#1d426a' : '#6c757d',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            transition: 'all 0.2s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.target.style.transform = 'scale(1.05)';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.transform = 'scale(1)';
-          }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M20,21H4V10H6V19H18V10H20V21M20,3H4V8H20V3M6,5V6H18V5H6Z"/>
-          </svg>
-          {showArchived ? 'Aktive Reparaturaufträge anzeigen' : 'Archiv anzeigen'}
-        </button>
-      </div>
 
       {/* Search and Sort Controls */}
       <div style={{ 
@@ -1220,14 +1281,26 @@ const ErstellteReperaturauftragePage = () => {
                   onClick={() => handleSort('kommission')}>
                 Kommission {sortBy === 'kommission' && (sortOrder === 'asc' ? '↑' : '↓')}
               </th>
-              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333' }}>Firma</th>
-              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333' }}>Filiale</th>
-              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333' }}>Wkst. Eingang</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
+                  onClick={() => handleSort('customers.company')}>
+                Firma {sortBy === 'customers.company' && (sortOrder === 'asc' ? '↑' : '↓')}
+              </th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
+                  onClick={() => handleSort('customers.branch')}>
+                Filiale {sortBy === 'customers.branch' && (sortOrder === 'asc' ? '↑' : '↓')}
+              </th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
+                  onClick={() => handleSort('werkstatteingang')}>
+                Wkst. Eingang {sortBy === 'werkstatteingang' && (sortOrder === 'asc' ? '↑' : '↓')}
+              </th>
               <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
                   onClick={() => handleSort('nettopreis')}>
                 Nettopreis {sortBy === 'nettopreis' && (sortOrder === 'asc' ? '↑' : '↓')}
               </th>
-              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333' }}>Porto</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
+                  onClick={() => handleSort('porto')}>
+                Porto {sortBy === 'porto' && (sortOrder === 'asc' ? '↑' : '↓')}
+              </th>
               <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '120px' }}>Aktionen</th>
             </tr>
           </thead>
@@ -1481,22 +1554,176 @@ const ErstellteReperaturauftragePage = () => {
         </table>
       </div>
 
-      {/* Summary */}
-      <div style={{ 
-        marginTop: '1rem', 
-        padding: '1rem', 
-        background: '#f8f9fa', 
-        borderRadius: '6px',
+      {/* Results Info */}
+      {totalItems > 0 && (
+        <div style={{
+          margin: '1rem 0 0.5rem 0',
+          padding: '1rem',
+          background: '#f8f9fa',
+          borderRadius: '6px',
+          fontSize: '14px',
+          color: '#666',
+          textAlign: 'center'
+        }}>
+          {totalItems} Reparaturaufträge angezeigt
+          {searchTerm && ` (gefiltert nach "${searchTerm}")`}
+        </div>
+      )}
+
+      {/* Items Per Page Selector */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        margin: '0.5rem 0',
         fontSize: '14px',
         color: '#666'
       }}>
-        {filteredRepairOrders.length > 0 && (
-          <span>
-            {filteredRepairOrders.length} Reparaturauftrag{filteredRepairOrders.length !== 1 ? 'e' : ''} angezeigt
-            {searchTerm && ` (gefiltert nach "${searchTerm}")`}
-          </span>
-        )}
+        <span style={{ marginRight: '8px' }}>
+          {itemsPerPage === 999999 ? 'alle' : itemsPerPage} Ergebnisse pro Seite werden angezeigt
+        </span>
+        <select
+          value={itemsPerPage}
+          onChange={(e) => handleItemsPerPageChange(parseInt(e.target.value))}
+          style={{
+            padding: '4px 8px',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            fontSize: '14px',
+            cursor: 'pointer'
+          }}
+        >
+          <option value={8}>8</option>
+          <option value={15}>15</option>
+          <option value={30}>30</option>
+          <option value={50}>50</option>
+          <option value={100}>100</option>
+          <option value={999999}>alle</option>
+        </select>
       </div>
+
+      {/* Enhanced Pagination */}
+      {totalPages > 1 && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '4px',
+          margin: '0.5rem 0 1rem 0',
+          padding: '1rem'
+        }}>
+          {/* First Page Button */}
+          <button
+            onClick={() => handlePageChange(1)}
+            disabled={currentPage === 1}
+            style={{
+              padding: '8px 10px',
+              border: '1px solid #ddd',
+              background: currentPage === 1 ? '#f5f5f5' : '#fff',
+              color: currentPage === 1 ? '#999' : '#333',
+              cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+              borderRadius: '4px',
+              fontSize: '14px',
+              minWidth: '36px'
+            }}
+          >
+            &lt;&lt;
+          </button>
+
+          {/* Previous Button */}
+          <button
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+            style={{
+              padding: '8px 10px',
+              border: '1px solid #ddd',
+              background: currentPage === 1 ? '#f5f5f5' : '#fff',
+              color: currentPage === 1 ? '#999' : '#333',
+              cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+              borderRadius: '4px',
+              fontSize: '14px',
+              minWidth: '36px'
+            }}
+          >
+            &lt;
+          </button>
+
+          {/* Smart Page Numbers */}
+          {getPaginationItems().map((item, index) => {
+            if (item === '...') {
+              return (
+                <span
+                  key={`ellipsis-${index}`}
+                  style={{
+                    padding: '8px 4px',
+                    color: '#999',
+                    fontSize: '14px'
+                  }}
+                >
+                  ...
+                </span>
+              );
+            }
+
+            return (
+              <button
+                key={item}
+                onClick={() => handlePageChange(item)}
+                style={{
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  background: currentPage === item ? '#1d426a' : '#fff',
+                  color: currentPage === item ? '#fff' : '#333',
+                  cursor: 'pointer',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  fontWeight: currentPage === item ? '600' : 'normal',
+                  minWidth: '36px'
+                }}
+              >
+                {item}
+              </button>
+            );
+          })}
+
+          {/* Next Button */}
+          <button
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={currentPage === totalPages}
+            style={{
+              padding: '8px 10px',
+              border: '1px solid #ddd',
+              background: currentPage === totalPages ? '#f5f5f5' : '#fff',
+              color: currentPage === totalPages ? '#999' : '#333',
+              cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+              borderRadius: '4px',
+              fontSize: '14px',
+              minWidth: '36px'
+            }}
+          >
+            &gt;
+          </button>
+
+          {/* Last Page Button */}
+          <button
+            onClick={() => handlePageChange(totalPages)}
+            disabled={currentPage === totalPages}
+            style={{
+              padding: '8px 10px',
+              border: '1px solid #ddd',
+              background: currentPage === totalPages ? '#f5f5f5' : '#fff',
+              color: currentPage === totalPages ? '#999' : '#333',
+              cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+              borderRadius: '4px',
+              fontSize: '14px',
+              minWidth: '36px'
+            }}
+          >
+            &gt;&gt;
+          </button>
+        </div>
+      )}
+
 
       {/* View Modal */}
       {showViewModal && viewingOrder && (
