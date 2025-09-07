@@ -4336,7 +4336,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                       onChange={() => handleIdoHdo('SCHWIERIG')}
                       style={{ margin: 0 }}
                     /> 
-                    <span style={{ fontSize: 14 }}>Schwierigere Fälle (32,00 €)</span>
+                    <span style={{ fontSize: 14 }}>Schwierige Fälle (32,00 €)</span>
                   </label>
                 </div>
               </div>
