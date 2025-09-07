@@ -1187,8 +1187,28 @@ const ErstellteReperaturauftragePage = () => {
 
   if (loading) {
     return (
-      <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <div style={{ fontSize: '18px', color: '#666' }}>Lade Reparaturaufträge...</div>
+      <div style={{ 
+        height: '80vh', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        gap: '20px' 
+      }}>
+        {/* Animated Loading Spinner */}
+        <div 
+          className="loading-spinner"
+          style={{
+            width: '40px',
+            height: '40px',
+            border: '4px solid #f3f3f3',
+            borderTop: '4px solid #1d426a',
+            borderRadius: '50%'
+          }}
+        ></div>
+        <div style={{ fontSize: '18px', color: '#666', fontWeight: '500' }}>
+          Lade Reparaturaufträge...
+        </div>
       </div>
     );
   }
