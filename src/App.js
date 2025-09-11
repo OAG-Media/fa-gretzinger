@@ -2531,6 +2531,7 @@ function AppContent() {
   const [bottom, setBottom] = useState('kostenpflichtig');
   const [reklamationDate, setReklamationDate] = useState('');
   const [kulanzPorto, setKulanzPorto] = useState('ja');
+  const [manualPorto, setManualPorto] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerSearch, setCustomerSearch] = useState('');
   const [customers, setCustomers] = useState([]);
@@ -2561,6 +2562,7 @@ function AppContent() {
   
   // IDO/HDO State for Arbeitszeit pricing
   const [idoHdo, setIdoHdo] = useState('IDO');
+  const [austriaArbeitszeit, setAustriaArbeitszeit] = useState('26'); // '26' or '22'
   
   // State for "Alle 5 standard Arbeitspositionen anwählen" checkbox
   const [selectAllStandard, setSelectAllStandard] = useState(false);
@@ -2632,7 +2634,9 @@ function AppContent() {
     setBottom('kostenpflichtig');
     setReklamationDate('');
     setKulanzPorto('ja');
+    setManualPorto('');
     setIdoHdo('IDO');
+    setAustriaArbeitszeit('26');
     setSelectAllStandard(false);
     setGesaendetAnWerkstatt('');
     setNotes('');
@@ -2709,7 +2713,9 @@ function AppContent() {
       setBottom(order.bottom || 'kostenpflichtig');
       setReklamationDate(order.reklamation_date || '');
       setKulanzPorto(order.kulanz_porto || 'ja');
+      setManualPorto(order.manual_porto || '');
       setIdoHdo(order.ido_hdo || 'IDO');
+      setAustriaArbeitszeit(order.austria_arbeitszeit || '26');
       
       // Set Kostenvoranschlag
       setKostenvoranschlagChecked(order.kostenvoranschlag_checked || false);
@@ -2808,6 +2814,13 @@ function AppContent() {
     if (val !== 'kostenpflichtig') setKulanzPorto('ja');
     if (val !== 'reklamation') setReklamationDate('');
   };
+  
+  // Reset Austria option if country changes from AT to something else
+  useEffect(() => {
+    if (kulanzPorto === 'austria' && country !== 'AT') {
+      setKulanzPorto('ja');
+    }
+  }, [country, kulanzPorto]);
   const handleKulanzPorto = (val) => setKulanzPorto(val);
   const handleReklamationDate = (e) => setReklamationDate(e.target.value);
   const handleWerkstattDate = (e) => setWerkstattDate(e.target.value);
@@ -2915,7 +2928,9 @@ function AppContent() {
         bottom: bottom || 'kostenpflichtig',
         reklamation_date: reklamationDate || null,
         kulanz_porto: kulanzPorto || 'ja',
+        manual_porto: manualPorto || '',
         ido_hdo: idoHdo || 'IDO',
+        austria_arbeitszeit: austriaArbeitszeit || '26',
         country: country || 'DE'
 
       };
@@ -3305,11 +3320,19 @@ function AppContent() {
       arbeitszeit = 32.0;
     }
   }
-  // Austria always uses 26.0 (unchanged)
+  
+  // Apply Austrian arbeitszeit selection
+  if (country === 'AT') {
+    arbeitszeit = parseFloat(austriaArbeitszeit) || 26.0;
+  }
 
   // Apply Porto toggle for all procedure types
   if (kulanzPorto === 'nein') {
     porto = 0;
+  } else if (kulanzPorto === 'austria' && country === 'AT') {
+    porto = 14.90; // Special Austrian rate (only for Austria)
+  } else if (kulanzPorto === 'manual' && manualPorto) {
+    porto = parseFloat(manualPorto) || 0; // Manual porto amount
   }
 
   if (freigabe === 'Unrepariert zurückschicken') {
@@ -3525,19 +3548,19 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
           const [yyyy, mm, dd] = kvDate.split('-');
           doc.text(` ${dd}.${mm}.${yyyy}`, repWerkstattNotiz+37, notesY);
         }
-        const gesendetanwerkstattX = leftX+141;
+        const gesendetanwerkstattX = leftX+139;
         const gesendetanwerkstattY = customerInfo;
 
                 // Workshop Date Section (Top Right)
                 if (werkstattDate) {
-                  doc.setFontSize(10);
+                  doc.setFontSize(8);
                   doc.setFont(undefined, 'bold');
                   doc.text('Sendedatum:', gesendetanwerkstattX, gesendetanwerkstattY);
                   doc.setFont(undefined, 'normal');
                   
                   // Format date as DD.MM.YYYY
                   const [yyyy, mm, dd] = werkstattDate.split('-');
-                  doc.setFontSize(8);
+                  doc.setFontSize(10);
                   doc.text(`${dd}.${mm}.${yyyy}`, gesendetanwerkstattX +17, gesendetanwerkstattY);
                 }
 
@@ -3693,6 +3716,22 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
       doc.text('Porto ja', leftX + 16, verfahrenY);
       drawCheckbox(doc, leftX + 38, verfahrenY - 3.5, kulanzPorto === 'nein');
       doc.text('Porto nein', leftX + 44, verfahrenY);
+      
+      // Only show Austria option if country is AT
+      if (country === 'AT') {
+        drawCheckbox(doc, leftX + 70, verfahrenY - 3.5, kulanzPorto === 'austria');
+        doc.text('Porto 14,90€', leftX + 76, verfahrenY);
+      }
+      
+      // Manual porto option
+      const manualPortoX = country === 'AT' ? leftX + 105 : leftX + 70;
+      const manualPortoTextX = country === 'AT' ? leftX + 111 : leftX + 76;
+      drawCheckbox(doc, manualPortoX, verfahrenY - 3.5, kulanzPorto === 'manual');
+      const manualPortoText = kulanzPorto === 'manual' && manualPorto ? 
+        `Porto ${parseFloat(manualPorto).toFixed(2).replace('.', ',')}€` : 
+        'Porto manuell';
+      doc.text(manualPortoText, manualPortoTextX, verfahrenY);
+      
       verfahrenY += linePad;
     }
     const kvYabNetto = 73
@@ -4638,13 +4677,40 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                   <input type="radio" name="bottom" checked={bottom === 'kulanz'} onChange={() => handleBottom('kulanz')} disabled={freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen'} /> Kulanz
                 </label>
                 <div style={{ marginLeft: 24, marginTop: 4, opacity: bottom === 'kulanz' && (freigabe === 'Keine angabe' || freigabe === 'Reparatur laut KV durchführen') ? 1 : 0.5, pointerEvents: bottom === 'kulanz' && (freigabe === 'Keine angabe' || freigabe === 'Reparatur laut KV durchführen') ? 'auto' : 'none' }}>
-                  <label style={{ marginRight: 16 }}>
-                    <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'ja'} disabled={bottom !== 'kulanz' || (freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen')} onChange={() => handleKulanzPorto('ja')} /> Porto ja
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px' }}>
+                    <label>
+                      <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'ja'} disabled={bottom !== 'kulanz' || (freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen')} onChange={() => handleKulanzPorto('ja')} /> Porto ja
                   </label>
                   <label>
-                    <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'nein'} disabled={bottom !== 'kulanz' || (freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen')} onChange={() => handleKulanzPorto('nein')} /> Porto nein
+                      <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'nein'} disabled={bottom !== 'kulanz' || (freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen')} onChange={() => handleKulanzPorto('nein')} /> Porto nein
+                    </label>
+                    {country === 'AT' && (
+                      <label>
+                        <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'austria'} disabled={bottom !== 'kulanz' || (freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen')} onChange={() => handleKulanzPorto('austria')} /> Porto 14,90€
+                      </label>
+                    )}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'manual'} disabled={bottom !== 'kulanz' || (freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen')} onChange={() => handleKulanzPorto('manual')} /> Porto manuell:
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={manualPorto}
+                        onChange={(e) => setManualPorto(e.target.value)}
+                        disabled={kulanzPorto !== 'manual' || bottom !== 'kulanz' || (freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen')}
+                        placeholder="0,00"
+                        style={{
+                          width: '60px',
+                          padding: '2px 4px',
+                          border: '1px solid #e1e5e9',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          opacity: kulanzPorto === 'manual' && bottom === 'kulanz' && (freigabe === 'Keine angabe' || freigabe === 'Reparatur laut KV durchführen') ? 1 : 0.5
+                        }}
+                      />€
                   </label>
                 </div>
+              </div>
               </div>
             </div>
             
@@ -4741,6 +4807,35 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
               </div>
             )}
             
+            {/* Austrian Arbeitszeit Selection - Only for Austria */}
+            {country === 'AT' && (
+              <div style={boxStyle}>
+                <div style={{ fontWeight: 600, marginBottom: 8, textAlign: 'left' }}>Arbeitszeit Typ (Österreich):</div>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input 
+                      type="radio" 
+                      name="austriaArbeitszeit" 
+                      checked={austriaArbeitszeit === '22'} 
+                      onChange={() => setAustriaArbeitszeit('22')}
+                      style={{ margin: 0 }}
+                    /> 
+                    <span style={{ fontSize: 14 }}> 22,00 €</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input 
+                      type="radio" 
+                      name="austriaArbeitszeit" 
+                      checked={austriaArbeitszeit === '26'} 
+                      onChange={() => setAustriaArbeitszeit('26')}
+                      style={{ margin: 0 }}
+                    /> 
+                    <span style={{ fontSize: 14 }}> 26,00 €</span>
+                  </label>
+                </div>
+              </div>
+            )}
+            
             {/* Alle 5 standard Arbeitspositionen anwählen */}
             <div style={boxStyle}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -4815,7 +4910,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
             </div>
             <div style={{ ...boxStyle, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginTop: 20 }}>
               {/* Porto Toggle Section */}
-              <div style={{ width: '100%', marginBottom: 16, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16 }}>
+              <div style={{ width: '100%', marginBottom: 16, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 14, fontWeight: 500, color: '#666' }}>Porto & Verpackung:</span>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <input 
@@ -4836,6 +4931,46 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                     style={{ margin: 0 }}
                   /> 
                   <span style={{ fontSize: 14 }}>Porto nein</span>
+                </label>
+                {country === 'AT' && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input 
+                      type="radio" 
+                      name="portoToggle" 
+                      checked={kulanzPorto === 'austria'} 
+                      onChange={() => handleKulanzPorto('austria')}
+                      style={{ margin: 0 }}
+                    /> 
+                    <span style={{ fontSize: 14 }}>Porto 14,90€</span>
+                  </label>
+                )}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input 
+                    type="radio" 
+                    name="portoToggle" 
+                    checked={kulanzPorto === 'manual'} 
+                    onChange={() => handleKulanzPorto('manual')}
+                    style={{ margin: 0 }}
+                  /> 
+                  <span style={{ fontSize: 14 }}>Porto manuell:</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={manualPorto}
+                    onChange={(e) => setManualPorto(e.target.value)}
+                    disabled={kulanzPorto !== 'manual'}
+                    placeholder="0,00"
+                    style={{
+                      width: '70px',
+                      padding: '4px 6px',
+                      border: '1px solid #e1e5e9',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      opacity: kulanzPorto === 'manual' ? 1 : 0.5
+                    }}
+                  />
+                  <span style={{ fontSize: 14 }}>€</span>
                 </label>
                 </div>
               
