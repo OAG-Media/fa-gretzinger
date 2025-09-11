@@ -3525,12 +3525,12 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
           const [yyyy, mm, dd] = kvDate.split('-');
           doc.text(` ${dd}.${mm}.${yyyy}`, repWerkstattNotiz+37, notesY);
         }
-        const gesendetanwerkstattX = leftX+142;
+        const gesendetanwerkstattX = leftX+141;
         const gesendetanwerkstattY = customerInfo;
 
                 // Workshop Date Section (Top Right)
                 if (werkstattDate) {
-                  doc.setFontSize(8);
+                  doc.setFontSize(10);
                   doc.setFont(undefined, 'bold');
                   doc.text('Sendedatum:', gesendetanwerkstattX, gesendetanwerkstattY);
                   doc.setFont(undefined, 'normal');
