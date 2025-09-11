@@ -945,6 +945,19 @@ const ErstellteReperaturauftragePage = () => {
   
   // Hover State
   const [hoveredButton, setHoveredButton] = useState(null);
+  
+  // Date Filtering State
+  const [dateFilterField, setDateFilterField] = useState('werkstattausgang'); // werkstattausgang, werkstatteingang, gesendet_an_werkstatt
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  
+  // Company Filtering State
+  const [selectedCompany, setSelectedCompany] = useState('');
+  const [companySearchTerm, setCompanySearchTerm] = useState('');
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
 
   // Load repair orders from Supabase
   const loadRepairOrders = async () => {
@@ -984,10 +997,10 @@ const ErstellteReperaturauftragePage = () => {
     loadRepairOrders();
   }, []);
 
-  // Reset pagination when search term changes
+  // Reset pagination when search term, date filters, or company filter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm]);
+  }, [searchTerm, dateFrom, dateTo, dateFilterField, selectedCompany]);
 
   // Toggle row expansion
   const toggleRow = (orderId) => {
@@ -1045,11 +1058,26 @@ const ErstellteReperaturauftragePage = () => {
     setShowArchived(!showArchived);
   };
 
+  // Helper function for date filtering - must be defined before filtering logic
+  const getDateFieldValue = (order, field) => {
+    switch (field) {
+      case 'werkstattausgang':
+        return order.werkstattausgang;
+      case 'werkstatteingang':
+        return order.werkstatteingang;
+      case 'gesendet_an_werkstatt':
+        return order.gesendet_an_werkstatt;
+      default:
+        return order.werkstattausgang;
+    }
+  };
+
   // Filter and sort repair orders
   const filteredAndSortedOrders = repairOrders
     .filter(order => {
+      // Search filter
       const searchLower = searchTerm.toLowerCase();
-      return (
+      const matchesSearch = !searchTerm || (
         order.kommission?.toLowerCase().includes(searchLower) ||
         order.hersteller?.toLowerCase().includes(searchLower) ||
         order.geraetetyp?.toLowerCase().includes(searchLower) ||
@@ -1057,6 +1085,20 @@ const ErstellteReperaturauftragePage = () => {
         order.customers?.company?.toLowerCase().includes(searchLower) ||
         order.customers?.branch?.toLowerCase().includes(searchLower)
       );
+
+      // Date filter
+      const orderDate = getDateFieldValue(order, dateFilterField);
+      const matchesDateFilter = (!dateFrom && !dateTo) || (
+        orderDate && 
+        (!dateFrom || orderDate >= dateFrom) &&
+        (!dateTo || orderDate <= dateTo)
+      );
+
+      // Company filter
+      const matchesCompanyFilter = !selectedCompany || 
+        order.customers?.company === selectedCompany;
+
+      return matchesSearch && matchesDateFilter && matchesCompanyFilter;
     })
     .sort((a, b) => {
       let aValue, bValue;
@@ -1185,6 +1227,70 @@ const ErstellteReperaturauftragePage = () => {
     return `${parseFloat(price).toFixed(2).replace('.', ',')} €`;
   };
 
+  // Date filtering helper functions
+  const handleMonthSelection = (year, month) => {
+    // First day of the selected month (month-1 because JS months are 0-indexed)
+    const startOfMonth = new Date(year, month - 1, 1);
+    
+    // Last day of the selected month: go to NEXT month, then day 0 = last day of current month
+    const endOfMonth = new Date(year, month, 0);
+    
+    // Convert to YYYY-MM-DD format using local date methods to avoid timezone issues
+    const startDateString = `${year}-${String(month).padStart(2, '0')}-01`;
+    const endDateString = `${year}-${String(month).padStart(2, '0')}-${String(endOfMonth.getDate()).padStart(2, '0')}`;
+    
+    // Debug logging to see what dates we're setting
+    console.log(`Month selection: ${month}/${year}`);
+    console.log('Start date:', startDateString, '(should be first day of month)');
+    console.log('End date:', endDateString, '(should be last day of month)');
+    console.log('End of month calculation:', endOfMonth.getDate(), 'days in month');
+    
+    setDateFrom(startDateString);
+    setDateTo(endDateString);
+    setShowMonthPicker(false);
+  };
+
+  const clearDateFilter = () => {
+    setDateFrom('');
+    setDateTo('');
+  };
+
+  // Get unique companies from repair orders for filter dropdown
+  const getUniqueCompanies = (searchFilter = '') => {
+    const companies = repairOrders
+      .map(order => order.customers?.company)
+      .filter(company => company && company.trim() !== '') // Remove empty/null companies
+      .filter(company => 
+        searchFilter === '' || 
+        company.toLowerCase().includes(searchFilter.toLowerCase())
+      ) // Filter by search term
+      .sort(); // Sort alphabetically
+    
+    return [...new Set(companies)]; // Remove duplicates
+  };
+
+  // Handle company selection from dropdown
+  const handleCompanySelect = (company) => {
+    setSelectedCompany(company);
+    setCompanySearchTerm(company);
+    setShowCompanyDropdown(false);
+  };
+
+  // Handle company search input
+  const handleCompanySearchChange = (value) => {
+    setCompanySearchTerm(value);
+    if (value === '') {
+      setSelectedCompany('');
+    }
+  };
+
+  // Clear company filter
+  const clearCompanyFilter = () => {
+    setSelectedCompany('');
+    setCompanySearchTerm('');
+    setShowCompanyDropdown(false);
+  };
+
   if (loading) {
     return (
       <div style={{ 
@@ -1305,8 +1411,8 @@ const ErstellteReperaturauftragePage = () => {
         marginBottom: '2rem',
         boxShadow: '0 1px 4px #0001'
       }}>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Search */}
+        {/* First Row: Search */}
+        <div style={{ marginBottom: '1rem' }}>
           <div style={{ flex: 1, minWidth: 300 }}>
             <input
               type="text"
@@ -1326,7 +1432,290 @@ const ErstellteReperaturauftragePage = () => {
               }}
             />
           </div>
+        </div>
 
+        {/* Second Row: Date Filtering */}
+        <div style={{ 
+          display: 'flex', 
+          gap: '1rem', 
+          alignItems: 'center', 
+          flexWrap: 'wrap',
+          marginBottom: '1rem',
+          padding: '1rem',
+          background: '#f8f9fa',
+          borderRadius: '6px',
+          border: '1px solid #e9ecef'
+        }}>
+          {/* Date Field Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '14px', color: '#666', minWidth: '80px' }}>Datum Filter:</span>
+            <select
+              value={dateFilterField}
+              onChange={(e) => setDateFilterField(e.target.value)}
+              style={{
+                padding: '6px 12px',
+                border: '1px solid #e1e5e9',
+                borderRadius: '4px',
+                fontSize: '14px',
+                minWidth: '150px'
+              }}
+            >
+              <option value="werkstattausgang">Werkstattausgang</option>
+              <option value="werkstatteingang">Werkstatteingang</option>
+              <option value="gesendet_an_werkstatt">Gesendet an Werkstatt</option>
+            </select>
+          </div>
+
+          {/* Date Range */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '14px', color: '#666' }}>Von:</span>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              style={{
+                padding: '6px 8px',
+                border: '1px solid #e1e5e9',
+                borderRadius: '4px',
+                fontSize: '14px'
+              }}
+            />
+            <span style={{ fontSize: '14px', color: '#666' }}>Bis:</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              style={{
+                padding: '6px 8px',
+                border: '1px solid #e1e5e9',
+                borderRadius: '4px',
+                fontSize: '14px'
+              }}
+            />
+          </div>
+
+          {/* Month Button */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowMonthPicker(!showMonthPicker)}
+              style={{
+                padding: '6px 12px',
+                background: '#1d426a',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              Monat
+            </button>
+            
+            {/* Month Picker Modal */}
+            {showMonthPicker && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                zIndex: 1000,
+                background: 'white',
+                border: '1px solid #e1e5e9',
+                borderRadius: '6px',
+                padding: '1rem',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                minWidth: '200px'
+              }}>
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <label style={{ fontSize: '14px', color: '#666' }}>Jahr:</label>
+                  <select
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                    style={{
+                      width: '100%',
+                      padding: '4px 8px',
+                      border: '1px solid #e1e5e9',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      marginTop: '4px'
+                    }}
+                  >
+                    {Array.from({length: 10}, (_, i) => new Date().getFullYear() - 5 + i).map(year => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <label style={{ fontSize: '14px', color: '#666' }}>Monat:</label>
+                  <select
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                    style={{
+                      width: '100%',
+                      padding: '4px 8px',
+                      border: '1px solid #e1e5e9',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      marginTop: '4px'
+                    }}
+                  >
+                    {Array.from({length: 12}, (_, i) => i + 1).map(month => (
+                      <option key={month} value={month}>
+                        {new Date(2024, month - 1, 1).toLocaleDateString('de-DE', { month: 'long' })}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    onClick={() => handleMonthSelection(selectedYear, selectedMonth)}
+                    style={{
+                      flex: 1,
+                      padding: '6px 12px',
+                      background: '#1d426a',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    Anwenden
+                  </button>
+                  <button
+                    onClick={() => setShowMonthPicker(false)}
+                    style={{
+                      flex: 1,
+                      padding: '6px 12px',
+                      background: '#6c757d',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Company Filter - Searchable */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', position: 'relative' }}>
+            <span style={{ fontSize: '14px', color: '#666', minWidth: '60px' }}>Firma:</span>
+            <div style={{ position: 'relative', minWidth: '200px' }}>
+              <input
+                type="text"
+                placeholder="Alle Firmen - tippen zum Suchen..."
+                value={companySearchTerm}
+                onChange={(e) => handleCompanySearchChange(e.target.value)}
+                onFocus={() => setShowCompanyDropdown(true)}
+                onBlur={() => {
+                  // Delay hiding to allow clicks on dropdown items
+                  setTimeout(() => setShowCompanyDropdown(false), 150);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '6px 12px',
+                  border: '1px solid #e1e5e9',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
+                }}
+              />
+              
+              {/* Dropdown */}
+              {showCompanyDropdown && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  zIndex: 1000,
+                  background: 'white',
+                  border: '1px solid #e1e5e9',
+                  borderTop: 'none',
+                  borderRadius: '0 0 4px 4px',
+                  maxHeight: '200px',
+                  overflowY: 'auto',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                }}>
+                  {/* "Alle Firmen" option */}
+                  <div
+                    onClick={() => {
+                      setSelectedCompany('');
+                      setCompanySearchTerm('');
+                      setShowCompanyDropdown(false);
+                    }}
+                    style={{
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      backgroundColor: selectedCompany === '' ? '#f0f0f0' : 'transparent'
+                    }}
+                    onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}
+                    onMouseLeave={(e) => e.target.style.backgroundColor = selectedCompany === '' ? '#f0f0f0' : 'transparent'}
+                  >
+                    Alle Firmen
+                  </div>
+                  
+                  {/* Filtered companies */}
+                  {getUniqueCompanies(companySearchTerm).map(company => (
+                    <div
+                      key={company}
+                      onClick={() => handleCompanySelect(company)}
+                      style={{
+                        padding: '8px 12px',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        backgroundColor: selectedCompany === company ? '#f0f0f0' : 'transparent'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = selectedCompany === company ? '#f0f0f0' : 'transparent'}
+                    >
+                      {company}
+                    </div>
+                  ))}
+                  
+                  {/* No results message */}
+                  {getUniqueCompanies(companySearchTerm).length === 0 && companySearchTerm && (
+                    <div style={{
+                      padding: '8px 12px',
+                      fontSize: '14px',
+                      color: '#999',
+                      fontStyle: 'italic'
+                    }}>
+                      Keine Firmen gefunden
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Clear All Filters Button */}
+          <button
+            onClick={() => {
+              clearDateFilter();
+              clearCompanyFilter();
+            }}
+            style={{
+              padding: '6px 12px',
+              background: '#dc3545',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            Alle Filter löschen
+          </button>
+        </div>
+
+        {/* Third Row: Sort */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           {/* Sort */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span style={{ fontSize: '14px', color: '#666' }}>Sortieren nach:</span>
@@ -1670,7 +2059,17 @@ const ErstellteReperaturauftragePage = () => {
           textAlign: 'center'
         }}>
           {totalItems} Reparaturaufträge gefunden
-          {searchTerm && ` (gefiltert nach "${searchTerm}")`}
+          {(searchTerm || selectedCompany || dateFrom || dateTo) && (
+            <span>
+              {' (gefiltert nach: '}
+              {[
+                searchTerm && `Suche: "${searchTerm}"`,
+                selectedCompany && `Firma: "${selectedCompany}"`,
+                (dateFrom || dateTo) && `Datum: ${dateFrom || '...'} bis ${dateTo || '...'}`
+              ].filter(Boolean).join(', ')}
+              {')'}
+            </span>
+          )}
         </div>
       )}
 
