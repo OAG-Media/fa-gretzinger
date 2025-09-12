@@ -203,7 +203,10 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
     street: '',
     location: '',
     country: 'DE',
-    contact_person: ''
+    contact_person: '',
+    billing_street: '',
+    billing_location: '',
+    billing_country: 'DE'
   });
   
   // Filter and sort customers
@@ -265,7 +268,10 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
       street: customer.street || '',
       location: customer.location || '',
       country: customer.country === 'Österreich' ? 'AT' : 'DE',
-      contact_person: customer.contact_person || ''
+      contact_person: customer.contact_person || '',
+      billing_street: customer.billing_street || '',
+      billing_location: customer.billing_location || '',
+      billing_country: customer.billing_country === 'Österreich' ? 'AT' : 'DE'
     });
     setShowEditModal(true);
   };
@@ -281,7 +287,10 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
           street: editForm.street,
           location: editForm.location,
           country: editForm.country === 'DE' ? 'Deutschland' : 'Österreich',
-          contact_person: editForm.contact_person
+          contact_person: editForm.contact_person,
+          billing_street: editForm.billing_street,
+          billing_location: editForm.billing_location,
+          billing_country: editForm.billing_country === 'DE' ? 'Deutschland' : 'Österreich'
         })
         .eq('id', editingCustomer.id);
       
@@ -699,6 +708,119 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                 </select>
               </div>
               
+              {/* Billing Address Section */}
+              <div style={{ 
+                margin: '2rem 0 1.5rem 0',
+                borderTop: '1px solid #e9ecef',
+                paddingTop: '1.5rem'
+              }}>
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center', 
+                  marginBottom: '1rem' 
+                }}>
+                  <h3 style={{ 
+                    margin: 0, 
+                    fontSize: '16px', 
+                    color: '#666', 
+                    fontWeight: '500' 
+                  }}>
+                    Rechnungsadresse
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditForm(prev => ({
+                        ...prev,
+                        billing_street: prev.street,
+                        billing_location: prev.location,
+                        billing_country: prev.country
+                      }));
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      background: '#f8f9fa',
+                      color: '#495057',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = '#e9ecef';
+                      e.target.style.transform = 'scale(1.02)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = '#f8f9fa';
+                      e.target.style.transform = 'scale(1)';
+                    }}
+                  >
+                    📋 Hauptadresse kopieren
+                  </button>
+                </div>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+                    Straße
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.billing_street}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, billing_street: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+                    Ort
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.billing_location}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, billing_location: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+                    Land
+                  </label>
+                  <select
+                    value={editForm.billing_country}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, billing_country: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      boxSizing: 'border-box'
+                    }}
+                  >
+                    <option value="DE">Deutschland</option>
+                    <option value="AT">Österreich</option>
+                  </select>
+                </div>
+              </div>
+              
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
                 <button
                   type="button"
@@ -785,7 +907,7 @@ const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkus
         
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
               Filiale *
             </label>
             <input
@@ -805,7 +927,7 @@ const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkus
           </div>
           
           <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
               Firma *
             </label>
             <input
@@ -825,7 +947,7 @@ const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkus
           </div>
           
           <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
               Straße *
             </label>
             <input
@@ -845,7 +967,7 @@ const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkus
           </div>
           
           <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
               Ort *
             </label>
             <input
@@ -864,8 +986,27 @@ const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkus
             />
           </div>
           
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+              Ansprechpartner
+            </label>
+            <input
+              type="text"
+              value={newAkustiker.contact_person}
+              onChange={(e) => setNewAkustiker(prev => ({ ...prev, contact_person: e.target.value }))}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+          
           <div style={{ marginBottom: '1.5rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
               Land *
             </label>
             <select
@@ -884,6 +1025,119 @@ const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkus
               <option value="DE">Deutschland</option>
               <option value="AT">Österreich</option>
             </select>
+          </div>
+          
+          {/* Billing Address Section */}
+          <div style={{ 
+            margin: '2rem 0 1.5rem 0',
+            borderTop: '1px solid #e9ecef',
+            paddingTop: '1.5rem'
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              marginBottom: '1rem' 
+            }}>
+              <h3 style={{ 
+                margin: 0, 
+                fontSize: '16px', 
+                color: '#666', 
+                fontWeight: '500' 
+              }}>
+                Rechnungsadresse
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewAkustiker(prev => ({
+                    ...prev,
+                    billing_street: prev.street,
+                    billing_location: prev.location,
+                    billing_country: prev.country
+                  }));
+                }}
+                style={{
+                  padding: '6px 12px',
+                  background: '#f8f9fa',
+                  color: '#495057',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = '#e9ecef';
+                  e.target.style.transform = 'scale(1.02)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = '#f8f9fa';
+                  e.target.style.transform = 'scale(1)';
+                }}
+              >
+                📋 Hauptadresse kopieren
+              </button>
+            </div>
+            
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+                Straße
+              </label>
+              <input
+                type="text"
+                value={newAkustiker.billing_street}
+                onChange={(e) => setNewAkustiker(prev => ({ ...prev, billing_street: e.target.value }))}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+                Ort
+              </label>
+              <input
+                type="text"
+                value={newAkustiker.billing_location}
+                onChange={(e) => setNewAkustiker(prev => ({ ...prev, billing_location: e.target.value }))}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+                Land
+              </label>
+              <select
+                value={newAkustiker.billing_country}
+                onChange={(e) => setNewAkustiker(prev => ({ ...prev, billing_country: e.target.value }))}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
+                }}
+              >
+                <option value="DE">Deutschland</option>
+                <option value="AT">Österreich</option>
+              </select>
+            </div>
           </div>
           
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
@@ -2582,7 +2836,11 @@ function AppContent() {
     company: '',
     street: '',
     location: '',
-    country: 'DE'
+    country: 'DE',
+    contact_person: '',
+    billing_street: '',
+    billing_location: '',
+    billing_country: 'DE'
   });
 
   // Edit Repair Order State
@@ -2849,7 +3107,10 @@ function AppContent() {
           street: newAkustiker.street,
           location: newAkustiker.location,
           country: newAkustiker.country === 'DE' ? 'Deutschland' : 'Österreich',
-          contact_person: ''
+          contact_person: '',
+          billing_street: newAkustiker.billing_street,
+          billing_location: newAkustiker.billing_location,
+          billing_country: newAkustiker.billing_country === 'DE' ? 'Deutschland' : 'Österreich'
         }]);
       
       if (error) throw error;
@@ -2863,7 +3124,11 @@ function AppContent() {
         company: '',
         street: '',
         location: '',
-        country: 'DE'
+        country: 'DE',
+        contact_person: '',
+        billing_street: '',
+        billing_location: '',
+        billing_country: 'DE'
       });
       setShowAddAkustikerModal(false);
       
