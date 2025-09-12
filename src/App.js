@@ -1212,6 +1212,10 @@ const ErstellteReperaturauftragePage = () => {
   const [selectedCompany, setSelectedCompany] = useState('');
   const [companySearchTerm, setCompanySearchTerm] = useState('');
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+  
+  // Selection State
+  const [selectedOrders, setSelectedOrders] = useState(new Set());
+  const [selectAll, setSelectAll] = useState(false);
 
   // Load repair orders from Supabase
   const loadRepairOrders = async () => {
@@ -1255,6 +1259,7 @@ const ErstellteReperaturauftragePage = () => {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, dateFrom, dateTo, dateFilterField, selectedCompany]);
+  
 
   // Toggle row expansion
   const toggleRow = (orderId) => {
@@ -1394,12 +1399,54 @@ const ErstellteReperaturauftragePage = () => {
       return 0;
     });
 
+  
+  // Selection handlers (defined after filteredAndSortedOrders)
+  const handleSelectOrder = (orderId) => {
+    const newSelected = new Set(selectedOrders);
+    if (newSelected.has(orderId)) {
+      newSelected.delete(orderId);
+    } else {
+      newSelected.add(orderId);
+    }
+    setSelectedOrders(newSelected);
+    
+    // Update selectAll state based on current selection
+    const totalOrders = filteredAndSortedOrders.length;
+    setSelectAll(newSelected.size === totalOrders && totalOrders > 0);
+  };
+  
+  const handleSelectAll = () => {
+    if (selectAll) {
+      // Deselect all
+      setSelectedOrders(new Set());
+      setSelectAll(false);
+    } else {
+      // Select all filtered orders (not just current page)
+      const allOrderIds = new Set(filteredAndSortedOrders.map(order => order.id));
+      setSelectedOrders(allOrderIds);
+      setSelectAll(true);
+    }
+  };
+  
   // Pagination calculations
   const totalItems = filteredAndSortedOrders.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const filteredRepairOrders = filteredAndSortedOrders.slice(startIndex, endIndex);
+  
+  // Update selection when filters change - keep only valid selections
+  useEffect(() => {
+    const validOrderIds = new Set(filteredAndSortedOrders.map(order => order.id));
+    const validSelections = new Set([...selectedOrders].filter(id => validOrderIds.has(id)));
+    
+    if (validSelections.size !== selectedOrders.size) {
+      setSelectedOrders(validSelections);
+      // Update selectAll state
+      const totalOrders = filteredAndSortedOrders.length;
+      setSelectAll(validSelections.size === totalOrders && totalOrders > 0);
+    }
+  }, [filteredAndSortedOrders, selectedOrders]);
 
   const handleSort = (field) => {
     if (sortBy === field) {
@@ -2019,6 +2066,19 @@ const ErstellteReperaturauftragePage = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8f9fa', borderBottom: '1px solid #e0e0e0' }}>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '50px' }}>
+                <input
+                  type="checkbox"
+                  checked={selectAll}
+                  onChange={handleSelectAll}
+                  style={{
+                    width: '16px',
+                    height: '16px',
+                    cursor: 'pointer',
+                    accentColor: '#1d426a'
+                  }}
+                />
+              </th>
               <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '40px' }}></th>
               <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
                   onClick={() => handleSort('werkstattausgang')}>
@@ -2054,7 +2114,7 @@ const ErstellteReperaturauftragePage = () => {
           <tbody>
             {filteredRepairOrders.length === 0 ? (
               <tr>
-                <td colSpan="9" style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
+                <td colSpan="10" style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
                   {searchTerm ? 'Keine Reparaturaufträge gefunden.' : 'Noch keine Reparaturaufträge erstellt.'}
                 </td>
               </tr>
@@ -2063,6 +2123,19 @@ const ErstellteReperaturauftragePage = () => {
                 <React.Fragment key={order.id}>
                   {/* Main Row */}
                   <tr style={{ borderBottom: '1px solid #f0f0f0' }}>
+                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedOrders.has(order.id)}
+                        onChange={() => handleSelectOrder(order.id)}
+                        style={{
+                          width: '16px',
+                          height: '16px',
+                          cursor: 'pointer',
+                          accentColor: '#1d426a'
+                        }}
+                      />
+                    </td>
                     <td style={{ padding: '12px', textAlign: 'center' }}>
                       <button
                         onClick={() => toggleRow(order.id)}
@@ -2300,6 +2373,23 @@ const ErstellteReperaturauftragePage = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Selection Counter */}
+      {selectedOrders.size > 0 && (
+        <div style={{
+          margin: '1rem 0 0.5rem 0',
+          padding: '0.75rem 1rem',
+          background: '#e3f2fd',
+          borderRadius: '6px',
+          fontSize: '14px',
+          color: '#1976d2',
+          textAlign: 'center',
+          fontWeight: '500',
+          border: '1px solid #bbdefb'
+        }}>
+          {selectedOrders.size} ausgewählt
+        </div>
+      )}
 
       {/* Results Info */}
       {totalItems > 0 && (
