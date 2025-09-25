@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, useParams } from 'react-router-dom';
 import './App.css';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -160,6 +160,32 @@ const Dashboard = ({ setIsLoggedIn, navigate }) => {
             }}
           >
             Reparaturaufträge anzeigen
+          </button>
+        </div>
+        <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '1.2rem 1.5rem', boxShadow: '0 1px 4px #0001' }}>
+          <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Erstellte Rechnungen</h3>
+          <p style={{ color: '#666', marginBottom: '1rem' }}>Alle Rechnungen verwalten und einsehen</p>
+          <button 
+            onClick={() => navigate('/erstellte-rechnungen')}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'scale(1.05)';
+              setHoveredButton('rechnungen');
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'scale(1)';
+              setHoveredButton(null);
+            }}
+            style={{ 
+              padding: '10px 20px', 
+              background: hoveredButton === 'rechnungen' ? '#2a5a8a' : '#1d426a', 
+              color: 'white', 
+              border: 'none', 
+              borderRadius: '6px', 
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            Rechnungen anzeigen
           </button>
         </div>
       </div>
@@ -1213,6 +1239,9 @@ const ErstellteReperaturauftragePage = () => {
   const [companySearchTerm, setCompanySearchTerm] = useState('');
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
   
+  // Invoice Status Filtering State
+  const [showOnlyUnused, setShowOnlyUnused] = useState(false);
+  
   // Selection State
   const [selectedOrders, setSelectedOrders] = useState(new Set());
   const [selectAll, setSelectAll] = useState(false);
@@ -1231,6 +1260,11 @@ const ErstellteReperaturauftragePage = () => {
             street,
             location,
             country
+          ),
+          invoice_items!repair_order_id (
+            invoice:invoices (
+              invoice_number
+            )
           )
         `)
         .eq('archived', showArchived)
@@ -1255,10 +1289,10 @@ const ErstellteReperaturauftragePage = () => {
     loadRepairOrders();
   }, []);
 
-  // Reset pagination when search term, date filters, or company filter change
+  // Reset pagination when search term, date filters, company filter, or invoice status filter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, dateFrom, dateTo, dateFilterField, selectedCompany]);
+  }, [searchTerm, dateFrom, dateTo, dateFilterField, selectedCompany, showOnlyUnused]);
   
 
   // Toggle row expansion
@@ -1357,7 +1391,10 @@ const ErstellteReperaturauftragePage = () => {
       const matchesCompanyFilter = !selectedCompany || 
         order.customers?.company === selectedCompany;
 
-      return matchesSearch && matchesDateFilter && matchesCompanyFilter;
+      // Invoice status filter (show only unused)
+      const matchesInvoiceStatusFilter = !showOnlyUnused || !order.invoice_status;
+
+      return matchesSearch && matchesDateFilter && matchesCompanyFilter && matchesInvoiceStatusFilter;
     })
     .sort((a, b) => {
       let aValue, bValue;
@@ -1621,7 +1658,7 @@ const ErstellteReperaturauftragePage = () => {
   }
 
   return (
-    <div style={{ padding: '2rem', maxWidth: 1400, margin: '0 auto' }}>
+    <div style={{ padding: '2rem', maxWidth: 1600, margin: '0 auto' }}>
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'left', marginBottom: '2rem', textAlign: 'left' }}>
@@ -1671,6 +1708,34 @@ const ErstellteReperaturauftragePage = () => {
               <path d="M20,21H4V10H6V19H18V10H20V21M20,3H4V8H20V3M6,5V6H18V5H6Z"/>
             </svg>
             {showArchived ? 'Aktive Reparaturaufträge anzeigen' : 'Archiv anzeigen'}
+          </button>
+          <button
+            onClick={() => window.location.href = '/erstellte-reperaturauftrage'}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'scale(1.05)';
+              setHoveredButton('reparaturauftrage');
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'scale(1)';
+              setHoveredButton(null);
+            }}
+            style={{
+              padding: '10px 20px',
+              height: '40px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: hoveredButton === 'reparaturauftrage' ? '#5a6268' : '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              transition: 'all 0.2s ease',
+              marginRight: '10px'
+            }}
+          >
+            Zurück zu den Reparaturaufträgen
           </button>
           <button
             onClick={() => window.location.href = '/'}
@@ -2000,6 +2065,7 @@ const ErstellteReperaturauftragePage = () => {
             onClick={() => {
               clearDateFilter();
               clearCompanyFilter();
+              setShowOnlyUnused(false);
             }}
             style={{
               padding: '6px 12px',
@@ -2052,6 +2118,44 @@ const ErstellteReperaturauftragePage = () => {
               {sortOrder === 'asc' ? ' ↑ ' : ' ↓ '}
             </button>
           </div>
+          
+          {/* Invoice Status Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '14px', color: '#666', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={showOnlyUnused}
+                onChange={(e) => setShowOnlyUnused(e.target.checked)}
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  cursor: 'pointer',
+                  accentColor: '#1d426a'
+                }}
+              />
+              Zeige nur ungenutzte Reparaturaufträge
+            </label>
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+              <span 
+                style={{ 
+                  fontSize: '14px', 
+                  color: '#666', 
+                  cursor: 'help',
+                  width: '16px',
+                  height: '16px',
+                  border: '1px solid #666',
+                  borderRadius: '50%',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  lineHeight: '1'
+                }}
+                title="Hiermit versteckst du Reparaturaufträge welche bereits in einer Rechnung eingepflegt worden sind"
+              >
+                ?
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2066,7 +2170,7 @@ const ErstellteReperaturauftragePage = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8f9fa', borderBottom: '1px solid #e0e0e0' }}>
-              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '50px' }}>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '50px', fontSize: '14px' }}>
                 <input
                   type="checkbox"
                   checked={selectAll}
@@ -2079,36 +2183,33 @@ const ErstellteReperaturauftragePage = () => {
                   }}
                 />
               </th>
-              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '40px' }}></th>
-              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '30px', fontSize: '14px' }}></th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '80px', fontSize: '14px' }}>Status</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer', fontSize: '14px' }}
                   onClick={() => handleSort('werkstattausgang')}>
                 Wkst. Ausgang {sortBy === 'werkstattausgang' && (sortOrder === 'asc' ? '↑' : '↓')}
               </th>
-              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer', fontSize: '14px' }}
                   onClick={() => handleSort('kommission')}>
                 Kommission {sortBy === 'kommission' && (sortOrder === 'asc' ? '↑' : '↓')}
               </th>
-              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer', fontSize: '14px' }}
                   onClick={() => handleSort('customers.company')}>
                 Firma {sortBy === 'customers.company' && (sortOrder === 'asc' ? '↑' : '↓')}
               </th>
-              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer', fontSize: '14px' }}
                   onClick={() => handleSort('customers.branch')}>
                 Filiale {sortBy === 'customers.branch' && (sortOrder === 'asc' ? '↑' : '↓')}
               </th>
-              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
-                  onClick={() => handleSort('werkstatteingang')}>
-                Wkst. Eingang {sortBy === 'werkstatteingang' && (sortOrder === 'asc' ? '↑' : '↓')}
-              </th>
-              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer', fontSize: '14px' }}
                   onClick={() => handleSort('nettopreis')}>
                 Nettopreis {sortBy === 'nettopreis' && (sortOrder === 'asc' ? '↑' : '↓')}
               </th>
-              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer' }}
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', cursor: 'pointer', fontSize: '14px' }}
                   onClick={() => handleSort('porto')}>
                 Porto {sortBy === 'porto' && (sortOrder === 'asc' ? '↑' : '↓')}
               </th>
-              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '120px' }}>Aktionen</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '120px', fontSize: '14px' }}>Aktionen</th>
             </tr>
           </thead>
           <tbody>
@@ -2122,21 +2223,27 @@ const ErstellteReperaturauftragePage = () => {
               filteredRepairOrders.map((order) => (
                 <React.Fragment key={order.id}>
                   {/* Main Row */}
-                  <tr style={{ borderBottom: '1px solid #f0f0f0' }}>
+                  <tr style={{ 
+                    borderBottom: '1px solid #f0f0f0',
+                    backgroundColor: (order.invoice_status && order.invoice_items?.[0]?.invoice?.invoice_number) ? '#f0f8f0' : 'transparent',
+                    opacity: (order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number) ? 0.6 : 1
+                  }}>
                     <td style={{ padding: '12px', textAlign: 'center' }}>
                       <input
                         type="checkbox"
                         checked={selectedOrders.has(order.id)}
                         onChange={() => handleSelectOrder(order.id)}
+                        disabled={order.invoice_status && order.invoice_items?.[0]?.invoice?.invoice_number}
                         style={{
                           width: '16px',
                           height: '16px',
-                          cursor: 'pointer',
-                          accentColor: '#1d426a'
+                          cursor: (order.invoice_status && order.invoice_items?.[0]?.invoice?.invoice_number) ? 'not-allowed' : 'pointer',
+                          accentColor: '#1d426a',
+                          opacity: (order.invoice_status && order.invoice_items?.[0]?.invoice?.invoice_number) ? 0.5 : 1
                         }}
                       />
                     </td>
-                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                    <td style={{ padding: '4px', textAlign: 'center' }}>
                       <button
                         onClick={() => toggleRow(order.id)}
                         style={{
@@ -2145,15 +2252,46 @@ const ErstellteReperaturauftragePage = () => {
                           cursor: 'pointer',
                           fontSize: '11px',
                           color: '#666',
-                          padding: '4px',
-                          borderRadius: '4px',
-                          transition: 'all 0.2s'
+                          padding: '2px',
+                          borderRadius: '2px',
+                          transition: 'all 0.2s',
+                          minWidth: '16px',
+                          height: '16px'
                         }}
                         onMouseEnter={(e) => e.target.style.background = '#f0f0f0'}
                         onMouseLeave={(e) => e.target.style.background = 'none'}
                       >
                         {expandedRows.has(order.id) ? '▼' : '▶'}
                       </button>
+                    </td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>
+                      {order.invoice_status && order.invoice_items?.[0]?.invoice?.invoice_number && (
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center',
+                          flexDirection: 'column',
+                          gap: '2px'
+                        }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ 
+                            color: order.invoice_status === 'invoiced' ? '#28a745' : '#ffc107'
+                          }}>
+                            {order.invoice_status === 'invoiced' ? (
+                              <path d="M2,21L23,12L2,3V10L17,12L2,14V21Z"/>
+                            ) : (
+                              <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                            )}
+                          </svg>
+                          <div style={{ 
+                            fontSize: '11px',
+                            fontWeight: '500',
+                            color: order.invoice_status === 'invoiced' ? '#28a745' : '#ffc107',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            Re: {order.invoice_items[0].invoice.invoice_number}
+                          </div>
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: '12px', fontSize: '14px' }}>
                       {order.werkstattausgang ? formatDate(order.werkstattausgang) : '-'}
@@ -2166,9 +2304,6 @@ const ErstellteReperaturauftragePage = () => {
                     </td>
                     <td style={{ padding: '12px', fontSize: '14px' }}>
                       {order.customers?.branch || '-'}
-                    </td>
-                    <td style={{ padding: '12px', fontSize: '14px' }}>
-                      {order.werkstatteingang ? formatDate(order.werkstatteingang) : '-'}
                     </td>
                     <td style={{ padding: '12px', fontSize: '14px', fontWeight: '600', color: '#1d426a' }}>
                       {formatPrice(order.nettopreis)}
@@ -2209,55 +2344,67 @@ const ErstellteReperaturauftragePage = () => {
                         </button>
                         {/* Edit Button */}
                         <button
-                          onClick={() => handleEditOrder(order.id)}
+                          onClick={() => !(order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number) && handleEditOrder(order.id)}
+                          disabled={order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number}
                           style={{
                             background: 'none',
-                            color: '#1d426a',
-                            border: '1px solid #1d426a',
+                            color: (order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number) ? '#ccc' : '#1d426a',
+                            border: `1px solid ${(order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number) ? '#ccc' : '#1d426a'}`,
                             borderRadius: '4px',
-                            cursor: 'pointer',
+                            cursor: (order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number) ? 'not-allowed' : 'pointer',
                             padding: '6px 8px',
                             fontSize: '12px',
                             display: 'flex',
                             alignItems: 'center',
                             gap: '4px',
-                            transition: 'all 0.2s ease'
+                            transition: 'all 0.2s ease',
+                            opacity: (order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number) ? 0.5 : 1
                           }}
                           onMouseEnter={(e) => {
-                            e.target.style.transform = 'scale(1.05)';
+                            if (!(order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number)) {
+                              e.target.style.transform = 'scale(1.05)';
+                            }
                           }}
                           onMouseLeave={(e) => {
-                            e.target.style.transform = 'scale(1)';
+                            if (!(order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number)) {
+                              e.target.style.transform = 'scale(1)';
+                            }
                           }}
-                          title="Bearbeiten"
+                          title={(order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number) ? 'Rechnung bereits erstellt - nicht bearbeitbar' : 'Bearbeiten'}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z"/>
                           </svg>
                         </button>
-                        {/* Delete Button - Only show when not in archive view */}
+                        {/* Delete Button - Only show when not in archive view and not invoiced */}
                         {!showArchived && (
                           <button 
-                            onClick={() => handleDeleteOrder(order)} 
-                            title="Löschen"
+                            onClick={() => !(order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number) && handleDeleteOrder(order)} 
+                            disabled={order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number}
+                            title={(order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number) ? 'Rechnung bereits erstellt - nicht löschbar' : 'Löschen'}
                             style={{
                               background: 'none',
-                              color: '#1d426a',
-                              border: '1px solid #1d426a',
+                              color: (order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number) ? '#ccc' : '#1d426a',
+                              border: `1px solid ${(order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number) ? '#ccc' : '#1d426a'}`,
                               borderRadius: '4px',
-                              cursor: 'pointer',
+                              cursor: (order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number) ? 'not-allowed' : 'pointer',
                               padding: '6px 8px',
                               fontSize: '12px',
                               display: 'flex',
                               alignItems: 'center',
                               gap: '4px',
-                              transition: 'all 0.2s ease'
+                              transition: 'all 0.2s ease',
+                              opacity: (order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number) ? 0.5 : 1
                             }}
                             onMouseEnter={(e) => {
-                              e.target.style.transform = 'scale(1.05)';
+                              if (order.invoice_status !== 'invoiced') {
+                                e.target.style.transform = 'scale(1.05)';
+                              }
                             }}
                             onMouseLeave={(e) => {
-                              e.target.style.transform = 'scale(1)';
+                              if (order.invoice_status !== 'invoiced') {
+                                e.target.style.transform = 'scale(1)';
+                              }
                             }}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -2320,6 +2467,10 @@ const ErstellteReperaturauftragePage = () => {
                                   <span>{order.per_method || '-'}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ fontWeight: '500', color: '#666' }}>Wkst. Eingang:</span>
+                                  <span>{order.werkstatteingang ? formatDate(order.werkstatteingang) : '-'}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                   <span style={{ fontWeight: '500', color: '#666' }}>Gesendet an Werkstatt:</span>
                                   <span>{order.gesendet_an_werkstatt ? formatDate(order.gesendet_an_werkstatt) : '-'}</span>
                                 </div>
@@ -2374,20 +2525,61 @@ const ErstellteReperaturauftragePage = () => {
         </table>
       </div>
 
-      {/* Selection Counter */}
+      {/* Selection Counter & Invoice Button */}
       {selectedOrders.size > 0 && (
         <div style={{
           margin: '1rem 0 0.5rem 0',
-          padding: '0.75rem 1rem',
-          background: '#e3f2fd',
-          borderRadius: '6px',
-          fontSize: '14px',
-          color: '#1976d2',
-          textAlign: 'center',
-          fontWeight: '500',
-          border: '1px solid #bbdefb'
+          display: 'flex',
+          gap: '1rem',
+          alignItems: 'center',
+          justifyContent: 'center'
         }}>
-          {selectedOrders.size} ausgewählt
+          <div style={{
+            padding: '0.75rem 1rem',
+            background: '#e3f2fd',
+            borderRadius: '6px',
+            fontSize: '14px',
+            color: '#1976d2',
+            fontWeight: '500',
+            border: '1px solid #bbdefb'
+          }}>
+            {selectedOrders.size} ausgewählt
+          </div>
+          
+          <button
+            onClick={() => {
+              // Navigate to invoice creation with selected orders
+              const selectedOrderIds = Array.from(selectedOrders);
+              window.location.href = `/rechnung-erstellen?orders=${selectedOrderIds.join(',')}`;
+            }}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: '#28a745',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = '#218838';
+              e.target.style.transform = 'scale(1.02)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = '#28a745';
+              e.target.style.transform = 'scale(1)';
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+            </svg>
+            Rechnung aus Auswahl erstellen
+          </button>
         </div>
       )}
 
@@ -2850,6 +3042,2745 @@ const getInputStyleWithValidation = (currentValue, maxLength, baseStyle) => {
     position: 'relative',
     paddingRight: isAtLimit ? '30px' : baseStyle.paddingRight || '12px'
   };
+};
+
+// Invoice List Page Component
+const ErstellteRechnungenPage = () => {
+  const [invoices, setInvoices] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load invoices from database
+  const loadInvoices = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('invoices')
+        .select(`
+          *,
+          customers (
+            id,
+            company,
+            branch,
+            street,
+            location,
+            country
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setInvoices(data || []);
+    } catch (error) {
+      console.error('Error loading invoices:', error);
+      alert('Fehler beim Laden der Rechnungen');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadInvoices();
+  }, []);
+
+  // Invoice action handlers
+  const handleDownloadInvoicePDF = (invoice) => {
+    // TODO: Implement PDF download
+    alert('PDF Download wird implementiert');
+  };
+
+  const handleEditInvoice = (invoiceId) => {
+    // TODO: Navigate to edit invoice page
+    window.location.href = `/rechnung-bearbeiten/${invoiceId}`;
+  };
+
+  const handleArchiveInvoice = async (invoice) => {
+    if (window.confirm(`Möchten Sie Rechnung ${invoice.invoice_number} wirklich archivieren?`)) {
+      try {
+        // Delete the invoice (for now, until we add archived column)
+        const { error: deleteError } = await supabase
+          .from('invoices')
+          .delete()
+          .eq('id', invoice.id);
+
+        if (deleteError) throw deleteError;
+
+        // Reset repair orders status to null for ANY deleted invoice
+        const { data: invoiceItems, error: itemsError } = await supabase
+          .from('invoice_items')
+          .select('repair_order_id')
+          .eq('invoice_id', invoice.id)
+          .not('repair_order_id', 'is', null);
+
+        if (itemsError) throw itemsError;
+
+        if (invoiceItems && invoiceItems.length > 0) {
+          const repairOrderIds = invoiceItems.map(item => item.repair_order_id);
+          const { error: resetError } = await supabase
+            .from('repair_orders')
+            .update({ invoice_status: null })
+            .in('id', repairOrderIds);
+
+          if (resetError) throw resetError;
+        }
+
+        alert('Rechnung erfolgreich archiviert');
+        loadInvoices(); // Reload the list
+      } catch (error) {
+        console.error('Error archiving invoice:', error);
+        alert('Fehler beim Archivieren der Rechnung: ' + error.message);
+      }
+    }
+  };
+
+  // Change invoice status
+  const handleChangeStatus = async (invoice, newStatus) => {
+    const statusLabels = {
+      'draft': 'Entwurf',
+      'sent': 'Gesendet', 
+      'paid': 'Bezahlt'
+    };
+
+    if (window.confirm(`Möchten Sie den Status von Rechnung ${invoice.invoice_number} wirklich zu "${statusLabels[newStatus]}" ändern?`)) {
+      try {
+        const updateData = {
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        };
+
+        // Add timestamps based on status
+        if (newStatus === 'sent' && invoice.status !== 'sent') {
+          updateData.sent_at = new Date().toISOString();
+        } else if (newStatus === 'paid' && invoice.status !== 'paid') {
+          updateData.paid_at = new Date().toISOString();
+        } else if (newStatus === 'draft') {
+          updateData.sent_at = null;
+          updateData.paid_at = null;
+        }
+
+        const { error: updateError } = await supabase
+          .from('invoices')
+          .update(updateData)
+          .eq('id', invoice.id);
+
+        if (updateError) throw updateError;
+
+        // Update repair orders status accordingly
+        const { data: invoiceItems, error: itemsError } = await supabase
+          .from('invoice_items')
+          .select('repair_order_id')
+          .eq('invoice_id', invoice.id)
+          .not('repair_order_id', 'is', null);
+
+        if (itemsError) throw itemsError;
+
+        if (invoiceItems && invoiceItems.length > 0) {
+          const repairOrderIds = invoiceItems.map(item => item.repair_order_id);
+          const repairOrderStatus = newStatus === 'sent' || newStatus === 'paid' ? 'invoiced' : 'draft';
+          
+          const { error: statusError } = await supabase
+            .from('repair_orders')
+            .update({ invoice_status: repairOrderStatus })
+            .in('id', repairOrderIds);
+
+          if (statusError) throw statusError;
+        }
+
+        alert(`Status erfolgreich zu "${statusLabels[newStatus]}" geändert`);
+        loadInvoices(); // Reload the list
+      } catch (error) {
+        console.error('Error changing status:', error);
+        alert('Fehler beim Ändern des Status: ' + error.message);
+      }
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '80vh',
+        flexDirection: 'column',
+        gap: '1rem'
+      }}>
+        <div className="loading-spinner"></div>
+        <p style={{ color: '#666', fontSize: '16px' }}>Lade Rechnungen...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '2rem' }}>
+      <header style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #eee', paddingBottom: '1rem' }}>
+        <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 60, marginRight: 24 }} />
+        <h1 style={{ fontWeight: 400, color: '#1d426a', fontSize: '1.8rem', margin: 0 }}>Erstellte Rechnungen</h1>
+      </header>
+
+      <div style={{ marginBottom: '2rem' }}>
+        <button
+          onClick={() => window.location.href = '/'}
+          style={{
+            padding: '8px 16px',
+            background: '#6c757d',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = '#5a6268';
+            e.target.style.transform = 'scale(1.02)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = '#6c757d';
+            e.target.style.transform = 'scale(1)';
+          }}
+        >
+          ← Zurück zum Hauptmenü
+        </button>
+      </div>
+
+      {invoices.length === 0 ? (
+        <div style={{
+          textAlign: 'center',
+          padding: '4rem',
+          color: '#666'
+        }}>
+          <h3>Noch keine Rechnungen erstellt</h3>
+          <p>Erstellen Sie Ihre erste Rechnung über die Reparaturaufträge.</p>
+        </div>
+      ) : (
+        <div style={{ 
+          background: 'white', 
+          border: '1px solid #e0e0e0', 
+          borderRadius: 8, 
+          overflow: 'hidden',
+          boxShadow: '0 1px 4px #0001'
+        }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f8f9fa', borderBottom: '1px solid #e0e0e0' }}>
+                <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '60px' }}>Status</th>
+                <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '120px' }}>Rechnung Nr.</th>
+                <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Kunde</th>
+                <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '120px' }}>Datum</th>
+                <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600', color: '#333', width: '100px' }}>Netto</th>
+                <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600', color: '#333', width: '80px' }}>MwSt.</th>
+                <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600', color: '#333', width: '100px' }}>Gesamt</th>
+                <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '150px' }}>Aktionen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map((invoice, index) => (
+                <tr key={invoice.id} style={{ 
+                  borderBottom: index < invoices.length - 1 ? '1px solid #f0f0f0' : 'none',
+                  backgroundColor: 'transparent'
+                }}>
+                  <td style={{ padding: '12px', textAlign: 'center' }}>
+                    <select
+                      value={invoice.status || 'draft'}
+                      onChange={(e) => handleChangeStatus(invoice, e.target.value)}
+                      style={{
+                        padding: '4px 8px',
+                        border: '1px solid #ddd',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        background: 'white',
+                        cursor: 'pointer',
+                        color: invoice.status === 'draft' ? '#856404' : invoice.status === 'sent' ? '#155724' : '#004085',
+                        fontWeight: '500'
+                      }}
+                    >
+                      <option value="draft">Entwurf</option>
+                      <option value="sent">Gesendet</option>
+                      <option value="paid">Bezahlt</option>
+                    </select>
+                  </td>
+                  <td style={{ padding: '12px', textAlign: 'center', fontWeight: '500' }}>
+                    {invoice.invoice_number}
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <div style={{ fontWeight: '500' }}>{invoice.customers?.company}</div>
+                    <div style={{ fontSize: '12px', color: '#666' }}>{invoice.customers?.branch}</div>
+                  </td>
+                  <td style={{ padding: '12px', textAlign: 'center', fontSize: '14px' }}>
+                    {new Date(invoice.invoice_date).toLocaleDateString('de-DE')}
+                  </td>
+                  <td style={{ padding: '12px', textAlign: 'right', fontSize: '14px', fontWeight: '500' }}>
+                    {invoice.subtotal.toFixed(2)}€
+                  </td>
+                  <td style={{ padding: '12px', textAlign: 'right', fontSize: '14px' }}>
+                    {invoice.tax_amount.toFixed(2)}€
+                  </td>
+                  <td style={{ padding: '12px', textAlign: 'right', fontSize: '14px', fontWeight: '600', color: '#1d426a' }}>
+                    {invoice.total_amount.toFixed(2)}€
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+                      {/* PDF Button */}
+                      <button
+                        onClick={() => handleDownloadInvoicePDF(invoice)}
+                        style={{
+                          background: 'none',
+                          color: '#1d426a',
+                          border: '1px solid #1d426a',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          padding: '6px 8px',
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.transform = 'scale(1.05)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.transform = 'scale(1)';
+                        }}
+                        title="PDF herunterladen"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                        </svg>
+                      </button>
+                      
+                      {/* Edit Button */}
+                      <button
+                        onClick={() => handleEditInvoice(invoice.id)}
+                        style={{
+                          background: 'none',
+                          color: '#1d426a',
+                          border: '1px solid #1d426a',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          padding: '6px 8px',
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.transform = 'scale(1.05)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.transform = 'scale(1)';
+                        }}
+                        title="Bearbeiten"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z"/>
+                        </svg>
+                      </button>
+                      
+                      {/* Delete Button */}
+                      <button 
+                        onClick={() => handleArchiveInvoice(invoice)} 
+                        style={{
+                          background: 'none',
+                          color: '#1d426a',
+                          border: '1px solid #1d426a',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          padding: '6px 8px',
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.transform = 'scale(1.05)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.transform = 'scale(1)';
+                        }}
+                        title="Archivieren"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M9,3V4H4V6H5V19A2,2 0 0,0 7,21H17A2,2 0 0,0 19,19V6H20V4H15V3H9M7,6H17V19H7V6M9,8V17H11V8H9M13,8V17H15V8H13Z"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Invoice Creation Page Component
+const RechnungErstellenPage = () => {
+  const [selectedOrderIds, setSelectedOrderIds] = useState([]);
+  const [selectedOrders, setSelectedOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Invoice form state
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [periodStart, setPeriodStart] = useState('');
+  const [periodEnd, setPeriodEnd] = useState('');
+  const [isEditingNumber, setIsEditingNumber] = useState(false);
+  const [numberValidation, setNumberValidation] = useState({ isValid: true, message: '' });
+
+  // Manual line items state
+  const [manualItems, setManualItems] = useState([]);
+  const [showManualItemModal, setShowManualItemModal] = useState(false);
+  const [manualItemType, setManualItemType] = useState('positive'); // 'positive' or 'negative'
+  const [manualItemForm, setManualItemForm] = useState({
+    description: '',
+    amount: ''
+  });
+
+  // Get next invoice number
+  const getNextInvoiceNumber = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('invoice_number')
+        .order('id', { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const lastNumber = parseInt(data[0].invoice_number);
+        return (lastNumber + 1).toString();
+      } else {
+        // Start from 8125 if no invoices exist (continuing from your example 8124)
+        return '8125';
+      }
+    } catch (error) {
+      console.error('Error getting next invoice number:', error);
+      return '8125'; // Fallback
+    }
+  };
+
+  // Validate invoice number for duplicates
+  const validateInvoiceNumber = async (number) => {
+    if (!number.trim()) {
+      setNumberValidation({ isValid: false, message: 'Rechnungsnummer ist erforderlich' });
+      return false;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('id')
+        .eq('invoice_number', number.trim())
+        .limit(1);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setNumberValidation({ 
+          isValid: false, 
+          message: 'Diese Rechnungsnummer ist bereits vergeben' 
+        });
+        return false;
+      } else {
+        setNumberValidation({ isValid: true, message: '' });
+        return true;
+      }
+    } catch (error) {
+      console.error('Error validating invoice number:', error);
+      setNumberValidation({ 
+        isValid: false, 
+        message: 'Fehler bei der Validierung' 
+      });
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    // Get order IDs from URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const orderIds = urlParams.get('orders');
+    
+    if (orderIds) {
+      const ids = orderIds.split(',').map(id => id.trim());
+      setSelectedOrderIds(ids);
+      loadSelectedOrders(ids);
+      // Load next invoice number
+      loadNextInvoiceNumber();
+    } else {
+      // No orders selected, redirect back
+      window.location.href = '/erstellte-reperaturauftrage';
+    }
+  }, []);
+
+  const loadNextInvoiceNumber = async () => {
+    const nextNumber = await getNextInvoiceNumber();
+    setInvoiceNumber(nextNumber);
+  };
+
+  const loadSelectedOrders = async (orderIds) => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('repair_orders')
+        .select(`
+          *,
+          customers (
+            id,
+            company,
+            branch,
+            street,
+            location,
+            country,
+            contact_person,
+            billing_street,
+            billing_location,
+            billing_country
+          )
+        `)
+        .in('id', orderIds);
+
+      if (error) throw error;
+      setSelectedOrders(data || []);
+    } catch (error) {
+      console.error('Error loading selected orders:', error);
+      alert('Fehler beim Laden der ausgewählten Reparaturaufträge');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Helper function to calculate repair costs
+  const calculateRepairCost = (order) => {
+    // If nettopreis is already calculated and stored, use it
+    if (order.nettopreis && order.nettopreis > 0) {
+      return parseFloat(order.nettopreis);
+    }
+    
+    // Otherwise, calculate from individual components (for new orders)
+    let total = 0;
+    
+    // Add arbeitszeit cost
+    if (order.arbeitszeit) {
+      if (order.austria_arbeitszeit && order.customers?.country === 'Österreich') {
+        total += parseFloat(order.austria_arbeitszeit) || 0;
+      } else {
+        // Default arbeitszeit costs
+        if (order.customers?.country === 'Österreich') {
+          total += 26.00; // Default for Austria
+        } else {
+          total += 22.00; // Default for Germany
+        }
+      }
+    }
+    
+    // Add other arbeiten costs
+    const ARBEITEN_COSTS = {
+      'fehlerdiagnose': 5.95,
+      'reinigung': 5.95,
+      'kleinmaterial': 5.95,
+      'endkontrolle': 5.95,
+      'hoerer_repariert': 14.90,
+      'schale_repariert': 14.90,
+      'zugfaden': 5.95,
+      'cerumenschutz': 5.95,
+      'faceplate': 14.90,
+      'ido_schale': 32.00,
+      'hdo_schale': 32.00,
+      'winkel': 5.95,
+      'batteriekontakt': 5.95,
+      'lautstaerke': 5.95,
+      'programmiertaste': 5.95,
+      'mikrofon': 14.90,
+      'hoerer': 14.90,
+      'kabel': 14.90,
+      'daempfung': 5.95,
+      'schwierige_faelle': 32.00
+    };
+    
+    // Add costs for selected arbeiten
+    Object.keys(ARBEITEN_COSTS).forEach(key => {
+      if (order[key]) {
+        total += ARBEITEN_COSTS[key];
+      }
+    });
+    
+    // Add manual arbeiten costs
+    Object.keys(order).forEach(key => {
+      if (key.endsWith('_manual') && order[key]) {
+        const manualCost = parseFloat(order[key]) || 0;
+        total += manualCost;
+      }
+    });
+    
+    return total;
+  };
+
+  // Helper function to calculate porto
+  const calculatePorto = (order) => {
+    // If porto is already calculated and stored, use it
+    if (order.porto !== undefined && order.porto !== null) {
+      return parseFloat(order.porto);
+    }
+    
+    // If no stored porto value, return 0 (no porto)
+    return 0;
+  };
+
+  // Helper function to get repair description
+  const getRepairDescription = (order) => {
+    // Check for specific status first (garantie, reklamation, kulanz, unrepariert zurück)
+    if (order.freigabe === 'garantie') {
+      return 'Garantie';
+    }
+    if (order.freigabe === 'reklamation') {
+      return 'Reklamation';
+    }
+    if (order.freigabe === 'kulanz') {
+      return 'Kulanz';
+    }
+    if (order.freigabe === 'unrepariert zurück') {
+      return 'Unrepariert zurück';
+    }
+    
+    // Check for KV repair
+    if (order.freigabe === 'Reparatur laut KV durchführen') {
+      return `Reparatur laut KV durchführen${order.kv_method && order.kv_method !== 'keine Angabe' ? ` (${order.kv_method})` : ''}`;
+    }
+    
+    // If freigabe has other specific values, use them
+    if (order.freigabe && order.freigabe !== 'Keine angabe') {
+      return order.freigabe;
+    }
+    
+    // Build description from selected arbeiten
+    const selectedArbeiten = [];
+    const ARBEITEN_NAMES = {
+      'fehlerdiagnose': 'Fehlerdiagnose',
+      'reinigung': 'Reinigung',
+      'kleinmaterial': 'Kleinmaterial',
+      'arbeitszeit': 'Arbeitszeit',
+      'endkontrolle': 'Endkontrolle',
+      'hoerer_repariert': 'Hörer repariert',
+      'schale_repariert': 'Schale repariert',
+      'zugfaden': 'Zugfaden',
+      'cerumenschutz': 'Cerumenschutz',
+      'faceplate': 'Gehäuse / Faceplate',
+      'ido_schale': 'Gehäuse / IDO Schale',
+      'hdo_schale': 'Gehäuse / HDO Schale',
+      'winkel': 'Winkel',
+      'batteriekontakt': 'Batteriekontakt',
+      'lautstaerke': 'Lautstärke',
+      'programmiertaste': 'Programmiertaste',
+      'mikrofon': 'Mikrofon',
+      'hoerer': 'Hörer',
+      'kabel': 'Kabel',
+      'daempfung': 'Dämpfung',
+      'schwierige_faelle': 'Schwierige Fälle'
+    };
+    
+    Object.keys(ARBEITEN_NAMES).forEach(key => {
+      if (order[key]) {
+        selectedArbeiten.push(ARBEITEN_NAMES[key]);
+      }
+    });
+    
+    return selectedArbeiten.length > 0 ? selectedArbeiten.join(', ') : 'Einzelne Positionen';
+  };
+
+  // Manual item handlers
+  const handleAddManualItem = (type) => {
+    setManualItemType(type);
+    setManualItemForm({ description: '', amount: '' });
+    setShowManualItemModal(true);
+  };
+
+  const handleSaveManualItem = () => {
+    if (!manualItemForm.description.trim() || !manualItemForm.amount.trim()) {
+      alert('Bitte füllen Sie alle Felder aus.');
+      return;
+    }
+
+    const amount = parseFloat(manualItemForm.amount.replace(',', '.'));
+    if (isNaN(amount) || amount <= 0) {
+      alert('Bitte geben Sie einen gültigen Betrag ein.');
+      return;
+    }
+
+    const newItem = {
+      id: Date.now(), // Temporary ID
+      description: manualItemForm.description.trim(),
+      amount: manualItemType === 'negative' ? -Math.abs(amount) : Math.abs(amount),
+      type: 'manual'
+    };
+
+    setManualItems(prev => [...prev, newItem]);
+    setShowManualItemModal(false);
+    setManualItemForm({ description: '', amount: '' });
+  };
+
+  const handleRemoveManualItem = (itemId) => {
+    setManualItems(prev => prev.filter(item => item.id !== itemId));
+  };
+
+  // Invoice saving handlers
+  const handleSaveInvoice = async () => {
+    try {
+      if (!invoiceNumber.trim() || !invoiceDate) {
+        alert('Bitte füllen Sie alle Pflichtfelder aus.');
+        return;
+      }
+
+      if (!numberValidation.isValid) {
+        alert('Bitte korrigieren Sie die Rechnungsnummer.');
+        return;
+      }
+
+      // Calculate totals
+      const totalRepairCost = selectedOrders.reduce((sum, order) => sum + calculateRepairCost(order), 0);
+      const totalPorto = selectedOrders.reduce((sum, order) => sum + calculatePorto(order), 0);
+      const totalManualAmount = manualItems.reduce((sum, item) => sum + item.amount, 0);
+      const subtotal = totalRepairCost + totalPorto + totalManualAmount;
+      const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0.20 : 0.19;
+      const totalTax = subtotal * taxRate;
+      const grandTotal = subtotal + totalTax;
+
+      // Create invoice record
+      const invoiceData = {
+        invoice_number: invoiceNumber,
+        invoice_date: invoiceDate,
+        customer_id: selectedOrders[0].customers.id,
+        period_start: periodStart || null,
+        period_end: periodEnd || null,
+        status: 'draft',
+        subtotal: subtotal,
+        tax_amount: totalTax,
+        tax_rate: taxRate,
+        total_amount: grandTotal,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      // Save invoice to database
+      const { data: invoice, error: invoiceError } = await supabase
+        .from('invoices')
+        .insert([invoiceData])
+        .select()
+        .single();
+
+      if (invoiceError) throw invoiceError;
+
+      // Create invoice items
+      const invoiceItems = [];
+
+      // Add repair orders as invoice items
+      selectedOrders.forEach((order, index) => {
+        const repairCost = calculateRepairCost(order);
+        const portoCost = calculatePorto(order);
+        
+        invoiceItems.push({
+          invoice_id: invoice.id,
+          repair_order_id: order.id,
+          position: index + 1,
+          date_performed: order.werkstattausgang || order.created_at,
+          kommission: order.kommission || '',
+          description: getRepairDescription(order),
+          filiale: order.customers?.branch || '',
+          repair_amount: repairCost,
+          porto: portoCost,
+          line_total: repairCost + portoCost,
+          created_at: new Date().toISOString()
+        });
+      });
+
+      // Add manual items as invoice items
+      manualItems.forEach((item, index) => {
+        invoiceItems.push({
+          invoice_id: invoice.id,
+          repair_order_id: null, // No repair order for manual items
+          position: selectedOrders.length + index + 1,
+          date_performed: new Date().toISOString().split('T')[0],
+          kommission: 'Manual',
+          description: item.description,
+          filiale: '',
+          repair_amount: item.amount,
+          porto: 0,
+          line_total: item.amount,
+          created_at: new Date().toISOString()
+        });
+      });
+
+      // Save invoice items
+      const { error: itemsError } = await supabase
+        .from('invoice_items')
+        .insert(invoiceItems);
+
+      if (itemsError) throw itemsError;
+
+      // Update repair orders status to 'draft'
+      const repairOrderIds = selectedOrders.map(order => order.id);
+      const { error: updateError } = await supabase
+        .from('repair_orders')
+        .update({ invoice_status: 'draft' })
+        .in('id', repairOrderIds);
+
+      if (updateError) throw updateError;
+
+      alert('Rechnung erfolgreich gespeichert!');
+      
+    } catch (error) {
+      console.error('Error saving invoice:', error);
+      alert('Fehler beim Speichern der Rechnung: ' + error.message);
+    }
+  };
+
+  const handleSaveAndSend = async () => {
+    try {
+      if (!invoiceNumber.trim() || !invoiceDate) {
+        alert('Bitte füllen Sie alle Pflichtfelder aus.');
+        return;
+      }
+
+      if (!numberValidation.isValid) {
+        alert('Bitte korrigieren Sie die Rechnungsnummer.');
+        return;
+      }
+
+      // Calculate totals
+      const totalRepairCost = selectedOrders.reduce((sum, order) => sum + calculateRepairCost(order), 0);
+      const totalPorto = selectedOrders.reduce((sum, order) => sum + calculatePorto(order), 0);
+      const totalManualAmount = manualItems.reduce((sum, item) => sum + item.amount, 0);
+      const subtotal = totalRepairCost + totalPorto + totalManualAmount;
+      const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0.20 : 0.19;
+      const totalTax = subtotal * taxRate;
+      const grandTotal = subtotal + totalTax;
+
+      // Create invoice record with 'sent' status
+      const invoiceData = {
+        invoice_number: invoiceNumber,
+        invoice_date: invoiceDate,
+        customer_id: selectedOrders[0].customers.id,
+        period_start: periodStart || null,
+        period_end: periodEnd || null,
+        status: 'sent', // Set as sent directly
+        subtotal: subtotal,
+        tax_amount: totalTax,
+        tax_rate: taxRate,
+        total_amount: grandTotal,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        sent_at: new Date().toISOString() // Add sent timestamp
+      };
+
+      // Save invoice to database
+      const { data: invoice, error: invoiceError } = await supabase
+        .from('invoices')
+        .insert([invoiceData])
+        .select()
+        .single();
+
+      if (invoiceError) throw invoiceError;
+
+      // Create invoice items
+      const invoiceItems = [];
+
+      // Add repair orders as invoice items
+      selectedOrders.forEach((order, index) => {
+        const repairCost = calculateRepairCost(order);
+        const portoCost = calculatePorto(order);
+        
+        invoiceItems.push({
+          invoice_id: invoice.id,
+          repair_order_id: order.id,
+          position: index + 1,
+          date_performed: order.werkstattausgang || order.created_at,
+          kommission: order.kommission || '',
+          description: getRepairDescription(order),
+          filiale: order.customers?.branch || '',
+          repair_amount: repairCost,
+          porto: portoCost,
+          line_total: repairCost + portoCost,
+          created_at: new Date().toISOString()
+        });
+      });
+
+      // Add manual items as invoice items
+      manualItems.forEach((item, index) => {
+        invoiceItems.push({
+          invoice_id: invoice.id,
+          repair_order_id: null,
+          position: selectedOrders.length + index + 1,
+          date_performed: new Date().toISOString().split('T')[0],
+          kommission: 'Manual',
+          description: item.description,
+          filiale: '',
+          repair_amount: item.amount,
+          porto: 0,
+          line_total: item.amount,
+          created_at: new Date().toISOString()
+        });
+      });
+
+      // Save invoice items
+      const { error: itemsError } = await supabase
+        .from('invoice_items')
+        .insert(invoiceItems);
+
+      if (itemsError) throw itemsError;
+
+      // Update repair orders status to 'invoiced' (sent)
+      const repairOrderIds = selectedOrders.map(order => order.id);
+      const { error: updateError } = await supabase
+        .from('repair_orders')
+        .update({ invoice_status: 'invoiced' })
+        .in('id', repairOrderIds);
+
+      if (updateError) throw updateError;
+
+      // TODO: Add PDF export here
+      
+      alert('Rechnung erfolgreich erstellt und gesendet!');
+      // Redirect to invoice list
+      window.location.href = '/erstellte-rechnungen';
+      
+    } catch (error) {
+      console.error('Error saving and sending invoice:', error);
+      alert('Fehler beim Speichern und Senden der Rechnung: ' + error.message);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '80vh',
+        flexDirection: 'column',
+        gap: '1rem'
+      }}>
+        <div className="loading-spinner"></div>
+        <p style={{ color: '#666', fontSize: '16px' }}>Lade ausgewählte Reparaturaufträge...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '2rem' }}>
+      <header style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #eee', paddingBottom: '1rem' }}>
+        <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 60, marginRight: 24 }} />
+        <h1 style={{ fontWeight: 400, color: '#1d426a', fontSize: '1.8rem', margin: 0 }}>Rechnung erstellen</h1>
+      </header>
+
+      <div style={{ marginBottom: '2rem' }}>
+        <button
+          onClick={() => window.location.href = '/erstellte-reperaturauftrage'}
+          style={{
+            padding: '8px 16px',
+            background: '#6c757d',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = '#5a6268';
+            e.target.style.transform = 'scale(1.02)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = '#6c757d';
+            e.target.style.transform = 'scale(1)';
+          }}
+        >
+          ← Zurück zu Reparaturaufträge
+        </button>
+      </div>
+
+      {/* Invoice Form Section */}
+      <div style={{
+        background: 'white',
+        border: '1px solid #e0e0e0',
+        borderRadius: '8px',
+        padding: '2rem',
+        marginBottom: '2rem'
+      }}>
+        <h2 style={{ color: '#1d426a', marginBottom: '1.5rem' }}>Rechnungsinformationen</h2>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '1.5rem', alignItems: 'end' }}>
+          {/* Invoice Number */}
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', fontSize: '14px' }}>
+              Rechnungsnummer *
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              {isEditingNumber ? (
+                <input
+                  type="text"
+                  value={invoiceNumber}
+                  onChange={(e) => {
+                    setInvoiceNumber(e.target.value);
+                    if (e.target.value.trim()) {
+                      validateInvoiceNumber(e.target.value);
+                    }
+                  }}
+                  onBlur={() => setIsEditingNumber(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setIsEditingNumber(false);
+                    }
+                  }}
+                  autoFocus
+                  style={{
+                    padding: '6px 10px',
+                    border: `1px solid ${numberValidation.isValid ? '#ddd' : '#dc3545'}`,
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    flex: 1
+                  }}
+                />
+              ) : (
+                <div style={{
+                  padding: '6px 10px',
+                  border: `1px solid ${numberValidation.isValid ? '#ddd' : '#dc3545'}`,
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  background: '#f8f9fa',
+                  flex: 1
+                }}>
+                  {invoiceNumber}
+                </div>
+              )}
+              
+              <button
+                onClick={() => setIsEditingNumber(!isEditingNumber)}
+                style={{
+                  background: 'none',
+                  border: '1px solid #1d426a',
+                  borderRadius: '4px',
+                  padding: '6px',
+                  cursor: 'pointer',
+                  color: '#1d426a'
+                }}
+                title="Rechnungsnummer bearbeiten"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z"/>
+                </svg>
+              </button>
+              
+              {!numberValidation.isValid && (
+                <span
+                  style={{
+                    color: '#dc3545',
+                    fontSize: '14px',
+                    cursor: 'help'
+                  }}
+                  title={numberValidation.message}
+                >
+                  ⚠️
+                </span>
+              )}
+            </div>
+          </div>
+          
+          {/* Invoice Date */}
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', fontSize: '14px' }}>
+              Rechnungsdatum *
+            </label>
+            <input
+              type="date"
+              value={invoiceDate}
+              onChange={(e) => setInvoiceDate(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 10px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+          
+          {/* Period Start */}
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', fontSize: '14px' }}>
+              Leistungszeitraum von
+            </label>
+            <input
+              type="date"
+              value={periodStart}
+              onChange={(e) => setPeriodStart(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 10px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+          
+          {/* Period End */}
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', fontSize: '14px' }}>
+              Leistungszeitraum bis
+            </label>
+            <input
+              type="date"
+              value={periodEnd}
+              onChange={(e) => setPeriodEnd(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 10px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Customer Information Section */}
+      {selectedOrders.length > 0 && selectedOrders[0].customers && (
+        <div style={{
+          background: 'white',
+          border: '1px solid #e0e0e0',
+          borderRadius: '8px',
+          padding: '2rem',
+          marginBottom: '2rem'
+        }}>
+          {(() => {
+            const customer = selectedOrders[0].customers;
+            const hasBillingAddress = customer.billing_street || customer.billing_location || customer.billing_country;
+            const usingFallback = !hasBillingAddress;
+            
+            return (
+              <div style={{ position: 'relative' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                  <h2 style={{ color: '#1d426a', margin: 0 }}>Rechnungsadresse</h2>
+                  {usingFallback && (
+                    <span 
+                      style={{ 
+                        color: '#dc3545', 
+                        fontSize: '14px',
+                        cursor: 'help',
+                        position: 'relative',
+                        top: '-2px'
+                      }}
+                      title="Achtung: Aufgrund von nicht vorhandener Rechnungsadresse in der Datenbank der Akustiker, wurde die Filialadresse genommen"
+                    >
+                      ⚠️
+                    </span>
+                  )}
+                </div>
+                
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '2rem',
+                  fontSize: '14px',
+                  lineHeight: '1.6'
+                }}>
+                  <div>
+                    <div style={{ fontWeight: '600', color: '#1d426a', marginBottom: '0.5rem' }}>
+                      Rechnungsempfänger:
+                    </div>
+                    <div style={{ color: '#333' }}>
+                      {customer.company && (
+                        <div style={{ fontWeight: '500' }}>{customer.company}</div>
+                      )}
+                      {customer.branch && (
+                        <div>{customer.branch}</div>
+                      )}
+                      {customer.contact_person && (
+                        <div style={{ fontStyle: 'italic', color: '#666' }}>
+                          Ansprechpartner: {customer.contact_person}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div style={{ fontWeight: '600', color: '#1d426a', marginBottom: '0.5rem' }}>
+                      Adresse:
+                    </div>
+                    <div style={{ color: '#333' }}>
+                      {(customer.billing_street || customer.street) && (
+                        <div>{customer.billing_street || customer.street}</div>
+                      )}
+                      {(customer.billing_location || customer.location) && (
+                        <div>{customer.billing_location || customer.location}</div>
+                      )}
+                      {(customer.billing_country || customer.country) && (
+                        <div>{customer.billing_country || customer.country}</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Invoice Items Table */}
+      <div style={{
+        background: 'white',
+        border: '1px solid #e0e0e0',
+        borderRadius: '8px',
+        padding: '2rem'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <h2 style={{ color: '#1d426a', margin: 0 }}>Rechnungspositionen ({selectedOrders.length + manualItems.length})</h2>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={() => handleAddManualItem('positive')}
+              style={{
+                background: '#28a745',
+                color: 'white',
+                border: 'none',
+                padding: '8px 12px',
+                borderRadius: '4px',
+                fontSize: '14px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                transition: 'all 0.2s ease'
+              }}
+              title="Positive Position hinzufügen"
+              onMouseEnter={(e) => {
+                e.target.style.background = '#218838';
+                e.target.style.transform = 'scale(1.02)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = '#28a745';
+                e.target.style.transform = 'scale(1)';
+              }}
+            >
+              <span style={{ fontSize: '16px', fontWeight: 'bold' }}>+</span>
+              Position
+            </button>
+            <button
+              onClick={() => handleAddManualItem('negative')}
+              style={{
+                background: '#dc3545',
+                color: 'white',
+                border: 'none',
+                padding: '8px 12px',
+                borderRadius: '4px',
+                fontSize: '14px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                transition: 'all 0.2s ease'
+              }}
+              title="Negative Position hinzufügen (Gutschrift)"
+              onMouseEnter={(e) => {
+                e.target.style.background = '#c82333';
+                e.target.style.transform = 'scale(1.02)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = '#dc3545';
+                e.target.style.transform = 'scale(1)';
+              }}
+            >
+              <span style={{ fontSize: '16px', fontWeight: 'bold' }}>−</span>
+              Gutschrift
+            </button>
+          </div>
+        </div>
+        
+        {selectedOrders.length === 0 ? (
+          <p style={{ color: '#666', textAlign: 'center', padding: '2rem' }}>
+            Keine Reparaturaufträge ausgewählt.
+          </p>
+        ) : (
+          <>
+            {/* Table Header */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '100px 120px 2fr 1fr 100px 80px 80px 100px 60px',
+              gap: '12px',
+              padding: '12px',
+              background: '#f8f9fa',
+              borderRadius: '6px',
+              fontWeight: '600',
+              fontSize: '14px',
+              color: '#333',
+              marginBottom: '1rem'
+            }}>
+              <div>Datum</div>
+              <div>Kommission</div>
+              <div>Reparatur</div>
+              <div>Filiale</div>
+              <div style={{ textAlign: 'right' }}>Rep.kosten</div>
+              <div style={{ textAlign: 'right' }}>Porto</div>
+              <div style={{ textAlign: 'right' }}>MwSt.</div>
+              <div style={{ textAlign: 'right' }}>Gesamt</div>
+              <div style={{ textAlign: 'center' }}>Aktion</div>
+            </div>
+            
+            {/* Table Rows - Repair Orders */}
+            {selectedOrders.map((order, index) => {
+              // Calculate repair costs
+              const repairCost = calculateRepairCost(order);
+              const portoCost = calculatePorto(order);
+              const taxRate = order.customers?.country === 'Österreich' ? 0.20 : 0.19;
+              const subtotal = repairCost + portoCost;
+              const taxAmount = subtotal * taxRate;
+              const total = subtotal + taxAmount;
+              
+              return (
+                <div key={order.id} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '100px 120px 2fr 1fr 100px 80px 80px 100px 60px',
+                  gap: '12px',
+                  padding: '12px',
+                  border: '1px solid #e0e0e0',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  alignItems: 'center',
+                  marginBottom: '0.5rem'
+                }}>
+                  <div>
+                    {order.werkstattausgang 
+                      ? new Date(order.werkstattausgang).toLocaleDateString('de-DE')
+                      : '-'
+                    }
+                  </div>
+                  <div style={{ fontWeight: '500' }}>{order.kommission || '-'}</div>
+                  <div style={{ fontSize: '13px', lineHeight: '1.3' }}>
+                    {getRepairDescription(order)}
+                  </div>
+                  <div>{order.customers?.branch || '-'}</div>
+                  <div style={{ textAlign: 'right', fontWeight: '500' }}>
+                    {repairCost.toFixed(2)}€
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    {portoCost.toFixed(2)}€
+                  </div>
+                  <div style={{ textAlign: 'right', fontSize: '12px', color: '#666' }}>
+                    {(taxRate * 100).toFixed(0)}%
+                  </div>
+                  <div style={{ textAlign: 'right', fontWeight: '600', color: '#1d426a' }}>
+                    {total.toFixed(2)}€
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <button
+                      style={{
+                        background: 'none',
+                        border: '1px solid #dc3545',
+                        color: '#dc3545',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        transition: 'all 0.2s ease'
+                      }}
+                      title="Position entfernen"
+                      onClick={() => {
+                        const updatedOrders = selectedOrders.filter(o => o.id !== order.id);
+                        setSelectedOrders(updatedOrders);
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.background = '#dc3545';
+                        e.target.style.color = 'white';
+                        e.target.style.transform = 'scale(1.05)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.background = 'none';
+                        e.target.style.color = '#dc3545';
+                        e.target.style.transform = 'scale(1)';
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            
+            {/* Table Rows - Manual Items */}
+            {manualItems.map((item, index) => {
+              const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0.20 : 0.19;
+              const taxAmount = item.amount * taxRate;
+              const total = item.amount + taxAmount;
+              
+              return (
+                <div key={`manual-${item.id}`} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '100px 120px 2fr 1fr 100px 80px 80px 100px 60px',
+                  gap: '12px',
+                  padding: '12px',
+                  border: '1px solid #e0e0e0',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  alignItems: 'center',
+                  marginBottom: '0.5rem',
+                  background: item.amount < 0 ? '#fff5f5' : '#f0f8f0'
+                }}>
+                  <div>-</div>
+                  <div>Manual</div>
+                  <div style={{ fontSize: '13px', lineHeight: '1.3', fontStyle: 'italic' }}>
+                    {item.description}
+                  </div>
+                  <div>-</div>
+                  <div style={{ textAlign: 'right', fontWeight: '500' }}>
+                    {item.amount.toFixed(2)}€
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    0.00€
+                  </div>
+                  <div style={{ textAlign: 'right', fontSize: '12px', color: '#666' }}>
+                    {(taxRate * 100).toFixed(0)}%
+                  </div>
+                  <div style={{ textAlign: 'right', fontWeight: '600', color: item.amount < 0 ? '#dc3545' : '#28a745' }}>
+                    {total.toFixed(2)}€
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <button
+                      style={{
+                        background: 'none',
+                        border: '1px solid #dc3545',
+                        color: '#dc3545',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        transition: 'all 0.2s ease'
+                      }}
+                      title="Position entfernen"
+                      onClick={() => handleRemoveManualItem(item.id)}
+                      onMouseEnter={(e) => {
+                        e.target.style.background = '#dc3545';
+                        e.target.style.color = 'white';
+                        e.target.style.transform = 'scale(1.05)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.background = 'none';
+                        e.target.style.color = '#dc3545';
+                        e.target.style.transform = 'scale(1)';
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            
+            {/* Summary Row */}
+            {(() => {
+              const totalRepairCost = selectedOrders.reduce((sum, order) => sum + calculateRepairCost(order), 0);
+              const totalPorto = selectedOrders.reduce((sum, order) => sum + calculatePorto(order), 0);
+              const totalManualAmount = manualItems.reduce((sum, item) => sum + item.amount, 0);
+              const subtotal = totalRepairCost + totalPorto + totalManualAmount;
+              // Use tax rate from first customer (assuming all same country for now)
+              const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0.20 : 0.19;
+              const totalTax = subtotal * taxRate;
+              const grandTotal = subtotal + totalTax;
+              
+              return (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '100px 120px 2fr 1fr 100px 80px 80px 100px 60px',
+                  gap: '12px',
+                  padding: '12px',
+                  background: '#f8f9fa',
+                  borderRadius: '6px',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  color: '#1d426a',
+                  marginTop: '1rem',
+                  borderTop: '2px solid #1d426a'
+                }}>
+                  <div></div>
+                  <div></div>
+                  <div>SUMME</div>
+                  <div></div>
+                  <div style={{ textAlign: 'right' }}>
+                    {(totalRepairCost + totalManualAmount).toFixed(2)}€
+                  </div>
+                  <div style={{ textAlign: 'right' }}>{totalPorto.toFixed(2)}€</div>
+                  <div style={{ textAlign: 'right' }}>{totalTax.toFixed(2)}€</div>
+                  <div style={{ textAlign: 'right', fontSize: '16px' }}>{grandTotal.toFixed(2)}€</div>
+                  <div></div>
+                </div>
+              );
+            })()}
+          </>
+        )}
+        
+        {selectedOrders.length > 0 && (
+          <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center', gap: '1rem' }}>
+            <button
+              onClick={handleSaveInvoice}
+              style={{
+                background: '#1d426a',
+                color: 'white',
+                border: 'none',
+                padding: '12px 16px',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+              title="Rechnung speichern"
+              onMouseEnter={(e) => {
+                e.target.style.background = '#16365a';
+                e.target.style.transform = 'scale(1.02)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = '#1d426a';
+                e.target.style.transform = 'scale(1)';
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z"/>
+              </svg>
+            </button>
+            
+            <button
+              style={{
+                background: '#1d426a',
+                color: 'white',
+                border: 'none',
+                padding: '12px 16px',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+              title="PDF exportieren"
+              onMouseEnter={(e) => {
+                e.target.style.background = '#16365a';
+                e.target.style.transform = 'scale(1.02)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = '#1d426a';
+                e.target.style.transform = 'scale(1)';
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+              </svg>
+            </button>
+            
+            <button
+              onClick={handleSaveAndSend}
+              style={{
+                background: '#1d426a',
+                color: 'white',
+                border: 'none',
+                padding: '12px 24px',
+                borderRadius: '6px',
+                fontSize: '16px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = '#16365a';
+                e.target.style.transform = 'scale(1.02)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = '#1d426a';
+                e.target.style.transform = 'scale(1)';
+              }}
+            >
+              Speichern & Senden
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Manual Item Modal */}
+      {showManualItemModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '8px',
+            padding: '2rem',
+            width: '500px',
+            maxWidth: '90vw'
+          }}>
+            <h3 style={{ 
+              color: '#1d426a', 
+              marginBottom: '1.5rem', 
+              textAlign: 'center' 
+            }}>
+              {manualItemType === 'positive' ? 'Positive Position hinzufügen' : 'Gutschrift hinzufügen'}
+            </h3>
+            
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '0.5rem', 
+                fontWeight: '500', 
+                color: '#333' 
+              }}>
+                Beschreibung *
+              </label>
+              <input
+                type="text"
+                value={manualItemForm.description}
+                onChange={(e) => setManualItemForm(prev => ({ ...prev, description: e.target.value }))}
+                placeholder={manualItemType === 'positive' ? 'z.B. Zusätzliche Beratung' : 'z.B. Gutschrift von Juli 2025'}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            
+            <div style={{ marginBottom: '2rem' }}>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '0.5rem', 
+                fontWeight: '500', 
+                color: '#333' 
+              }}>
+                Betrag * (€)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={manualItemForm.amount}
+                onChange={(e) => setManualItemForm(prev => ({ ...prev, amount: e.target.value }))}
+                placeholder="0.00"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowManualItemModal(false)}
+                style={{
+                  background: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  padding: '10px 20px',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = '#5a6268';
+                  e.target.style.transform = 'scale(1.02)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = '#6c757d';
+                  e.target.style.transform = 'scale(1)';
+                }}
+              >
+                Abbrechen
+              </button>
+              
+              <button
+                onClick={handleSaveManualItem}
+                style={{
+                  background: manualItemType === 'positive' ? '#28a745' : '#dc3545',
+                  color: 'white',
+                  border: 'none',
+                  padding: '10px 20px',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = manualItemType === 'positive' ? '#218838' : '#c82333';
+                  e.target.style.transform = 'scale(1.02)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = manualItemType === 'positive' ? '#28a745' : '#dc3545';
+                  e.target.style.transform = 'scale(1)';
+                }}
+              >
+                {manualItemType === 'positive' ? 'Position hinzufügen' : 'Gutschrift hinzufügen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Invoice Edit Page Component
+const RechnungBearbeitenPage = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [invoice, setInvoice] = useState(null);
+  const [invoiceItems, setInvoiceItems] = useState([]);
+  const [selectedOrders, setSelectedOrders] = useState([]);
+  const [availableOrders, setAvailableOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  
+  // Invoice form state
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState('');
+  const [periodStart, setPeriodStart] = useState('');
+  const [periodEnd, setPeriodEnd] = useState('');
+  const [isEditingNumber, setIsEditingNumber] = useState(false);
+  const [numberValidation, setNumberValidation] = useState({ isValid: true, message: '' });
+  
+  // Manual item state
+  const [manualItems, setManualItems] = useState([]);
+  const [showManualItemModal, setShowManualItemModal] = useState(false);
+  const [manualItemType, setManualItemType] = useState('positive');
+  const [manualItemForm, setManualItemForm] = useState({ description: '', amount: '' });
+
+  useEffect(() => {
+    loadInvoice();
+    loadAvailableRepairOrders();
+  }, [id]);
+
+  const loadInvoice = async () => {
+    try {
+      setLoading(true);
+      
+      // Load invoice with customer data
+      const { data: invoiceData, error: invoiceError } = await supabase
+        .from('invoices')
+        .select(`
+          *,
+          customer:customers(
+            id,
+            company,
+            branch,
+            contact_person,
+            street,
+            location,
+            country,
+            billing_street,
+            billing_location,
+            billing_country
+          )
+        `)
+        .eq('id', id)
+        .single();
+
+      if (invoiceError) throw invoiceError;
+
+      // Load invoice items with repair order data
+      const { data: itemsData, error: itemsError } = await supabase
+        .from('invoice_items')
+        .select(`
+          *,
+          repair_order:repair_orders(
+            id,
+            kommission,
+            hersteller,
+            geraetetyp,
+            seriennummer,
+            werkstattausgang,
+            freigabe,
+            nettopreis,
+            porto,
+            manual_porto,
+            austria_arbeitszeit
+          )
+        `)
+        .eq('invoice_id', id)
+        .order('position');
+
+      if (itemsError) throw itemsError;
+
+      // Separate repair order items from manual items
+      const repairOrderItems = itemsData.filter(item => item.repair_order_id);
+      const manualItemsData = itemsData.filter(item => !item.repair_order_id);
+
+      setInvoice(invoiceData);
+      setInvoiceItems(repairOrderItems);
+      setManualItems(manualItemsData.map(item => ({
+        id: item.id,
+        type: item.line_total >= 0 ? 'positive' : 'negative',
+        description: item.description,
+        amount: Math.abs(item.line_total).toFixed(2)
+      })));
+
+      // Set form state
+      setInvoiceNumber(invoiceData.invoice_number);
+      setInvoiceDate(invoiceData.invoice_date);
+      setPeriodStart(invoiceData.period_start);
+      setPeriodEnd(invoiceData.period_end);
+      
+    } catch (error) {
+      console.error('Error loading invoice:', error);
+      alert('Fehler beim Laden der Rechnung: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      
+      // Calculate totals
+      const allOrders = [...invoiceItems, ...selectedOrders];
+      const repairTotal = allOrders.reduce((sum, order) => sum + (order.nettopreis || order.repair_amount || 0), 0);
+      const portoTotal = allOrders.reduce((sum, order) => sum + (order.porto || 0), 0);
+      const manualTotal = manualItems.reduce((sum, item) => {
+        const amount = parseFloat(item.amount);
+        return sum + (item.type === 'positive' ? amount : -amount);
+      }, 0);
+      
+      const subtotal = repairTotal + portoTotal + manualTotal;
+      const taxRate = invoice.customer.country === 'Österreich' ? 0.20 : 0.19;
+      const taxAmount = subtotal * taxRate;
+      const totalAmount = subtotal + taxAmount;
+      
+      // Update invoice
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update({
+          invoice_number: invoiceNumber,
+          invoice_date: invoiceDate,
+          period_start: periodStart,
+          period_end: periodEnd,
+          subtotal: subtotal,
+          tax_amount: taxAmount,
+          tax_rate: taxRate,
+          total_amount: totalAmount,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      if (updateError) throw updateError;
+
+      // Delete existing invoice items (we'll recreate them)
+      const { error: deleteError } = await supabase
+        .from('invoice_items')
+        .delete()
+        .eq('invoice_id', id);
+
+      if (deleteError) throw deleteError;
+
+      // Create new invoice items for repair orders
+      const repairOrderItems = allOrders.map((order, index) => ({
+        invoice_id: id,
+        repair_order_id: order.repair_order_id || order.id, // Handle both existing and new orders
+        position: index + 1,
+        date_performed: order.werkstattausgang || order.date_performed,
+        kommission: order.kommission,
+        description: getRepairDescription(order),
+        filiale: order.customers?.branch || order.filiale || '',
+        repair_amount: parseFloat(order.nettopreis || order.repair_amount || 0),
+        porto: parseFloat(order.porto || 0),
+        line_total: parseFloat((order.nettopreis || order.repair_amount || 0) + (order.porto || 0)),
+        created_at: new Date().toISOString()
+      }));
+
+      // Create manual items
+      const manualItemsData = manualItems.map((item, index) => ({
+        invoice_id: id,
+        repair_order_id: null,
+        position: allOrders.length + index + 1,
+        date_performed: null,
+        kommission: null,
+        description: item.description,
+        filiale: null,
+        repair_amount: 0.0,
+        porto: 0.0,
+        line_total: parseFloat(item.type === 'positive' ? item.amount : `-${item.amount}`),
+        created_at: new Date().toISOString()
+      }));
+
+      // Insert all items
+      const allItems = [...repairOrderItems, ...manualItemsData];
+      if (allItems.length > 0) {
+        const { error: itemsError } = await supabase
+          .from('invoice_items')
+          .insert(allItems);
+
+        if (itemsError) throw itemsError;
+      }
+
+      // Update repair orders status for newly added orders
+      if (selectedOrders.length > 0) {
+        const { error: statusError } = await supabase
+          .from('repair_orders')
+          .update({ invoice_status: 'draft' })
+          .in('id', selectedOrders.map(order => order.id));
+
+        if (statusError) throw statusError;
+      }
+      
+      alert('Rechnung erfolgreich gespeichert!');
+      navigate('/erstellte-rechnungen');
+      
+    } catch (error) {
+      console.error('Error saving invoice:', error);
+      alert('Fehler beim Speichern: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Helper function to get repair description
+  const getRepairDescription = (order) => {
+    if (order.freigabe && order.freigabe !== 'einzelne Positionen') {
+      const statusMap = {
+        'garantie': 'Garantie',
+        'reklamation': 'Reklamation', 
+        'kulanz': 'Kulanz',
+        'unrepariert zurück': 'Unrepariert zurück'
+      };
+      return statusMap[order.freigabe] || order.freigabe;
+    }
+    
+    if (order.kv_repair === 'ja') {
+      return 'Reparatur laut KV durchführen';
+    }
+    
+    return 'Reparatur: Einzelne Positionen';
+  };
+
+  // PDF Export function
+  const handlePDFExport = () => {
+    if (!invoice) return;
+    
+    // Prepare data in the format expected by the PDF export
+    const allOrders = [...invoiceItems, ...selectedOrders];
+    
+    // Convert invoice items back to repair order format for PDF
+    const selectedOrdersForPDF = allOrders.map(item => {
+      if (item.repair_order) {
+        // This is from invoiceItems with repair_order data
+        return {
+          ...item.repair_order,
+          customers: invoice.customer, // Use invoice customer data
+          nettopreis: item.repair_amount || 0,
+          repair_amount: item.repair_amount || 0, // Also provide as repair_amount for PDF compatibility
+          porto: item.porto || 0,
+          werkstattausgang: item.repair_order.werkstattausgang || item.date_performed,
+          kommission: item.kommission || item.repair_order.kommission,
+          freigabe: item.repair_order.freigabe
+        };
+      } else {
+        // This is from selectedOrders (newly added)
+        return {
+          ...item,
+          customers: invoice.customer,
+          repair_amount: item.nettopreis || 0 // Ensure repair_amount is available
+        };
+      }
+    });
+
+    const invoiceData = {
+      invoiceNumber: invoiceNumber,
+      invoiceDate: invoiceDate,
+      periodStart: periodStart,
+      periodEnd: periodEnd,
+      customer: invoice.customer,
+      manualItems: manualItems
+    };
+
+    // Import and use the PDF export function
+    import('./invoicePdfExport.js').then(({ generateInvoicePDF }) => {
+      generateInvoicePDF(invoiceData, selectedOrdersForPDF);
+    }).catch(error => {
+      console.error('Error loading PDF export:', error);
+      alert('Fehler beim PDF-Export: ' + error.message);
+    });
+  };
+
+  // Reset invoice to draft status
+  const handleResetToDraft = async () => {
+    if (window.confirm('Möchten Sie diese Rechnung wirklich als Entwurf zurücksetzen? Dadurch wird sie wieder bearbeitbar, aber der "Gesendet"-Status geht verloren.')) {
+      try {
+        setSaving(true);
+        
+        // Update invoice status to draft
+        const { error: updateError } = await supabase
+          .from('invoices')
+          .update({
+            status: 'draft',
+            sent_at: null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', id);
+
+        if (updateError) throw updateError;
+
+        // Update associated repair orders status to draft
+        const { data: invoiceItems, error: itemsError } = await supabase
+          .from('invoice_items')
+          .select('repair_order_id')
+          .eq('invoice_id', id)
+          .not('repair_order_id', 'is', null);
+
+        if (itemsError) throw itemsError;
+
+        if (invoiceItems && invoiceItems.length > 0) {
+          const repairOrderIds = invoiceItems.map(item => item.repair_order_id);
+          const { error: resetError } = await supabase
+            .from('repair_orders')
+            .update({ invoice_status: 'draft' })
+            .in('id', repairOrderIds);
+
+          if (resetError) throw resetError;
+        }
+
+        // Reload the invoice to reflect changes
+        await loadInvoice();
+        alert('Rechnung wurde erfolgreich als Entwurf zurückgesetzt!');
+        
+      } catch (error) {
+        console.error('Error resetting invoice to draft:', error);
+        alert('Fehler beim Zurücksetzen: ' + error.message);
+      } finally {
+        setSaving(false);
+      }
+    }
+  };
+
+  // Load available repair orders for adding to invoice
+  const loadAvailableRepairOrders = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('repair_orders')
+        .select(`
+          *,
+          customers (
+            company,
+            branch,
+            street,
+            location,
+            country
+          )
+        `)
+        .is('invoice_status', null) // Only unused repair orders
+        .eq('archived', false)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setAvailableOrders(data || []);
+    } catch (error) {
+      console.error('Error loading available repair orders:', error);
+    }
+  };
+
+  // Add repair order to invoice
+  const handleAddRepairOrder = (repairOrder) => {
+    if (!selectedOrders.find(order => order.id === repairOrder.id)) {
+      setSelectedOrders(prev => [...prev, repairOrder]);
+      setAvailableOrders(prev => prev.filter(order => order.id !== repairOrder.id));
+    }
+  };
+
+  // Remove repair order from invoice
+  const handleRemoveRepairOrder = (repairOrderId) => {
+    const orderToRemove = selectedOrders.find(order => order.id === repairOrderId);
+    if (orderToRemove) {
+      setSelectedOrders(prev => prev.filter(order => order.id !== repairOrderId));
+      setAvailableOrders(prev => [...prev, orderToRemove]);
+    }
+  };
+
+  // Manual item functions
+  const handleAddManualItem = () => {
+    if (manualItemForm.description.trim() && manualItemForm.amount.trim()) {
+      const newItem = {
+        id: Date.now(), // Temporary ID
+        type: manualItemType,
+        description: manualItemForm.description.trim(),
+        amount: parseFloat(manualItemForm.amount).toFixed(2)
+      };
+      
+      setManualItems(prev => [...prev, newItem]);
+      setManualItemForm({ description: '', amount: '' });
+      setShowManualItemModal(false);
+    }
+  };
+
+  const handleRemoveManualItem = (itemId) => {
+    setManualItems(prev => prev.filter(item => item.id !== itemId));
+  };
+
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '80vh',
+        flexDirection: 'column',
+        gap: '20px'
+      }}>
+        <div className="loading-spinner"></div>
+        <p style={{ color: '#666', fontSize: '16px' }}>Lade Rechnung...</p>
+      </div>
+    );
+  }
+
+  if (!invoice) {
+    return (
+      <div style={{ padding: '2rem', textAlign: 'center' }}>
+        <h2>Rechnung nicht gefunden</h2>
+        <button onClick={() => navigate('/erstellte-rechnungen')}>
+          Zurück zu Rechnungen
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'space-between',
+        marginBottom: '2rem',
+        paddingBottom: '1rem',
+        borderBottom: '2px solid #1d426a'
+      }}>
+        <h1 style={{ 
+          margin: 0, 
+          color: '#1d426a', 
+          fontSize: '2rem',
+          fontWeight: '400'
+        }}>
+          Rechnung bearbeiten
+        </h1>
+        
+        <button
+          onClick={() => navigate('/erstellte-rechnungen')}
+          style={{
+            background: '#6c757d',
+            color: 'white',
+            border: 'none',
+            padding: '10px 20px',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = '#5a6268';
+            e.target.style.transform = 'scale(1.02)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = '#6c757d';
+            e.target.style.transform = 'scale(1)';
+          }}
+        >
+          Zurück zu Rechnungen
+        </button>
+      </div>
+
+      {/* Invoice Information */}
+      <div style={{
+        background: 'white',
+        border: '1px solid #e0e0e0',
+        borderRadius: '8px',
+        padding: '2rem',
+        marginBottom: '2rem',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.1)'
+      }}>
+        <h2 style={{ color: '#1d426a', marginBottom: '1.5rem' }}>Rechnungsinformationen</h2>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '2.5rem', alignItems: 'end' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', fontSize: '14px' }}>
+              Rechnungsnummer *
+            </label>
+            <input
+              type="text"
+              value={invoiceNumber}
+              onChange={(e) => setInvoiceNumber(e.target.value)}
+              style={{
+                padding: '6px 10px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                width: '100%'
+              }}
+            />
+          </div>
+          
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', fontSize: '14px' }}>
+              Rechnungsdatum *
+            </label>
+            <input
+              type="date"
+              value={invoiceDate}
+              onChange={(e) => setInvoiceDate(e.target.value)}
+              style={{
+                padding: '6px 10px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                width: '100%'
+              }}
+            />
+          </div>
+          
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', fontSize: '14px' }}>
+              Leistungszeitraum von *
+            </label>
+            <input
+              type="date"
+              value={periodStart}
+              onChange={(e) => setPeriodStart(e.target.value)}
+              style={{
+                padding: '6px 10px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                width: '100%'
+              }}
+            />
+          </div>
+          
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', fontSize: '14px' }}>
+              Leistungszeitraum bis *
+            </label>
+            <input
+              type="date"
+              value={periodEnd}
+              onChange={(e) => setPeriodEnd(e.target.value)}
+              style={{
+                padding: '6px 10px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                width: '100%'
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Customer Information */}
+      <div style={{
+        background: 'white',
+        border: '1px solid #e0e0e0',
+        borderRadius: '8px',
+        padding: '1.5rem',
+        marginBottom: '1.5rem',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.1)'
+      }}>
+        <h3 style={{ 
+          margin: '0 0 1rem 0', 
+          color: '#1d426a',
+          fontSize: '1.2rem',
+          fontWeight: '500'
+        }}>
+          Rechnungsadresse
+        </h3>
+        
+        <div style={{ fontSize: '14px', lineHeight: '1.4' }}>
+          <div style={{ fontWeight: '600', marginBottom: '4px' }}>
+            {invoice.customer.company}
+          </div>
+          <div style={{ marginBottom: '4px' }}>
+            {invoice.customer.branch}
+          </div>
+          <div style={{ marginBottom: '4px' }}>
+            {invoice.customer.billing_street || invoice.customer.street}
+          </div>
+          <div>
+            {invoice.customer.billing_location || invoice.customer.location}, {invoice.customer.billing_country || invoice.customer.country}
+          </div>
+        </div>
+      </div>
+
+      {/* Invoice Items */}
+      <div style={{
+        background: 'white',
+        border: '1px solid #e0e0e0',
+        borderRadius: '8px',
+        padding: '2rem'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <h2 style={{ color: '#1d426a', margin: 0 }}>Rechnungspositionen ({invoiceItems.length + manualItems.length})</h2>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={() => {
+                setManualItemType('positive');
+                setShowManualItemModal(true);
+              }}
+              style={{
+                background: '#28a745',
+                color: 'white',
+                border: 'none',
+                padding: '8px 12px',
+                borderRadius: '4px',
+                fontSize: '14px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              + Position
+            </button>
+            <button
+              onClick={() => {
+                setManualItemType('negative');
+                setShowManualItemModal(true);
+              }}
+              style={{
+                background: '#dc3545',
+                color: 'white',
+                border: 'none',
+                padding: '8px 12px',
+                borderRadius: '4px',
+                fontSize: '14px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              - Gutschrift
+            </button>
+          </div>
+        </div>
+
+        {/* Detailed breakdown table */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '1rem' }}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid #e0e0e0' }}>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333' }}>Datum</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333' }}>Kommission</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333' }}>Beschreibung</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333' }}>Filiale</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333' }}>Reparatur</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333' }}>Porto</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333' }}>Gesamt</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333' }}>Aktion</th>
+            </tr>
+          </thead>
+          <tbody>
+            {/* Existing invoice items */}
+            {invoiceItems.map((item, index) => (
+              <tr key={item.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>
+                  {item.date_performed ? new Date(item.date_performed).toLocaleDateString('de-DE') : '-'}
+                </td>
+                <td style={{ padding: '12px', fontSize: '14px', fontWeight: '500', textAlign: 'center' }}>
+                  {item.kommission}
+                </td>
+                <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>
+                  {item.description}
+                </td>
+                <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>
+                  {item.filiale}
+                </td>
+                <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center', fontWeight: '500' }}>
+                  {item.repair_amount?.toFixed(2)}€
+                </td>
+                <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>
+                  {item.porto?.toFixed(2)}€
+                </td>
+                <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center', fontWeight: '600', color: '#1d426a' }}>
+                  {item.line_total?.toFixed(2)}€
+                </td>
+                <td style={{ padding: '12px', textAlign: 'center' }}>
+                  <button
+                    onClick={() => handleRemoveRepairOrder(item.repair_order_id)}
+                    style={{
+                      background: '#dc3545',
+                      color: 'white',
+                      border: 'none',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      cursor: 'pointer'
+                    }}
+                    title="Entfernen"
+                  >
+                    ✕
+                  </button>
+                </td>
+              </tr>
+            ))}
+            
+            {/* Manual items */}
+            {manualItems.map((item, index) => (
+              <tr key={`manual-${item.id}`} style={{ 
+                borderBottom: '1px solid #f0f0f0',
+                backgroundColor: item.type === 'positive' ? '#f8f9fa' : '#fff5f5'
+              }}>
+                <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>-</td>
+                <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>-</td>
+                <td style={{ padding: '12px', fontSize: '14px', fontStyle: 'italic', textAlign: 'center' }}>
+                  {item.description}
+                </td>
+                <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>-</td>
+                <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>-</td>
+                <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>-</td>
+                <td style={{ 
+                  padding: '12px', 
+                  fontSize: '14px', 
+                  textAlign: 'center', 
+                  fontWeight: '600',
+                  color: item.type === 'positive' ? '#28a745' : '#dc3545'
+                }}>
+                  {item.type === 'positive' ? '+' : '-'}{item.amount}€
+                </td>
+                <td style={{ padding: '12px', textAlign: 'center' }}>
+                  <button
+                    onClick={() => handleRemoveManualItem(item.id)}
+                    style={{
+                      background: '#dc3545',
+                      color: 'white',
+                      border: 'none',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      cursor: 'pointer'
+                    }}
+                    title="Entfernen"
+                  >
+                    ✕
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* Add repair order section */}
+        {availableOrders.length > 0 && (
+          <div style={{
+            border: '1px solid #e0e0e0',
+            borderRadius: '6px',
+            padding: '1rem',
+            marginTop: '1rem',
+            backgroundColor: '#f8f9fa'
+          }}>
+            <h4 style={{ margin: '0 0 1rem 0', color: '#1d426a' }}>Verfügbare Reparaturaufträge hinzufügen</h4>
+            <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+              {availableOrders.slice(0, 10).map(order => (
+                <div key={order.id} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '8px',
+                  borderBottom: '1px solid #e0e0e0',
+                  fontSize: '14px'
+                }}>
+                  <div>
+                    <strong>{order.kommission}</strong> - {order.customers?.company} - {order.nettopreis?.toFixed(2)}€
+                  </div>
+                  <button
+                    onClick={() => handleAddRepairOrder(order)}
+                    style={{
+                      background: '#1d426a',
+                      color: 'white',
+                      border: 'none',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Hinzufügen
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Manual Item Modal */}
+      {showManualItemModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '2rem',
+            borderRadius: '8px',
+            width: '400px',
+            maxWidth: '90vw'
+          }}>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#1d426a' }}>
+              {manualItemType === 'positive' ? 'Position hinzufügen' : 'Gutschrift hinzufügen'}
+            </h3>
+            
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                Beschreibung *
+              </label>
+              <input
+                type="text"
+                value={manualItemForm.description}
+                onChange={(e) => setManualItemForm(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="z.B. Zusätzliche Beratung"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+            
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                Betrag (€) *
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={manualItemForm.amount}
+                onChange={(e) => setManualItemForm(prev => ({ ...prev, amount: e.target.value }))}
+                placeholder="0.00"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+            
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowManualItemModal(false);
+                  setManualItemForm({ description: '', amount: '' });
+                }}
+                style={{
+                  background: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={handleAddManualItem}
+                disabled={!manualItemForm.description.trim() || !manualItemForm.amount.trim()}
+                style={{
+                  background: manualItemType === 'positive' ? '#28a745' : '#dc3545',
+                  color: 'white',
+                  border: 'none',
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  cursor: manualItemForm.description.trim() && manualItemForm.amount.trim() ? 'pointer' : 'not-allowed',
+                  opacity: manualItemForm.description.trim() && manualItemForm.amount.trim() ? 1 : 0.6
+                }}
+              >
+                {manualItemType === 'positive' ? 'Position hinzufügen' : 'Gutschrift hinzufügen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      <div style={{ 
+        display: 'flex', 
+        gap: '1rem', 
+        justifyContent: 'flex-end',
+        marginTop: '2rem'
+      }}>
+        <button
+          onClick={() => navigate('/erstellte-rechnungen')}
+          disabled={saving}
+          style={{
+            background: '#6c757d',
+            color: 'white',
+            border: 'none',
+            padding: '12px 24px',
+            borderRadius: '6px',
+            fontSize: '14px',
+            cursor: saving ? 'not-allowed' : 'pointer',
+            opacity: saving ? 0.6 : 1,
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            if (!saving) {
+              e.target.style.background = '#5a6268';
+              e.target.style.transform = 'scale(1.02)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!saving) {
+              e.target.style.background = '#6c757d';
+              e.target.style.transform = 'scale(1)';
+            }
+          }}
+        >
+          Zurück zu Rechnungen
+        </button>
+
+        {/* Reset to Draft button - only show for sent invoices */}
+        {invoice?.status === 'sent' && (
+          <button
+            onClick={handleResetToDraft}
+            disabled={saving}
+            style={{
+              background: '#ffc107',
+              color: '#212529',
+              border: 'none',
+              padding: '12px 24px',
+              borderRadius: '6px',
+              fontSize: '14px',
+              cursor: saving ? 'not-allowed' : 'pointer',
+              opacity: saving ? 0.6 : 1,
+              transition: 'all 0.2s ease',
+              fontWeight: '500'
+            }}
+            onMouseEnter={(e) => {
+              if (!saving) {
+                e.target.style.background = '#e0a800';
+                e.target.style.transform = 'scale(1.02)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!saving) {
+                e.target.style.background = '#ffc107';
+                e.target.style.transform = 'scale(1)';
+              }
+            }}
+          >
+            Als Entwurf zurücksetzen
+          </button>
+        )}
+
+        <button
+          onClick={handlePDFExport}
+          disabled={saving}
+          style={{
+            background: '#1d426a',
+            color: 'white',
+            border: 'none',
+            padding: '12px 24px',
+            borderRadius: '6px',
+            fontSize: '14px',
+            cursor: saving ? 'not-allowed' : 'pointer',
+            opacity: saving ? 0.6 : 1,
+            transition: 'all 0.2s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+          onMouseEnter={(e) => {
+            if (!saving) {
+              e.target.style.background = '#16365a';
+              e.target.style.transform = 'scale(1.02)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!saving) {
+              e.target.style.background = '#1d426a';
+              e.target.style.transform = 'scale(1)';
+            }
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+          </svg>
+          PDF Export
+        </button>
+        
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          style={{
+            background: '#1d426a',
+            color: 'white',
+            border: 'none',
+            padding: '12px 24px',
+            borderRadius: '6px',
+            fontSize: '14px',
+            cursor: saving ? 'not-allowed' : 'pointer',
+            opacity: saving ? 0.6 : 1,
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            if (!saving) {
+              e.target.style.background = '#16365a';
+              e.target.style.transform = 'scale(1.02)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!saving) {
+              e.target.style.background = '#1d426a';
+              e.target.style.transform = 'scale(1)';
+            }
+          }}
+        >
+          {saving ? 'Speichern...' : 'Änderungen speichern'}
+        </button>
+      </div>
+    </div>
+  );
 };
 
 // Wrapper component that can use useNavigate hook
@@ -4219,6 +7150,9 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
         <Route path="/" element={<Dashboard setIsLoggedIn={setIsLoggedIn} navigate={navigate} />} />
         <Route path="/akustiker" element={<AkustikerPage customers={customers} setShowAddAkustikerModal={setShowAddAkustikerModal} showAddAkustikerModal={showAddAkustikerModal} newAkustiker={newAkustiker} setNewAkustiker={setNewAkustiker} handleAddAkustiker={handleAddAkustiker} navigate={navigate} loadCustomers={loadCustomers} />} />
         <Route path="/erstellte-reperaturauftrage" element={<ErstellteReperaturauftragePage />} />
+        <Route path="/rechnung-erstellen" element={<RechnungErstellenPage />} />
+        <Route path="/rechnung-bearbeiten/:id" element={<RechnungBearbeitenPage />} />
+        <Route path="/erstellte-rechnungen" element={<ErstellteRechnungenPage />} />
         <Route path="/reperaturauftrag" element={
             <>
       <header style={{ display: 'flex', alignItems: 'center', padding: '2rem 1rem 1rem 1rem', borderBottom: '1px solid #eee' }}>
