@@ -304,7 +304,22 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
 
   const handleUpdateCustomer = async () => {
     try {
-      // Update in Supabase
+      // Check if billing address is being updated and if there are other acousticians from the same company
+      const hasBillingAddress = editForm.billing_street || editForm.billing_location || editForm.billing_country;
+      const otherAcousticians = customers.filter(customer => 
+        customer.company === editForm.company && 
+        customer.id !== editingCustomer.id &&
+        (!customer.billing_street && !customer.billing_location && !customer.billing_country)
+      );
+
+      let shouldUpdateAll = false;
+      
+      if (hasBillingAddress && otherAcousticians.length > 0) {
+        const confirmMessage = `${otherAcousticians.length} weitere Akustiker für ${editForm.company} entdeckt, möchten Sie diese Rechnungsadresse für alle weiteren ${otherAcousticians.length} Akustiker übernehmen?`;
+        shouldUpdateAll = window.confirm(confirmMessage);
+      }
+
+      // Update current customer
       const { data, error } = await supabase
         .from('customers')
         .update({
@@ -321,6 +336,20 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
         .eq('id', editingCustomer.id);
       
       if (error) throw error;
+
+      // Update other acousticians from the same company if requested
+      if (shouldUpdateAll && otherAcousticians.length > 0) {
+        const { error: bulkError } = await supabase
+          .from('customers')
+          .update({
+            billing_street: editForm.billing_street,
+            billing_location: editForm.billing_location,
+            billing_country: editForm.billing_country === 'DE' ? 'Deutschland' : 'Österreich'
+          })
+          .in('id', otherAcousticians.map(customer => customer.id));
+        
+        if (bulkError) throw bulkError;
+      }
       
       // Refresh customers list
       await loadCustomers();
@@ -329,7 +358,11 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
       setShowEditModal(false);
       setEditingCustomer(null);
       
-      alert('Akustiker erfolgreich aktualisiert!');
+      const successMessage = shouldUpdateAll 
+        ? `Akustiker erfolgreich aktualisiert! Rechnungsadresse wurde auch für ${otherAcousticians.length} weitere Akustiker übernommen.`
+        : 'Akustiker erfolgreich aktualisiert!';
+      
+      alert(successMessage);
       
     } catch (error) {
       console.error('Error updating customer:', error);
@@ -1394,7 +1427,12 @@ const ErstellteReperaturauftragePage = () => {
       // Invoice status filter (show only unused)
       const matchesInvoiceStatusFilter = !showOnlyUnused || !order.invoice_status;
 
-      return matchesSearch && matchesDateFilter && matchesCompanyFilter && matchesInvoiceStatusFilter;
+      // Werkstattausgang filter - exclude orders without Werkstattausgang when any filter is active
+      const hasActiveFilters = searchTerm || dateFrom || dateTo || selectedCompany || showOnlyUnused;
+      const hasWerkstattausgang = order.werkstattausgang && order.werkstattausgang.trim() !== '';
+      const matchesWerkstattausgangFilter = !hasActiveFilters || hasWerkstattausgang;
+
+      return matchesSearch && matchesDateFilter && matchesCompanyFilter && matchesInvoiceStatusFilter && matchesWerkstattausgangFilter;
     })
     .sort((a, b) => {
       let aValue, bValue;
@@ -4162,8 +4200,21 @@ const RechnungErstellenPage = () => {
           marginBottom: '2rem'
         }}>
           {(() => {
-            const customer = selectedOrders[0].customers;
-            const hasBillingAddress = customer.billing_street || customer.billing_location || customer.billing_country;
+            // Smart invoice address selection logic
+            const customers = selectedOrders.map(order => order.customers);
+            
+            // Check if any customer has a billing address
+            const customersWithBillingAddress = customers.filter(customer => 
+              customer.billing_street || customer.billing_location || customer.billing_country
+            );
+            
+            // If any customer has billing address, use the first one with billing address
+            // Otherwise, use the first customer (fallback to main address)
+            const selectedCustomer = customersWithBillingAddress.length > 0 
+              ? customersWithBillingAddress[0] 
+              : customers[0];
+            
+            const hasBillingAddress = selectedCustomer.billing_street || selectedCustomer.billing_location || selectedCustomer.billing_country;
             const usingFallback = !hasBillingAddress;
             
             return (
@@ -4198,15 +4249,15 @@ const RechnungErstellenPage = () => {
                       Rechnungsempfänger:
                     </div>
                     <div style={{ color: '#333' }}>
-                      {customer.company && (
-                        <div style={{ fontWeight: '500' }}>{customer.company}</div>
+                      {selectedCustomer.company && (
+                        <div style={{ fontWeight: '500' }}>{selectedCustomer.company}</div>
                       )}
-                      {customer.branch && (
-                        <div>{customer.branch}</div>
+                      {selectedCustomer.branch && (
+                        <div>{selectedCustomer.branch}</div>
                       )}
-                      {customer.contact_person && (
+                      {selectedCustomer.contact_person && (
                         <div style={{ fontStyle: 'italic', color: '#666' }}>
-                          Ansprechpartner: {customer.contact_person}
+                          Ansprechpartner: {selectedCustomer.contact_person}
                         </div>
                       )}
                     </div>
@@ -4217,14 +4268,14 @@ const RechnungErstellenPage = () => {
                       Adresse:
                     </div>
                     <div style={{ color: '#333' }}>
-                      {(customer.billing_street || customer.street) && (
-                        <div>{customer.billing_street || customer.street}</div>
+                      {(selectedCustomer.billing_street || selectedCustomer.street) && (
+                        <div>{selectedCustomer.billing_street || selectedCustomer.street}</div>
                       )}
-                      {(customer.billing_location || customer.location) && (
-                        <div>{customer.billing_location || customer.location}</div>
+                      {(selectedCustomer.billing_location || selectedCustomer.location) && (
+                        <div>{selectedCustomer.billing_location || selectedCustomer.location}</div>
                       )}
-                      {(customer.billing_country || customer.country) && (
-                        <div>{customer.billing_country || customer.country}</div>
+                      {(selectedCustomer.billing_country || selectedCustomer.country) && (
+                        <div>{selectedCustomer.billing_country || selectedCustomer.country}</div>
                       )}
                     </div>
                   </div>
