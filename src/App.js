@@ -13,8 +13,11 @@ const COUNTRY_OPTIONS = [
 const FREIGABE_OPTIONS = [
   'Keine angabe',
   'Reparatur laut KV durchführen',
+  'Kostenpflichtige Reparatur',
   'Unrepariert zurückschicken',
   'Verschrotten',
+  'Garantie',
+  'Reklamation',
 ];
 
 const FEHLERANGABEN = [
@@ -3479,6 +3482,10 @@ const RechnungErstellenPage = () => {
     amount: ''
   });
 
+  // Sorting state
+  const [sortBy, setSortBy] = useState('datum'); // 'datum' or 'filiale'
+  const [sortOrder, setSortOrder] = useState('asc'); // 'asc' or 'desc'
+
   // Get next invoice number
   const getNextInvoiceNumber = async () => {
     try {
@@ -3672,23 +3679,28 @@ const RechnungErstellenPage = () => {
 
   // Helper function to get repair description
   const getRepairDescription = (order) => {
-    // Check for specific status first (garantie, reklamation, kulanz, unrepariert zurück)
-    if (order.freigabe === 'garantie') {
-      return 'Garantie';
-    }
-    if (order.freigabe === 'reklamation') {
-      return 'Reklamation';
-    }
-    if (order.freigabe === 'kulanz') {
-      return 'Kulanz';
-    }
-    if (order.freigabe === 'unrepariert zurück') {
-      return 'Unrepariert zurück';
+    // Check for KV repair or kostenpflichtige Reparatur - always "einzelne Positionen"
+    if (order.freigabe === 'Reparatur laut KV durchführen' || order.freigabe === 'Kostenpflichtige Reparatur') {
+      return 'einzelne Positionen';
     }
     
-    // Check for KV repair
-    if (order.freigabe === 'Reparatur laut KV durchführen') {
-      return `Reparatur laut KV durchführen${order.kv_method && order.kv_method !== 'keine Angabe' ? ` (${order.kv_method})` : ''}`;
+    // Check for specific status - just the word, no date or extra text
+    if (order.freigabe === 'Garantie') {
+      return 'Garantie';
+    }
+    if (order.freigabe === 'Reklamation') {
+      return 'Reklamation';
+    }
+    if (order.freigabe === 'Unrepariert zurückschicken') {
+      return 'Unrepariert zurück';
+    }
+    if (order.freigabe === 'Verschrotten') {
+      return 'Verschrotten';
+    }
+    
+    // Check for Kulanz - just "Kulanz"
+    if (order.kulanz) {
+      return 'Kulanz';
     }
     
     // If freigabe has other specific values, use them
@@ -4011,8 +4023,10 @@ const RechnungErstellenPage = () => {
   return (
     <div style={{ padding: '2rem' }}>
       <header style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #eee', paddingBottom: '1rem' }}>
-        <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 60, marginRight: 24 }} />
-        <h1 style={{ fontWeight: 400, color: '#1d426a', fontSize: '1.8rem', margin: 0 }}>Rechnung erstellen</h1>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 60, marginRight: 24 }} />
+          <h1 style={{ fontWeight: 400, color: '#1d426a', fontSize: '1.8rem', margin: 0 }}>Rechnung erstellen</h1>
+        </div>
       </header>
 
       <div style={{ marginBottom: '2rem' }}>
@@ -4252,9 +4266,6 @@ const RechnungErstellenPage = () => {
                       {selectedCustomer.company && (
                         <div style={{ fontWeight: '500' }}>{selectedCustomer.company}</div>
                       )}
-                      {selectedCustomer.branch && (
-                        <div>{selectedCustomer.branch}</div>
-                      )}
                       {selectedCustomer.contact_person && (
                         <div style={{ fontStyle: 'italic', color: '#666' }}>
                           Ansprechpartner: {selectedCustomer.contact_person}
@@ -4295,7 +4306,44 @@ const RechnungErstellenPage = () => {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <h2 style={{ color: '#1d426a', margin: 0 }}>Rechnungspositionen ({selectedOrders.length + manualItems.length})</h2>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            {/* Sorting Controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: '16px' }}>
+              <label style={{ fontSize: '14px', fontWeight: '500', color: '#333' }}>Sortieren nach:</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                style={{
+                  padding: '6px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  background: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="datum">Datum</option>
+                <option value="filiale">Filiale</option>
+              </select>
+              <button
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                style={{
+                  padding: '6px 8px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  background: 'white',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                title={sortOrder === 'asc' ? 'Aufsteigend' : 'Absteigend'}
+              >
+                {sortOrder === 'asc' ? '↑' : '↓'}
+              </button>
+            </div>
+            
             <button
               onClick={() => handleAddManualItem('positive')}
               style={{
@@ -4364,7 +4412,7 @@ const RechnungErstellenPage = () => {
             {/* Table Header */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '100px 120px 2fr 1fr 100px 80px 80px 100px 60px',
+              gridTemplateColumns: '100px 120px 2fr 1.5fr 100px 80px 80px 100px 60px',
               gap: '12px',
               padding: '12px',
               background: '#f8f9fa',
@@ -4386,7 +4434,38 @@ const RechnungErstellenPage = () => {
             </div>
             
             {/* Table Rows - Repair Orders */}
-            {selectedOrders.map((order, index) => {
+            {selectedOrders
+              .sort((a, b) => {
+                if (sortBy === 'datum') {
+                  // Sort by date, then by filiale for same dates
+                  const dateA = new Date(a.werkstattausgang || 0);
+                  const dateB = new Date(b.werkstattausgang || 0);
+                  if (dateA.getTime() !== dateB.getTime()) {
+                    return sortOrder === 'asc' 
+                      ? dateA.getTime() - dateB.getTime() // Oldest first
+                      : dateB.getTime() - dateA.getTime(); // Newest first
+                  }
+                  // Same date: sort by filiale
+                  const filialeA = a.customers?.branch || '';
+                  const filialeB = b.customers?.branch || '';
+                  return filialeA.localeCompare(filialeB);
+                } else if (sortBy === 'filiale') {
+                  // Sort by filiale, then by date for same filiales
+                  const filialeA = a.customers?.branch || '';
+                  const filialeB = b.customers?.branch || '';
+                  if (filialeA !== filialeB) {
+                    return filialeA.localeCompare(filialeB);
+                  }
+                  // Same filiale: sort by date
+                  const dateA = new Date(a.werkstattausgang || 0);
+                  const dateB = new Date(b.werkstattausgang || 0);
+                  return sortOrder === 'asc' 
+                    ? dateA.getTime() - dateB.getTime() // Oldest first
+                    : dateB.getTime() - dateA.getTime(); // Newest first
+                }
+                return 0;
+              })
+              .map((order, index) => {
               // Calculate repair costs
               const repairCost = calculateRepairCost(order);
               const portoCost = calculatePorto(order);
@@ -4398,7 +4477,7 @@ const RechnungErstellenPage = () => {
               return (
                 <div key={order.id} style={{
                   display: 'grid',
-                  gridTemplateColumns: '100px 120px 2fr 1fr 100px 80px 80px 100px 60px',
+                  gridTemplateColumns: '100px 120px 2fr 1.5fr 100px 80px 80px 100px 60px',
                   gap: '12px',
                   padding: '12px',
                   border: '1px solid #e0e0e0',
@@ -4474,7 +4553,7 @@ const RechnungErstellenPage = () => {
               return (
                 <div key={`manual-${item.id}`} style={{
                   display: 'grid',
-                  gridTemplateColumns: '100px 120px 2fr 1fr 100px 80px 80px 100px 60px',
+                  gridTemplateColumns: '100px 120px 2fr 1.5fr 100px 80px 80px 100px 60px',
                   gap: '12px',
                   padding: '12px',
                   border: '1px solid #e0e0e0',
@@ -4548,7 +4627,7 @@ const RechnungErstellenPage = () => {
               return (
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: '100px 120px 2fr 1fr 100px 80px 80px 100px 60px',
+                  gridTemplateColumns: '100px 120px 2fr 1.5fr 100px 80px 80px 100px 60px',
                   gap: '12px',
                   padding: '12px',
                   background: '#f8f9fa',
@@ -4829,6 +4908,10 @@ const RechnungBearbeitenPage = () => {
   const [manualItemType, setManualItemType] = useState('positive');
   const [manualItemForm, setManualItemForm] = useState({ description: '', amount: '' });
 
+  // Sorting state
+  const [sortBy, setSortBy] = useState('datum'); // 'datum' or 'filiale'
+  const [sortOrder, setSortOrder] = useState('asc'); // 'asc' or 'desc'
+
   useEffect(() => {
     loadInvoice();
     loadAvailableRepairOrders();
@@ -4877,7 +4960,16 @@ const RechnungBearbeitenPage = () => {
             nettopreis,
             porto,
             manual_porto,
-            austria_arbeitszeit
+            austria_arbeitszeit,
+            kulanz,
+            customers:customers(
+              id,
+              company,
+              branch,
+              street,
+              location,
+              country
+            )
           )
         `)
         .eq('invoice_id', id)
@@ -5049,13 +5141,15 @@ const RechnungBearbeitenPage = () => {
         // This is from invoiceItems with repair_order data
         return {
           ...item.repair_order,
-          customers: invoice.customer, // Use invoice customer data
+          customers: item.repair_order.customers, // Keep original customer data for each order
           nettopreis: item.repair_amount || 0,
           repair_amount: item.repair_amount || 0, // Also provide as repair_amount for PDF compatibility
           porto: item.porto || 0,
           werkstattausgang: item.repair_order.werkstattausgang || item.date_performed,
           kommission: item.kommission || item.repair_order.kommission,
-          freigabe: item.repair_order.freigabe
+          freigabe: item.repair_order.freigabe,
+          kv_repair: item.repair_order.kv_repair,
+          bottom: item.repair_order.bottom
         };
       } else {
         // This is from selectedOrders (newly added)
@@ -5379,9 +5473,6 @@ const RechnungBearbeitenPage = () => {
             {invoice.customer.company}
           </div>
           <div style={{ marginBottom: '4px' }}>
-            {invoice.customer.branch}
-          </div>
-          <div style={{ marginBottom: '4px' }}>
             {invoice.customer.billing_street || invoice.customer.street}
           </div>
           <div>
@@ -5399,7 +5490,44 @@ const RechnungBearbeitenPage = () => {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <h2 style={{ color: '#1d426a', margin: 0 }}>Rechnungspositionen ({invoiceItems.length + manualItems.length})</h2>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            {/* Sorting Controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: '16px' }}>
+              <label style={{ fontSize: '14px', fontWeight: '500', color: '#333' }}>Sortieren nach:</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                style={{
+                  padding: '6px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  background: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="datum">Datum</option>
+                <option value="filiale">Filiale</option>
+              </select>
+              <button
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                style={{
+                  padding: '6px 8px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  background: 'white',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                title={sortOrder === 'asc' ? 'Aufsteigend' : 'Absteigend'}
+              >
+                {sortOrder === 'asc' ? '↑' : '↓'}
+              </button>
+            </div>
+            
             <button
               onClick={() => {
                 setManualItemType('positive');
@@ -5459,7 +5587,38 @@ const RechnungBearbeitenPage = () => {
           </thead>
           <tbody>
             {/* Existing invoice items */}
-            {invoiceItems.map((item, index) => (
+            {invoiceItems
+              .sort((a, b) => {
+                if (sortBy === 'datum') {
+                  // Sort by date, then by filiale for same dates
+                  const dateA = new Date(a.date_performed || 0);
+                  const dateB = new Date(b.date_performed || 0);
+                  if (dateA.getTime() !== dateB.getTime()) {
+                    return sortOrder === 'asc' 
+                      ? dateA.getTime() - dateB.getTime() // Oldest first
+                      : dateB.getTime() - dateA.getTime(); // Newest first
+                  }
+                  // Same date: sort by filiale
+                  const filialeA = a.repair_order?.customers?.branch || '';
+                  const filialeB = b.repair_order?.customers?.branch || '';
+                  return filialeA.localeCompare(filialeB);
+                } else if (sortBy === 'filiale') {
+                  // Sort by filiale, then by date for same filiales
+                  const filialeA = a.repair_order?.customers?.branch || '';
+                  const filialeB = b.repair_order?.customers?.branch || '';
+                  if (filialeA !== filialeB) {
+                    return filialeA.localeCompare(filialeB);
+                  }
+                  // Same filiale: sort by date
+                  const dateA = new Date(a.date_performed || 0);
+                  const dateB = new Date(b.date_performed || 0);
+                  return sortOrder === 'asc' 
+                    ? dateA.getTime() - dateB.getTime() // Oldest first
+                    : dateB.getTime() - dateA.getTime(); // Newest first
+                }
+                return 0;
+              })
+              .map((item, index) => (
               <tr key={item.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                 <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>
                   {item.date_performed ? new Date(item.date_performed).toLocaleDateString('de-DE') : '-'}
@@ -5468,7 +5627,38 @@ const RechnungBearbeitenPage = () => {
                   {item.kommission}
                 </td>
                 <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>
-                  {item.description}
+                  {(() => {
+                    // Use the same logic as getRepairDescription for consistency
+                    const order = item.repair_order;
+                    if (!order) return item.description;
+                    
+                    // Check for KV repair or kostenpflichtige Reparatur - always "einzelne Positionen"
+                    if (order.freigabe === 'Reparatur laut KV durchführen' || order.freigabe === 'Kostenpflichtige Reparatur') {
+                      return 'einzelne Positionen';
+                    }
+                    
+                    // Check for specific status - just the word, no date or extra text
+                    if (order.freigabe === 'Garantie') {
+                      return 'Garantie';
+                    }
+                    if (order.freigabe === 'Reklamation') {
+                      return 'Reklamation';
+                    }
+                    if (order.freigabe === 'Unrepariert zurückschicken') {
+                      return 'Unrepariert zurück';
+                    }
+                    if (order.freigabe === 'Verschrotten') {
+                      return 'Verschrotten';
+                    }
+                    
+                    // Check for Kulanz - just "Kulanz"
+                    if (order.kulanz) {
+                      return 'Kulanz';
+                    }
+                    
+                    // Default fallback
+                    return item.description;
+                  })()}
                 </td>
                 <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>
                   {item.filiale}
@@ -5854,8 +6044,9 @@ function AppContent() {
   const [fehler, setFehler] = useState({});
   const [arbeiten, setArbeiten] = useState({});
   const [arbeitenManual, setArbeitenManual] = useState({});
-  const [bottom, setBottom] = useState('kostenpflichtig');
+  const [kulanz, setKulanz] = useState(false);
   const [reklamationDate, setReklamationDate] = useState('');
+  const [garantieDate, setGarantieDate] = useState('');
   const [kulanzPorto, setKulanzPorto] = useState('ja');
   const [manualPorto, setManualPorto] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -5925,10 +6116,9 @@ function AppContent() {
   
 
 
-  // Logic for disabling all fields if not 'Keine angabe' or 'Reparatur laut KV durchführen' or if Verfahren disables fields
-  const verfahrenDisables = bottom === 'garantie' || bottom === 'reklamation' || bottom === 'kulanz';
-  const isDisabled = (freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen') || verfahrenDisables;
-  const hideFields = isDisabled || verfahrenDisables;
+  // Logic for disabling all fields if not 'Keine angabe' or 'Reparatur laut KV durchführen' or 'Kostenpflichtige Reparatur'
+  const isDisabled = (freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen' && freigabe !== 'Kostenpflichtige Reparatur') || kulanz;
+  const hideFields = isDisabled;
 
   // Load customers when component mounts
   useEffect(() => {
@@ -5961,8 +6151,9 @@ function AppContent() {
     setKvMethod('keine Angabe');
     setKvFreigabeDate('');
     setFehler({});
-    setBottom('kostenpflichtig');
+    setKulanz(false);
     setReklamationDate('');
+    setGarantieDate('');
     setKulanzPorto('ja');
     setManualPorto('');
     setIdoHdo('IDO');
@@ -6040,8 +6231,9 @@ function AppContent() {
       setFreigabe(order.freigabe || 'Keine angabe');
       setKvMethod(order.kv_method || 'keine Angabe');
       setKvFreigabeDate(order.kv_date_freigabe || '');
-      setBottom(order.bottom || 'kostenpflichtig');
+      setKulanz(order.kulanz || false);
       setReklamationDate(order.reklamation_date || '');
+      setGarantieDate(order.garantie_date || '');
       setKulanzPorto(order.kulanz_porto || 'ja');
       setManualPorto(order.manual_porto || '');
       setIdoHdo(order.ido_hdo || 'IDO');
@@ -6117,7 +6309,15 @@ function AppContent() {
 
   // Handlers
   const handleCountry = (e) => setCountry(e.target.value);
-  const handleFreigabe = (val) => setFreigabe(val);
+  const handleFreigabe = (val) => {
+    setFreigabe(val);
+    
+    // If switching from Garantie/Reklamation to Keine angabe, recalculate prices
+    if ((freigabe === 'Garantie' || freigabe === 'Reklamation') && val === 'Keine angabe') {
+      // The net calculation will automatically recalculate when the component re-renders
+      // because the freigabe state change triggers a re-render
+    }
+  };
   const handleFehler = (key) => setFehler((prev) => ({ ...prev, [key]: !prev[key] }));
   const handleArbeiten = (key) => {
     setArbeiten((prev) => {
@@ -6139,10 +6339,9 @@ function AppContent() {
     value = value.replace(/(,.*),/g, '$1');
     setArbeitenManual((prev) => ({ ...prev, [key]: value }));
   };
-  const handleBottom = (val) => {
-    setBottom(val);
-    if (val !== 'kostenpflichtig') setKulanzPorto('ja');
-    if (val !== 'reklamation') setReklamationDate('');
+  const handleKulanz = (checked) => {
+    setKulanz(checked);
+    if (!checked) setKulanzPorto('ja');
   };
   
   // Reset Austria option if country changes from AT to something else
@@ -6262,8 +6461,9 @@ function AppContent() {
         freigabe: freigabe || 'Keine angabe',
         kv_method: kvMethod || 'keine Angabe',
         kv_date_freigabe: kvFreigabeDate || null,
-        bottom: bottom || 'kostenpflichtig',
+        kulanz: kulanz || false,
         reklamation_date: reklamationDate || null,
+        garantie_date: garantieDate || null,
         kulanz_porto: kulanzPorto || 'ja',
         manual_porto: manualPorto || '',
         ido_hdo: idoHdo || 'IDO',
@@ -6314,10 +6514,8 @@ function AppContent() {
       // Reset form after successful save/update
       handleReset();
       
-      // If we were editing, navigate back to repair orders overview
-      if (isEditing && editingOrderId) {
-        navigate('/erstellte-reperaturauftrage');
-      }
+      // Navigate back to repair orders overview after save (both new and edit)
+      navigate('/erstellte-reperaturauftrage');
       
     } catch (error) {
       console.error('Error saving repair order:', error);
@@ -6678,7 +6876,11 @@ function AppContent() {
   } else if (freigabe === 'Verschrotten') {
     net = 0;
     porto = 0;
-  } else if (bottom === 'kostenpflichtig') {
+  } else if (freigabe === 'Garantie' || freigabe === 'Reklamation') {
+    // For Garantie and Reklamation, keep checkboxes checked but set net to 0
+    net = 0;
+    // Keep porto calculation from country settings
+  } else if (!kulanz) {
     ARBEITEN.forEach((a) => {
       if (arbeiten[a.key]) {
         if (a.price) {
@@ -6692,10 +6894,7 @@ function AppContent() {
       }
     });
     // net is now the base price only - DO NOT add porto here
-  } else if (bottom === 'garantie' || bottom === 'reklamation') {
-    net = 0;
-    // Porto can still be applied if enabled via toggle
-  } else if (bottom === 'kulanz') {
+  } else if (kulanz) {
     net = 0;
     // For kulanz, net remains 0, porto is handled separately
   }
@@ -6968,6 +7167,12 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
       if (opt === 'Reparatur laut KV durchführen' && checked && kvMethod && kvMethod !== 'keine Angabe' && kvFreigabeDate) {
         const formattedDate = new Date(kvFreigabeDate).toLocaleDateString('de-DE');
         doc.text(`${opt} -  ${kvMethod} am ${formattedDate}`, leftX + 8, yLeft);
+      } else if (opt === 'Garantie' && checked && garantieDate) {
+        const formattedDate = new Date(garantieDate).toLocaleDateString('de-DE');
+        doc.text(`${opt} auf Reparatur von ${formattedDate}`, leftX + 8, yLeft);
+      } else if (opt === 'Reklamation' && checked && reklamationDate) {
+        const formattedDate = new Date(reklamationDate).toLocaleDateString('de-DE');
+        doc.text(`${opt} auf Reparatur von ${formattedDate}`, leftX + 8, yLeft);
       } else {
       doc.text(opt, leftX + 8, yLeft);
       }
@@ -7014,40 +7219,17 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
       yLeft += 2;
     }
 
-    var verfahrenY = 228;
+    var verfahrenY = 250;
     doc.setFont(undefined, 'bold');
-    doc.text('Verfahren:', leftX, verfahrenY);
+    doc.text('Kulanz:', leftX, verfahrenY);
     doc.setFont(undefined, 'normal');
     verfahrenY += linePad + 1;
-    const verfahrenOptions = [
-      { label: 'Kostenpflichtige Reparatur', value: 'kostenpflichtig' },
-      { label: 'Garantie', value: 'garantie' },
-      { label: 'Reklamation auf Reparatur von', value: 'reklamation' },
-      { label: 'Kulanz', value: 'kulanz' },
-    ];
-    verfahrenOptions.forEach(opt => {
-      const checked = bottom === opt.value;
-      let label = opt.label;
-      if (opt.value === 'reklamation' && bottom === 'reklamation' && reklamationDate) {
-        // Format date as DD.MM.YYYY
-        const [yyyy, mm, dd] = reklamationDate.split('-');
-        label += ' ';
-        doc.setFont(undefined, checked ? 'bold' : 'normal');
-        drawCheckbox(doc, leftX + 1, verfahrenY - 3.5, checked);
-        doc.text(label, leftX + 8, verfahrenY);
-        if (reklamationDate) {
-          doc.text(`${dd}.${mm}.${yyyy}`, leftX + 8 + doc.getTextWidth(label) + 2, verfahrenY, { font: 'helvetica', fontStyle: 'bold' });
-        }
-        doc.setFont(undefined, 'normal');
-      } else {
-        drawCheckbox(doc, leftX + 1, verfahrenY - 3.5, checked);
-        doc.text(label, leftX + 8, verfahrenY);
-      }
-      verfahrenY += linePad;
-      
-
-    });
-    if (bottom === 'kulanz') {
+    // Kulanz checkbox
+    drawCheckbox(doc, leftX + 1, verfahrenY - 3.5, kulanz);
+    doc.text('Kulanz', leftX + 8, verfahrenY);
+    verfahrenY += linePad;
+    
+    if (kulanz) {
       verfahrenY += 1;
       drawCheckbox(doc, leftX + 10, verfahrenY - 3.5, kulanzPorto === 'ja');
       doc.text('Porto ja', leftX + 16, verfahrenY);
@@ -7071,13 +7253,16 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
       
       verfahrenY += linePad;
     }
+    
+    // Adjust Y position for subsequent sections based on whether Kulanz Porto options are shown
+    const kulanzYAdjustment = kulanz ? linePad * 2 : 0; // Add extra space if Kulanz Porto options are shown
     const kvYabNetto = 73
     const kvXabNetto = leftX + 25
     // Kostenvoranschlag Section
     yLeft += sectionPad;
     doc.setFont(undefined, 'bold');
     doc.text('Kostenvoranschlag:', leftX, kvYabNetto);
-    doc.setFont(undefined, 'normal');
+        doc.setFont(undefined, 'normal');
     yLeft += linePad + 1;
     
     // Kostenvoranschlag checkbox and amount
@@ -7087,10 +7272,10 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
     // Add amount text field (if checked and has amount)
     if (kostenvoranschlagChecked && kostenvoranschlagAmount) {
       doc.text(`${kostenvoranschlagAmount} € - netto`, kvXabNetto + 10, kvYabNetto);
-    } else {
+      } else {
       doc.text('_____ € - netto', kvXabNetto + 10, kvYabNetto);
-    }
-    yLeft += linePad;
+      }
+      yLeft += linePad;
 
     // Right column: Ausgeführte Arbeiten (true 3-column grid)
     let yRight = CheckBoxbereich;
@@ -7109,7 +7294,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
       const checked = !!arbeiten[a.key];
       let value = '';
       if (checked) {
-        if (bottom === 'kostenpflichtig') {
+        if (!kulanz) {
           if (a.price && a.price !== 'country') value = `${a.price.toFixed(2).replace('.', ',')} €`;
           else if (a.price === 'country') value = `${arbeitszeit.toFixed(2).replace('.', ',')} €`;
           else if (arbeitenManual[a.key]) value = `${arbeitenManual[a.key]} €`;
@@ -7907,6 +8092,52 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                       )}
                     </div>
                   )}
+                  {opt === 'Garantie' && freigabe === opt && (
+                    <div style={{ 
+                      marginLeft: '24px', 
+                      marginTop: '8px',
+                      display: 'flex', 
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      <span style={{ fontSize: '14px' }}>auf Reparatur von:</span>
+                      <input 
+                        type="date" 
+                        value={garantieDate}
+                        onChange={(e) => setGarantieDate(e.target.value)}
+                        style={{ 
+                          padding: '4px 8px', 
+                          borderRadius: '4px', 
+                          border: '1px solid #ccc',
+                          fontSize: '14px',
+                          minWidth: '140px'
+                        }}
+                      />
+                    </div>
+                  )}
+                  {opt === 'Reklamation' && freigabe === opt && (
+                    <div style={{ 
+                      marginLeft: '24px', 
+                      marginTop: '8px',
+                      display: 'flex', 
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      <span style={{ fontSize: '14px' }}>auf Reparatur von:</span>
+                      <input 
+                        type="date" 
+                        value={reklamationDate}
+                        onChange={(e) => setReklamationDate(e.target.value)}
+                        style={{ 
+                          padding: '4px 8px', 
+                          borderRadius: '4px', 
+                          border: '1px solid #ccc',
+                          fontSize: '14px',
+                          minWidth: '140px'
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -7996,48 +8227,33 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
               </div>
             </div>
             <div style={boxStyle}>
-              <div style={{ fontWeight: 600, marginBottom: 8, textAlign: 'left' }}>Verfahren:</div>
+              <div style={{ fontWeight: 600, marginBottom: 8, textAlign: 'left' }}>Kulanz:</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, textAlign: 'left', alignItems: 'flex-start' }}>
                 <label>
-                  <input type="radio" name="bottom" checked={bottom === 'kostenpflichtig'} onChange={() => handleBottom('kostenpflichtig')} /> Kostenpflichtige Reparatur
+                  <input type="checkbox" checked={kulanz} onChange={(e) => handleKulanz(e.target.checked)} /> Kulanz
                 </label>
-                <label>
-                  <input type="radio" name="bottom" checked={bottom === 'garantie'} onChange={() => handleBottom('garantie')} disabled={freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen'} /> Garantie
-                </label>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                    <input type="radio" name="bottom" checked={bottom === 'reklamation'} onChange={() => handleBottom('reklamation')} disabled={freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen'} style={{ marginTop: 2 }} />
-                    <span>Reklamation auf Reparatur von</span>
-                  </label>
-                  {bottom === 'reklamation' && (
-                    <input type="date" value={reklamationDate} onChange={handleReklamationDate} style={{ fontSize: 15, marginLeft: 28, marginTop: 2 }} disabled={freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen'} />
-                  )}
-                </div>
-                <label>
-                  <input type="radio" name="bottom" checked={bottom === 'kulanz'} onChange={() => handleBottom('kulanz')} disabled={freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen'} /> Kulanz
-                </label>
-                <div style={{ marginLeft: 24, marginTop: 4, opacity: bottom === 'kulanz' && (freigabe === 'Keine angabe' || freigabe === 'Reparatur laut KV durchführen') ? 1 : 0.5, pointerEvents: bottom === 'kulanz' && (freigabe === 'Keine angabe' || freigabe === 'Reparatur laut KV durchführen') ? 'auto' : 'none' }}>
+                <div style={{ marginLeft: 24, marginTop: 4, opacity: kulanz ? 1 : 0.5, pointerEvents: kulanz ? 'auto' : 'none' }}>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px' }}>
-                    <label>
-                      <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'ja'} disabled={bottom !== 'kulanz' || (freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen')} onChange={() => handleKulanzPorto('ja')} /> Porto ja
-                  </label>
-                  <label>
-                      <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'nein'} disabled={bottom !== 'kulanz' || (freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen')} onChange={() => handleKulanzPorto('nein')} /> Porto nein
-                    </label>
+                <label>
+                      <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'ja'} disabled={!kulanz} onChange={() => handleKulanzPorto('ja')} /> Porto ja
+                </label>
+                <label>
+                      <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'nein'} disabled={!kulanz} onChange={() => handleKulanzPorto('nein')} /> Porto nein
+                </label>
                     {country === 'AT' && (
-                      <label>
-                        <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'austria'} disabled={bottom !== 'kulanz' || (freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen')} onChange={() => handleKulanzPorto('austria')} /> Porto 14,90€
+                  <label>
+                        <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'austria'} disabled={!kulanz} onChange={() => handleKulanzPorto('austria')} /> Porto 14,90€
                       </label>
                     )}
                     <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'manual'} disabled={bottom !== 'kulanz' || (freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen')} onChange={() => handleKulanzPorto('manual')} /> Porto manuell:
+                      <input type="radio" name="kulanzPorto" checked={kulanzPorto === 'manual'} disabled={!kulanz} onChange={() => handleKulanzPorto('manual')} /> Porto manuell:
                       <input
                         type="number"
                         step="0.01"
                         min="0"
                         value={manualPorto}
                         onChange={(e) => setManualPorto(e.target.value)}
-                        disabled={kulanzPorto !== 'manual' || bottom !== 'kulanz' || (freigabe !== 'Keine angabe' && freigabe !== 'Reparatur laut KV durchführen')}
+                        disabled={kulanzPorto !== 'manual' || !kulanz}
                         placeholder="0,00"
                         style={{
                           width: '60px',
@@ -8045,7 +8261,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                           border: '1px solid #e1e5e9',
                           borderRadius: '4px',
                           fontSize: '12px',
-                          opacity: kulanzPorto === 'manual' && bottom === 'kulanz' && (freigabe === 'Keine angabe' || freigabe === 'Reparatur laut KV durchführen') ? 1 : 0.5
+                          opacity: kulanzPorto === 'manual' && kulanz ? 1 : 0.5
                         }}
                       />€
                   </label>
@@ -8220,7 +8436,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                   const showCountryPrice = !hideFields && a.price === 'country';
                   const showInput = !hideFields && !a.price;
                   return (
-                    <div key={a.key} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 16, textAlign: 'left', minHeight: 36 }}>
+                    <div key={a.key} style={{ display: 'flex', alignItems: 'center', gap: 20, fontSize: 16, textAlign: 'left', minHeight: 36 }}>
                       <input type="checkbox" checked={checked} onChange={() => handleArbeiten(a.key)} disabled={isDisabled} style={{ alignSelf: 'center' }} />
                       <span style={{ flex: 1, paddingRight: 10, alignSelf: 'center', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.label}</span>
                       {(showPrice || showCountryPrice) && (
@@ -8238,7 +8454,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                             style={{ fontSize: 15, width: 70, color: checked ? '#222' : '#888', background: checked ? '#fff' : '#f5f5f5', borderColor: checked ? '#ccc' : '#eee', textAlign: 'center' }}
                             inputMode="decimal"
                             pattern="[0-9,]*"
-                            disabled={!checked || isDisabled || bottom !== 'kostenpflichtig'}
+                            disabled={!checked || isDisabled || kulanz}
                           />
                           <span style={{ marginLeft: 4, color: checked ? '#222' : '#888' }}>€</span>
                         </div>
@@ -8472,3 +8688,4 @@ function App() {
 }
 
 export default App;
+
