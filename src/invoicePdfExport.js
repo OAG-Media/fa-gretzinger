@@ -54,7 +54,7 @@ const PDF_LAYOUT = {
   COL_HINWEIS_WIDTH: 35,
   COL_REPKOSTEN_LEFT: 140,
   COL_REPKOSTEN_WIDTH: 20,
-  COL_PORTO_LEFT: 155,
+  COL_PORTO_LEFT: 160,
   COL_PORTO_WIDTH: 20,
   COL_GESAMT_LEFT: 170,
   COL_GESAMT_WIDTH: 25,
@@ -249,7 +249,7 @@ const renderTableRow = (doc, item, startY, isEven = false) => {
   
   // Porto (right aligned)
   const porto = item.porto || 0;
-  doc.text(`${formatGermanNumber(porto)} €`, COL_PORTO_LEFT + 15, textY, { align: 'right' });
+  doc.text(`${formatGermanNumber(porto)} €`, COL_PORTO_LEFT +10, textY, { align: 'right' });
   
   // Total (right aligned to align Euro symbols)
   const total = item.total || 0;
@@ -277,12 +277,12 @@ const renderCalculations = (doc, startY, totals) => {
   
   // Netto
   doc.text('Netto:', CALC_BOX_LEFT, startY + 5);
-  doc.text(`${formatGermanNumber(totals.subtotal)} €`, CALC_BOX_LEFT + CALC_BOX_WIDTH - 5, startY + 5, { align: 'right' });
+  doc.text(`${formatGermanNumber(totals.subtotal)} €`, CALC_BOX_LEFT + CALC_BOX_WIDTH, startY + 5, { align: 'right' });
   
   // MwSt
   const taxPercent = Math.round(totals.taxRate * 100);
-  doc.text(`${taxPercent}%:`, CALC_BOX_LEFT, startY + 10);
-  doc.text(`${formatGermanNumber(totals.taxAmount)} €`, CALC_BOX_LEFT + CALC_BOX_WIDTH - 5, startY + 10, { align: 'right' });
+  doc.text(`MwSt ${taxPercent}%:`, CALC_BOX_LEFT, startY + 10);
+  doc.text(`${formatGermanNumber(totals.taxAmount)} €`, CALC_BOX_LEFT + CALC_BOX_WIDTH, startY + 10, { align: 'right' });
   
   // Thin line separator above Endbetrag
   doc.setDrawColor(150, 150, 150);
@@ -293,7 +293,7 @@ const renderCalculations = (doc, startY, totals) => {
   doc.setFontSize(PDF_LAYOUT.FONT_SIZE_NORMAL + 2);
   doc.setFont('helvetica', 'bold');
   doc.text('Endbetrag:', CALC_BOX_LEFT, startY + 17);
-  doc.text(`${formatGermanNumber(totals.total)} €`, CALC_BOX_LEFT + CALC_BOX_WIDTH - 5, startY + 17, { align: 'right' });
+  doc.text(`${formatGermanNumber(totals.total)} €`, CALC_BOX_LEFT + CALC_BOX_WIDTH, startY + 17, { align: 'right' });
   
   return startY + CALC_BOX_HEIGHT;
 };
@@ -309,7 +309,7 @@ const renderFooter = (doc, currentPage, totalPages, invoiceNumber) => {
   let currentY = FOOTER_TOP;
   
   // Payment instruction
-  doc.text('Rechnungsbetrag bitte innerhalb 14 Tagen nach Erhalt auf folgendes Konto überweisen:', MARGIN_LEFT, currentY);
+  doc.text('Rechnungsbetrag bitte innerhalb 10 Tagen nach Erhalt auf folgendes Konto überweisen:', MARGIN_LEFT, currentY);
   currentY += 4;
   
   // Bank details
@@ -354,7 +354,7 @@ export const generateInvoicePDF = (invoiceData, selectedOrders) => {
   }, 0);
   
   const subtotal = repairOrdersSubtotal + manualItemsSubtotal;
-  const taxRate = invoiceData.customer?.country === 'Österreich' ? 0.20 : 0.19;
+  const taxRate = invoiceData.customer?.country === 'Österreich' ? 0 : 0.19;
   const taxAmount = subtotal * taxRate;
   const total = subtotal + taxAmount;
   

@@ -3796,7 +3796,7 @@ const RechnungErstellenPage = () => {
       const totalPorto = selectedOrders.reduce((sum, order) => sum + calculatePorto(order), 0);
       const totalManualAmount = manualItems.reduce((sum, item) => sum + item.amount, 0);
       const subtotal = totalRepairCost + totalPorto + totalManualAmount;
-      const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0.20 : 0.19;
+      const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0 : 0.19;
       const totalTax = subtotal * taxRate;
       const grandTotal = subtotal + totalTax;
 
@@ -3906,7 +3906,7 @@ const RechnungErstellenPage = () => {
       const totalPorto = selectedOrders.reduce((sum, order) => sum + calculatePorto(order), 0);
       const totalManualAmount = manualItems.reduce((sum, item) => sum + item.amount, 0);
       const subtotal = totalRepairCost + totalPorto + totalManualAmount;
-      const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0.20 : 0.19;
+      const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0 : 0.19;
       const totalTax = subtotal * taxRate;
       const grandTotal = subtotal + totalTax;
 
@@ -4469,7 +4469,7 @@ const RechnungErstellenPage = () => {
               // Calculate repair costs
               const repairCost = calculateRepairCost(order);
               const portoCost = calculatePorto(order);
-              const taxRate = order.customers?.country === 'Österreich' ? 0.20 : 0.19;
+              const taxRate = order.customers?.country === 'Österreich' ? 0 : 0.19;
               const subtotal = repairCost + portoCost;
               const taxAmount = subtotal * taxRate;
               const total = subtotal + taxAmount;
@@ -4546,7 +4546,7 @@ const RechnungErstellenPage = () => {
             
             {/* Table Rows - Manual Items */}
             {manualItems.map((item, index) => {
-              const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0.20 : 0.19;
+              const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0 : 0.19;
               const taxAmount = item.amount * taxRate;
               const total = item.amount + taxAmount;
               
@@ -4620,7 +4620,7 @@ const RechnungErstellenPage = () => {
               const totalManualAmount = manualItems.reduce((sum, item) => sum + item.amount, 0);
               const subtotal = totalRepairCost + totalPorto + totalManualAmount;
               // Use tax rate from first customer (assuming all same country for now)
-              const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0.20 : 0.19;
+              const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0 : 0.19;
               const totalTax = subtotal * taxRate;
               const grandTotal = subtotal + totalTax;
               
@@ -5018,7 +5018,7 @@ const RechnungBearbeitenPage = () => {
       }, 0);
       
       const subtotal = repairTotal + portoTotal + manualTotal;
-      const taxRate = invoice.customer.country === 'Österreich' ? 0.20 : 0.19;
+      const taxRate = invoice.customer.country === 'Österreich' ? 0 : 0.19;
       const taxAmount = subtotal * taxRate;
       const totalAmount = subtotal + taxAmount;
       
