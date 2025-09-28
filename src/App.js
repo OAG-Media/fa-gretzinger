@@ -3461,6 +3461,7 @@ const ErstellteRechnungenPage = () => {
 
 // Invoice Creation Page Component
 const RechnungErstellenPage = () => {
+  const navigate = useNavigate();
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
   const [selectedOrders, setSelectedOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -3778,6 +3779,61 @@ const RechnungErstellenPage = () => {
     setManualItems(prev => prev.filter(item => item.id !== itemId));
   };
 
+  // PDF export for invoice creation
+  const handleInvoicePDFExport = async () => {
+    try {
+      if (!invoiceNumber.trim() || !invoiceDate) {
+        alert('Bitte füllen Sie alle Pflichtfelder aus.');
+        return;
+      }
+
+      if (!numberValidation.isValid) {
+        alert('Bitte korrigieren Sie die Rechnungsnummer.');
+        return;
+      }
+
+      // Calculate totals
+      const totalRepairCost = selectedOrders.reduce((sum, order) => sum + calculateRepairCost(order), 0);
+      const totalPorto = selectedOrders.reduce((sum, order) => sum + calculatePorto(order), 0);
+      const totalManualAmount = manualItems.reduce((sum, item) => sum + item.amount, 0);
+      const subtotal = totalRepairCost + totalPorto + totalManualAmount;
+      const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0 : 0.19;
+      const totalTax = subtotal * taxRate;
+      const grandTotal = subtotal + totalTax;
+
+      // Create invoice data for PDF
+      const invoiceData = {
+        invoiceNumber: invoiceNumber,
+        invoiceDate: invoiceDate,
+        periodStart: periodStart,
+        periodEnd: periodEnd,
+        customer: selectedOrders[0]?.customers || {},
+        manualItems: manualItems
+      };
+
+      // Prepare selected orders for PDF
+      const selectedOrdersForPDF = selectedOrders.map(order => ({
+        ...order,
+        nettopreis: calculateRepairCost(order),
+        repair_amount: calculateRepairCost(order),
+        porto: calculatePorto(order),
+        werkstattausgang: order.werkstattausgang,
+        kommission: order.kommission,
+        freigabe: order.freigabe,
+        kv_repair: order.kv_repair,
+        bottom: order.kulanz
+      }));
+
+      // Generate PDF
+      const { generateInvoicePDF } = await import('./invoicePdfExport.js');
+      generateInvoicePDF(invoiceData, selectedOrdersForPDF);
+
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Fehler beim Generieren der PDF: ' + error.message);
+    }
+  };
+
   // Invoice saving handlers
   const handleSaveInvoice = async () => {
     try {
@@ -3882,6 +3938,11 @@ const RechnungErstellenPage = () => {
       if (updateError) throw updateError;
 
       alert('Rechnung erfolgreich gespeichert!');
+      
+      // Redirect to invoice list after successful save
+      setTimeout(() => {
+        navigate('/erstellte-rechnungen');
+      }, 1000);
       
     } catch (error) {
       console.error('Error saving invoice:', error);
@@ -4658,37 +4719,7 @@ const RechnungErstellenPage = () => {
         {selectedOrders.length > 0 && (
           <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center', gap: '1rem' }}>
             <button
-              onClick={handleSaveInvoice}
-              style={{
-                background: '#1d426a',
-                color: 'white',
-                border: 'none',
-                padding: '12px 16px',
-                borderRadius: '6px',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-              title="Rechnung speichern"
-              onMouseEnter={(e) => {
-                e.target.style.background = '#16365a';
-                e.target.style.transform = 'scale(1.02)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = '#1d426a';
-                e.target.style.transform = 'scale(1)';
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z"/>
-              </svg>
-            </button>
-            
-            <button
+              onClick={handleInvoicePDFExport}
               style={{
                 background: '#1d426a',
                 color: 'white',
@@ -4719,7 +4750,7 @@ const RechnungErstellenPage = () => {
             </button>
             
             <button
-              onClick={handleSaveAndSend}
+              onClick={handleSaveInvoice}
               style={{
                 background: '#1d426a',
                 color: 'white',
@@ -4740,7 +4771,7 @@ const RechnungErstellenPage = () => {
                 e.target.style.transform = 'scale(1)';
               }}
             >
-              Speichern & Senden
+              Speichern als Entwurf
             </button>
           </div>
         )}
