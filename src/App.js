@@ -3124,9 +3124,68 @@ const ErstellteRechnungenPage = () => {
   }, []);
 
   // Invoice action handlers
-  const handleDownloadInvoicePDF = (invoice) => {
-    // TODO: Implement PDF download
-    alert('PDF Download wird implementiert');
+  const handleDownloadInvoicePDF = async (invoice) => {
+    try {
+      // Load complete customer data including billing address
+      const { data: customerData, error: customerError } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('id', invoice.customer_id)
+        .single();
+
+      if (customerError) throw customerError;
+
+      // Load invoice items for this invoice
+      const { data: invoiceItems, error: itemsError } = await supabase
+        .from('invoice_items')
+        .select(`
+          *,
+          repair_order:repair_orders(
+            *,
+            customers(*)
+          )
+        `)
+        .eq('invoice_id', invoice.id)
+        .order('position');
+
+      if (itemsError) throw itemsError;
+
+      // Prepare invoice data for PDF
+      const invoiceData = {
+        invoiceNumber: invoice.invoice_number,
+        invoiceDate: invoice.invoice_date,
+        periodStart: invoice.period_start,
+        periodEnd: invoice.period_end,
+        customer: customerData,
+        manualItems: invoiceItems.filter(item => !item.repair_order).map(item => ({
+          description: item.description,
+          amount: item.repair_amount
+        }))
+      };
+
+      // Prepare selected orders for PDF
+      const selectedOrdersForPDF = invoiceItems
+        .filter(item => item.repair_order)
+        .map(item => ({
+          ...item.repair_order,
+          nettopreis: item.repair_amount,
+          repair_amount: item.repair_amount,
+          porto: item.porto,
+          werkstattausgang: item.date_performed,
+          kommission: item.kommission,
+          freigabe: item.repair_order.freigabe,
+          kv_repair: item.repair_order.kv_repair,
+          bottom: item.repair_order.kulanz
+        }));
+
+      // Generate PDF
+      const { generateInvoicePDF } = await import('./invoicePdfExport.js');
+      generateInvoicePDF(invoiceData, selectedOrdersForPDF);
+
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Fehler beim Generieren der PDF: ' + error.message);
+    }
   };
 
   const handleEditInvoice = (invoiceId) => {
