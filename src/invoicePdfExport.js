@@ -33,7 +33,7 @@ const PDF_LAYOUT = {
   INVOICE_INFO_TOP: 100,
   INVOICE_INFO_HEIGHT: 25,
   INVOICE_NUMBER_LEFT: 15,
-  INVOICE_DATE_LEFT: 180,
+  INVOICE_DATE_LEFT: 195, // Aligned with right edge of table
   PERIOD_TEXT_TOP: 125,
   
   // Table section
@@ -54,9 +54,9 @@ const PDF_LAYOUT = {
   COL_HINWEIS_WIDTH: 35,
   COL_REPKOSTEN_LEFT: 140,
   COL_REPKOSTEN_WIDTH: 20,
-  COL_PORTO_LEFT: 160,
+  COL_PORTO_LEFT: 163,
   COL_PORTO_WIDTH: 20,
-  COL_GESAMT_LEFT: 170,
+  COL_GESAMT_LEFT: 176,
   COL_GESAMT_WIDTH: 25,
   
   // Calculations section (Netto, MwSt, Endbetrag)
@@ -90,7 +90,7 @@ const needsPageBreak = (currentY) => {
 };
 
 // Render header (logo + company address)
-const renderHeader = (doc) => {
+const renderHeader = (doc, customer = null) => {
   const { HEADER_TOP, LOGO_LEFT, LOGO_WIDTH, LOGO_HEIGHT, COMPANY_ADDRESS_LEFT, COMPANY_ADDRESS_TOP } = PDF_LAYOUT;
   
   // Company logo (using actual logo from CDN)
@@ -107,6 +107,11 @@ const renderHeader = (doc) => {
   doc.text('90443 Nürnberg', COMPANY_ADDRESS_LEFT, COMPANY_ADDRESS_TOP + 12, { align: 'right' });
   doc.text('Tel.: 0911/54 04 944', COMPANY_ADDRESS_LEFT, COMPANY_ADDRESS_TOP + 16, { align: 'right' });
   doc.text('Fax: 0911/54 04 946', COMPANY_ADDRESS_LEFT, COMPANY_ADDRESS_TOP + 20, { align: 'right' });
+  
+  // Show USt-ID for Austrian customers
+  if (customer && customer.country === 'Österreich' && customer.ust_id) {
+    doc.text(`USt-ID-Nr.: ${customer.ust_id}`, COMPANY_ADDRESS_LEFT, COMPANY_ADDRESS_TOP + 24, { align: 'right' });
+  }
 };
 
 // Render shorter header for page 2+ (just logo, 2x smaller)
@@ -459,7 +464,7 @@ export const generateInvoicePDF = (invoiceData, selectedOrders) => {
     
     // Render header
     if (isFirstPage) {
-      renderHeader(doc);
+      renderHeader(doc, invoiceData.customer);
       renderCustomerAddress(doc, invoiceData.customer);
       renderInvoiceInfo(doc, invoiceData);
     } else {

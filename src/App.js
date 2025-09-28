@@ -300,7 +300,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
       contact_person: customer.contact_person || '',
       billing_street: customer.billing_street || '',
       billing_location: customer.billing_location || '',
-      billing_country: customer.billing_country === 'Österreich' ? 'AT' : 'DE'
+      billing_country: customer.billing_country === 'Österreich' ? 'AT' : 'DE',
+      ust_id: customer.ust_id || ''
     });
     setShowEditModal(true);
   };
@@ -323,19 +324,22 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
       }
 
       // Update current customer
+      const updateData = {
+        branch: editForm.branch,
+        company: editForm.company,
+        street: editForm.street,
+        location: editForm.location,
+        country: editForm.country === 'DE' ? 'Deutschland' : 'Österreich',
+        contact_person: editForm.contact_person,
+        billing_street: editForm.billing_street,
+        billing_location: editForm.billing_location,
+        billing_country: editForm.billing_country === 'DE' ? 'Deutschland' : 'Österreich',
+        ust_id: editForm.ust_id || null
+      };
+      
       const { data, error } = await supabase
         .from('customers')
-        .update({
-          branch: editForm.branch,
-          company: editForm.company,
-          street: editForm.street,
-          location: editForm.location,
-          country: editForm.country === 'DE' ? 'Deutschland' : 'Österreich',
-          contact_person: editForm.contact_person,
-          billing_street: editForm.billing_street,
-          billing_location: editForm.billing_location,
-          billing_country: editForm.billing_country === 'DE' ? 'Deutschland' : 'Österreich'
-        })
+        .update(updateData)
         .eq('id', editingCustomer.id);
       
       if (error) throw error;
@@ -369,7 +373,7 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
       
     } catch (error) {
       console.error('Error updating customer:', error);
-      alert('Fehler beim Aktualisieren des Akustikers');
+      alert('Fehler beim Aktualisieren des Akustikers: ' + error.message);
     }
   };
 
@@ -883,6 +887,30 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                 </div>
               </div>
               
+              {/* USt-ID Field for Austrian customers */}
+              {editForm.country === 'AT' && (
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+                    USt-ID-Nr. *
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.ust_id || ''}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, ust_id: e.target.value }))}
+                    placeholder="ATU12345678"
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              )}
+              
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
                 <button
                   type="button"
@@ -1201,6 +1229,30 @@ const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkus
               </select>
             </div>
           </div>
+          
+          {/* USt-ID Field for Austrian customers */}
+          {newAkustiker.country === 'AT' && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+                USt-ID-Nr. *
+              </label>
+              <input
+                type="text"
+                value={newAkustiker.ust_id}
+                onChange={(e) => setNewAkustiker(prev => ({ ...prev, ust_id: e.target.value }))}
+                placeholder="ATU12345678"
+                required
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+          )}
           
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
             <button
@@ -6193,7 +6245,8 @@ function AppContent() {
     contact_person: '',
     billing_street: '',
     billing_location: '',
-    billing_country: 'DE'
+    billing_country: 'DE',
+    ust_id: ''
   });
 
   // Edit Repair Order State
@@ -6460,19 +6513,22 @@ function AppContent() {
       }
       
       // Add to Supabase
+      const insertData = {
+        branch: newAkustiker.branch,
+        company: newAkustiker.company,
+        street: newAkustiker.street,
+        location: newAkustiker.location,
+        country: newAkustiker.country === 'DE' ? 'Deutschland' : 'Österreich',
+        contact_person: '',
+        billing_street: newAkustiker.billing_street,
+        billing_location: newAkustiker.billing_location,
+        billing_country: newAkustiker.billing_country === 'DE' ? 'Deutschland' : 'Österreich',
+        ust_id: newAkustiker.ust_id || null
+      };
+      
       const { data, error } = await supabase
         .from('customers')
-        .insert([{
-          branch: newAkustiker.branch,
-          company: newAkustiker.company,
-          street: newAkustiker.street,
-          location: newAkustiker.location,
-          country: newAkustiker.country === 'DE' ? 'Deutschland' : 'Österreich',
-          contact_person: '',
-          billing_street: newAkustiker.billing_street,
-          billing_location: newAkustiker.billing_location,
-          billing_country: newAkustiker.billing_country === 'DE' ? 'Deutschland' : 'Österreich'
-        }]);
+        .insert([insertData]);
       
       if (error) throw error;
       
@@ -6489,7 +6545,8 @@ function AppContent() {
         contact_person: '',
         billing_street: '',
         billing_location: '',
-        billing_country: 'DE'
+        billing_country: 'DE',
+        ust_id: ''
       });
       setShowAddAkustikerModal(false);
       
@@ -6497,7 +6554,7 @@ function AppContent() {
       
     } catch (error) {
       console.error('Error adding akustiker:', error);
-      alert('Fehler beim Anlegen des Akustikers');
+      alert('Fehler beim Anlegen des Akustikers: ' + error.message);
     }
   };
 
