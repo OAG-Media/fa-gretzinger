@@ -2641,9 +2641,20 @@ const ErstellteReperaturauftragePage = () => {
           
           <button
             onClick={() => {
-              // Navigate to invoice creation with selected orders
+              // Navigate to invoice creation with selected orders and date filter
               const selectedOrderIds = Array.from(selectedOrders);
-              window.location.href = `/rechnung-erstellen?orders=${selectedOrderIds.join(',')}`;
+              const params = new URLSearchParams();
+              params.set('orders', selectedOrderIds.join(','));
+              
+              // Add date filter if available
+              if (dateFrom) {
+                params.set('periodStart', dateFrom);
+              }
+              if (dateTo) {
+                params.set('periodEnd', dateTo);
+              }
+              
+              window.location.href = `/rechnung-erstellen?${params.toString()}`;
             }}
             style={{
               padding: '0.75rem 1.5rem',
@@ -3663,12 +3674,24 @@ const RechnungErstellenPage = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const orderIds = urlParams.get('orders');
     
+    // Get period parameters from URL
+    const periodStart = urlParams.get('periodStart');
+    const periodEnd = urlParams.get('periodEnd');
+    
     if (orderIds) {
       const ids = orderIds.split(',').map(id => id.trim());
       setSelectedOrderIds(ids);
       loadSelectedOrders(ids);
       // Load next invoice number
       loadNextInvoiceNumber();
+      
+      // Set period fields if provided
+      if (periodStart) {
+        setPeriodStart(periodStart);
+      }
+      if (periodEnd) {
+        setPeriodEnd(periodEnd);
+      }
     } else {
       // No orders selected, redirect back
       window.location.href = '/erstellte-reperaturauftrage';
@@ -3697,7 +3720,8 @@ const RechnungErstellenPage = () => {
             contact_person,
             billing_street,
             billing_location,
-            billing_country
+            billing_country,
+            ust_id
           )
         `)
         .in('id', orderIds);

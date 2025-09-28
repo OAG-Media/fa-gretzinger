@@ -62,7 +62,7 @@ const PDF_LAYOUT = {
   // Calculations section (Netto, MwSt, Endbetrag)
   CALC_SECTION_MARGIN_TOP: 10,
   CALC_BOX_LEFT: 140,
-  CALC_BOX_WIDTH: 45,
+  CALC_BOX_WIDTH: 55, // Extended to align with table corner (195 - 140 = 55)
   CALC_BOX_HEIGHT: 20,
   
   // Footer section
@@ -110,7 +110,7 @@ const renderHeader = (doc, customer = null) => {
   
   // Show USt-ID for Austrian customers
   if (customer && customer.country === 'Österreich' && customer.ust_id) {
-    doc.text(`USt-ID-Nr.: ${customer.ust_id}`, COMPANY_ADDRESS_LEFT, COMPANY_ADDRESS_TOP + 24, { align: 'right' });
+    doc.text(`USt-ID-Nr.: ${customer.ust_id}`, COMPANY_ADDRESS_LEFT, COMPANY_ADDRESS_TOP + 44, { align: 'right' });
   }
 };
 
