@@ -172,9 +172,15 @@ const renderCustomerAddress = (doc, customer) => {
     currentY += 4;
   }
   
-  const locationLine = `${location || ''} ${country || ''}`.trim();
-  if (locationLine) {
-    doc.text(locationLine, CUSTOMER_ADDRESS_LEFT, currentY);
+  // City/location on its own line
+  if (location) {
+    doc.text(location, CUSTOMER_ADDRESS_LEFT, currentY);
+    currentY += 4;
+  }
+  
+  // Country on separate line below
+  if (country) {
+    doc.text(country, CUSTOMER_ADDRESS_LEFT, currentY);
   }
 };
 
