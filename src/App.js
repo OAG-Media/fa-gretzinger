@@ -1482,10 +1482,10 @@ const ErstellteReperaturauftragePage = () => {
       // Invoice status filter (show only unused)
       const matchesInvoiceStatusFilter = !showOnlyUnused || !order.invoice_status;
 
-      // Werkstattausgang filter - exclude orders without Werkstattausgang when any filter is active
-      const hasActiveFilters = searchTerm || dateFrom || dateTo || selectedCompany || showOnlyUnused;
+      // Werkstattausgang filter - only require Werkstattausgang for date/firma filters, not for search
+      const hasDateOrCompanyFilters = dateFrom || dateTo || selectedCompany || showOnlyUnused;
       const hasWerkstattausgang = order.werkstattausgang && order.werkstattausgang.trim() !== '';
-      const matchesWerkstattausgangFilter = !hasActiveFilters || hasWerkstattausgang;
+      const matchesWerkstattausgangFilter = !hasDateOrCompanyFilters || hasWerkstattausgang;
 
       return matchesSearch && matchesDateFilter && matchesCompanyFilter && matchesInvoiceStatusFilter && matchesWerkstattausgangFilter;
     })
