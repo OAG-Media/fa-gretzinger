@@ -5458,6 +5458,11 @@ const RechnungBearbeitenPage = () => {
     setManualItems(prev => prev.filter(item => item.id !== itemId));
   };
 
+  // Remove repair order from invoice
+  const handleRemoveRepairOrderFromInvoice = (repairOrderId) => {
+    setInvoiceItems(prev => prev.filter(item => item.repair_order_id !== repairOrderId));
+  };
+
   if (loading) {
     return (
       <div style={{ 
@@ -5840,7 +5845,7 @@ const RechnungBearbeitenPage = () => {
                 </td>
                 <td style={{ padding: '12px', textAlign: 'center' }}>
                   <button
-                    onClick={() => handleRemoveRepairOrder(item.repair_order_id)}
+                    onClick={() => handleRemoveRepairOrderFromInvoice(item.repair_order_id)}
                     style={{
                       background: '#dc3545',
                       color: 'white',
