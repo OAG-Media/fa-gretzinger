@@ -5,6 +5,53 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { supabase } from './supabaseClient';
 
+// Custom hook for handling unsaved changes warnings
+const useUnsavedChangesWarning = (hasUnsavedChanges, message = 'Sind Sie sich sicher, dass die Seite verlassen wollen? Ungespeicherte Änderungen gehen eventuell verloren') => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const shouldWarn = hasUnsavedChanges && location.pathname === '/reperaturauftrag';
+
+  // Handle browser beforeunload
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (shouldWarn) {
+        e.preventDefault();
+        e.returnValue = message;
+        return message;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [shouldWarn, message]);
+
+  // Handle React Router navigation (breadcrumbs, etc.)
+  useEffect(() => {
+    const handleNavigation = (e) => {
+      if (shouldWarn) {
+        e.preventDefault();
+        const confirmed = window.confirm(message);
+        if (confirmed) {
+          // Allow navigation
+          navigate(e.target.href || e.target.getAttribute('to'));
+        }
+      }
+    };
+
+    // Add click listeners to navigation elements
+    const navigationElements = document.querySelectorAll('a[href], button[onclick*="navigate"], button[onclick*="window.location"]');
+    navigationElements.forEach(element => {
+      element.addEventListener('click', handleNavigation);
+    });
+
+    return () => {
+      navigationElements.forEach(element => {
+        element.removeEventListener('click', handleNavigation);
+      });
+    };
+  }, [shouldWarn, message, navigate]);
+};
+
 const COUNTRY_OPTIONS = [
   { key: 'DE', label: 'Deutschland', arbeitszeit: 22.0, porto: 5.95 },
   { key: 'AT', label: 'Österreich', arbeitszeit: 26.0, porto: 9.0 },
@@ -235,7 +282,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
     contact_person: '',
     billing_street: '',
     billing_location: '',
-    billing_country: 'DE'
+    billing_country: 'DE',
+    ust_id: ''
   });
   
   // Filter and sort customers
@@ -885,20 +933,17 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                     <option value="AT">Österreich</option>
                   </select>
                 </div>
-              </div>
-              
-              {/* USt-ID Field for Austrian customers */}
-              {editForm.country === 'AT' && (
-                <div style={{ marginBottom: '1.5rem' }}>
+
+                <div style={{ marginBottom: '1rem' }}>
                   <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
-                    USt-ID-Nr. *
+                    USt-ID-Nr{editForm.country === 'AT' ? ' *' : ''}
                   </label>
                   <input
                     type="text"
                     value={editForm.ust_id || ''}
                     onChange={(e) => setEditForm(prev => ({ ...prev, ust_id: e.target.value }))}
-                    placeholder="ATU12345678"
-                    required
+                    placeholder={editForm.country === 'AT' ? 'ATU12345678' : 'z. B. DE285394860'}
+                    required={editForm.country === 'AT'}
                     style={{
                       width: '100%',
                       padding: '10px 12px',
@@ -909,7 +954,7 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                     }}
                   />
                 </div>
-              )}
+              </div>
               
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
                 <button
@@ -1228,20 +1273,17 @@ const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkus
                 <option value="AT">Österreich</option>
               </select>
             </div>
-          </div>
-          
-          {/* USt-ID Field for Austrian customers */}
-          {newAkustiker.country === 'AT' && (
-            <div style={{ marginBottom: '1.5rem' }}>
+
+            <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
-                USt-ID-Nr. *
+                USt-ID-Nr{newAkustiker.country === 'AT' ? ' *' : ''}
               </label>
               <input
                 type="text"
                 value={newAkustiker.ust_id}
                 onChange={(e) => setNewAkustiker(prev => ({ ...prev, ust_id: e.target.value }))}
-                placeholder="ATU12345678"
-                required
+                placeholder={newAkustiker.country === 'AT' ? 'ATU12345678' : 'z. B. DE285394860'}
+                required={newAkustiker.country === 'AT'}
                 style={{
                   width: '100%',
                   padding: '10px 12px',
@@ -1252,7 +1294,7 @@ const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkus
                 }}
               />
             </div>
-          )}
+          </div>
           
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
             <button
@@ -3608,6 +3650,11 @@ const RechnungErstellenPage = () => {
   // Sorting state
   const [sortBy, setSortBy] = useState('datum'); // 'datum' or 'filiale'
   const [sortOrder, setSortOrder] = useState('asc'); // 'asc' or 'desc'
+  
+  // Auto-save state
+  const [autoSaveTimeout, setAutoSaveTimeout] = useState(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
 
   // Get next invoice number
   const getNextInvoiceNumber = async () => {
@@ -3702,6 +3749,138 @@ const RechnungErstellenPage = () => {
     const nextNumber = await getNextInvoiceNumber();
     setInvoiceNumber(nextNumber);
   };
+
+  // Auto-save function (without redirect)
+  const handleAutoSave = async () => {
+    if (isAutoSaving || selectedOrders.length === 0) return;
+    
+    try {
+      setIsAutoSaving(true);
+      
+      // Calculate totals
+      const repairTotal = selectedOrders.reduce((sum, order) => sum + (order.nettopreis || 0), 0);
+      const portoTotal = selectedOrders.reduce((sum, order) => sum + (order.porto || 0), 0);
+      const manualTotal = manualItems.reduce((sum, item) => {
+        const amount = parseFloat(item.amount);
+        return sum + (item.type === 'positive' ? amount : -amount);
+      }, 0);
+      
+      const subtotal = repairTotal + portoTotal + manualTotal;
+      const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0 : 0.19;
+      const taxAmount = subtotal * taxRate;
+      const totalAmount = subtotal + taxAmount;
+      
+      // Create invoice data
+      const invoiceData = {
+        invoice_number: invoiceNumber,
+        invoice_date: invoiceDate,
+        period_start: periodStart,
+        period_end: periodEnd,
+        customer_id: selectedOrders[0]?.customers?.id,
+        subtotal: subtotal,
+        tax_amount: taxAmount,
+        tax_rate: taxRate,
+        total_amount: totalAmount,
+        status: 'draft',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      // Save invoice to database
+      const { data: invoice, error: invoiceError } = await supabase
+        .from('invoices')
+        .insert([invoiceData])
+        .select()
+        .single();
+
+      if (invoiceError) throw invoiceError;
+
+      // Create invoice items for repair orders
+      const invoiceItems = selectedOrders.map((order, index) => ({
+        invoice_id: invoice.id,
+        repair_order_id: order.id,
+        position: index + 1,
+        date_performed: order.werkstattausgang,
+        kommission: order.kommission,
+        description: getRepairDescription(order),
+        filiale: order.customers?.branch || '',
+        repair_amount: parseFloat(order.nettopreis || 0),
+        porto: parseFloat(order.porto || 0),
+        line_total: parseFloat((order.nettopreis || 0) + (order.porto || 0)),
+        created_at: new Date().toISOString()
+      }));
+
+      // Create manual items
+      const manualItemsData = manualItems.map((item, index) => ({
+        invoice_id: invoice.id,
+        repair_order_id: null,
+        position: selectedOrders.length + index + 1,
+        date_performed: null,
+        kommission: null,
+        description: item.description,
+        filiale: null,
+        repair_amount: 0.0,
+        porto: 0.0,
+        line_total: parseFloat(item.type === 'positive' ? item.amount : `-${item.amount}`),
+        created_at: new Date().toISOString()
+      }));
+
+      // Save invoice items
+      const allItems = [...invoiceItems, ...manualItemsData];
+      if (allItems.length > 0) {
+        const { error: itemsError } = await supabase
+          .from('invoice_items')
+          .insert(allItems);
+
+        if (itemsError) throw itemsError;
+      }
+
+      // Update repair orders status
+      const { error: statusError } = await supabase
+        .from('repair_orders')
+        .update({ invoice_status: 'draft' })
+        .in('id', selectedOrders.map(order => order.id));
+
+      if (statusError) throw statusError;
+      
+      setHasUnsavedChanges(false);
+      console.log('Auto-save completed successfully');
+      
+    } catch (error) {
+      console.error('Error during auto-save:', error);
+    } finally {
+      setIsAutoSaving(false);
+    }
+  };
+
+  // Set up auto-save timer
+  useEffect(() => {
+    if (hasUnsavedChanges && selectedOrders.length > 0) {
+      // Clear existing timeout
+      if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+      }
+      
+      // Set new timeout for 30 seconds
+      const timeout = setTimeout(() => {
+        handleAutoSave();
+      }, 30000);
+      
+      setAutoSaveTimeout(timeout);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [hasUnsavedChanges, selectedOrders]);
+
+  // Track form changes
+  useEffect(() => {
+    setHasUnsavedChanges(true);
+  }, [
+    invoiceNumber, invoiceDate, periodStart, periodEnd, selectedOrders, manualItems
+  ]);
+
+  // Browser warning for unsaved changes
+  useUnsavedChangesWarning(hasUnsavedChanges);
 
   const loadSelectedOrders = async (orderIds) => {
     try {
@@ -4074,6 +4253,9 @@ const RechnungErstellenPage = () => {
 
       alert('Rechnung erfolgreich gespeichert!');
       
+      // Clear unsaved changes flag
+      setHasUnsavedChanges(false);
+      
       // Redirect to invoice list after successful save
       setTimeout(() => {
         navigate('/erstellte-rechnungen');
@@ -4191,6 +4373,10 @@ const RechnungErstellenPage = () => {
       // TODO: Add PDF export here
       
       alert('Rechnung erfolgreich erstellt und gesendet!');
+      
+      // Clear unsaved changes flag
+      setHasUnsavedChanges(false);
+      
       // Redirect to invoice list
       window.location.href = '/erstellte-rechnungen';
       
@@ -4482,7 +4668,12 @@ const RechnungErstellenPage = () => {
                         <div>{selectedCustomer.billing_location || selectedCustomer.location}</div>
                       )}
                       {(selectedCustomer.billing_country || selectedCustomer.country) && (
-                        <div>{selectedCustomer.billing_country || selectedCustomer.country}</div>
+                        <div style={{ marginBottom: selectedCustomer.ust_id ? '4px' : 0 }}>
+                          {selectedCustomer.billing_country || selectedCustomer.country}
+                        </div>
+                      )}
+                      {selectedCustomer.ust_id && (
+                        <div>USt-ID-Nr.: {selectedCustomer.ust_id}</div>
                       )}
                     </div>
                   </div>
@@ -4906,8 +5097,18 @@ const RechnungErstellenPage = () => {
                 e.target.style.transform = 'scale(1)';
               }}
             >
-              Speichern als Entwurf
+              {isAutoSaving ? 'Auto-Speichern...' : 'Speichern als Entwurf'}
             </button>
+            {hasUnsavedChanges && !isAutoSaving && (
+              <span style={{ 
+                fontSize: '12px', 
+                color: '#ffc107', 
+                marginLeft: '8px',
+                fontWeight: '500'
+              }}>
+                • Ungespeicherte Änderungen
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -5077,6 +5278,11 @@ const RechnungBearbeitenPage = () => {
   // Sorting state
   const [sortBy, setSortBy] = useState('datum'); // 'datum' or 'filiale'
   const [sortOrder, setSortOrder] = useState('asc'); // 'asc' or 'desc'
+  
+  // Auto-save state
+  const [autoSaveTimeout, setAutoSaveTimeout] = useState(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
 
   useEffect(() => {
     loadInvoice();
@@ -5102,7 +5308,8 @@ const RechnungBearbeitenPage = () => {
             country,
             billing_street,
             billing_location,
-            billing_country
+            billing_country,
+            ust_id
           )
         `)
         .eq('id', id)
@@ -5169,6 +5376,142 @@ const RechnungBearbeitenPage = () => {
       setLoading(false);
     }
   };
+
+  // Auto-save function (without redirect)
+  const handleAutoSave = async () => {
+    if (isAutoSaving || !invoice) return;
+    
+    try {
+      setIsAutoSaving(true);
+      
+      // Calculate totals
+      const allOrders = [...invoiceItems, ...selectedOrders];
+      const repairTotal = allOrders.reduce((sum, order) => sum + (order.nettopreis || order.repair_amount || 0), 0);
+      const portoTotal = allOrders.reduce((sum, order) => sum + (order.porto || 0), 0);
+      const manualTotal = manualItems.reduce((sum, item) => {
+        const amount = parseFloat(item.amount);
+        return sum + (item.type === 'positive' ? amount : -amount);
+      }, 0);
+      
+      const subtotal = repairTotal + portoTotal + manualTotal;
+      const taxRate = invoice.customer.country === 'Österreich' ? 0 : 0.19;
+      const taxAmount = subtotal * taxRate;
+      const totalAmount = subtotal + taxAmount;
+      
+      // Update invoice
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update({
+          invoice_number: invoiceNumber,
+          invoice_date: invoiceDate,
+          period_start: periodStart,
+          period_end: periodEnd,
+          subtotal: subtotal,
+          tax_amount: taxAmount,
+          tax_rate: taxRate,
+          total_amount: totalAmount,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      if (updateError) throw updateError;
+
+      // Delete existing invoice items (we'll recreate them)
+      const { error: deleteError } = await supabase
+        .from('invoice_items')
+        .delete()
+        .eq('invoice_id', id);
+
+      if (deleteError) throw deleteError;
+
+      // Create new invoice items for repair orders
+      const repairOrderItems = allOrders.map((order, index) => ({
+        invoice_id: id,
+        repair_order_id: order.repair_order_id || order.id,
+        position: index + 1,
+        date_performed: order.werkstattausgang || order.date_performed,
+        kommission: order.kommission,
+        description: getRepairDescription(order),
+        filiale: order.customers?.branch || order.filiale || '',
+        repair_amount: parseFloat(order.nettopreis || order.repair_amount || 0),
+        porto: parseFloat(order.porto || 0),
+        line_total: parseFloat((order.nettopreis || order.repair_amount || 0) + (order.porto || 0)),
+        created_at: new Date().toISOString()
+      }));
+
+      // Create manual items
+      const manualItemsData = manualItems.map((item, index) => ({
+        invoice_id: id,
+        repair_order_id: null,
+        position: allOrders.length + index + 1,
+        date_performed: null,
+        kommission: null,
+        description: item.description,
+        filiale: null,
+        repair_amount: 0.0,
+        porto: 0.0,
+        line_total: parseFloat(item.type === 'positive' ? item.amount : `-${item.amount}`),
+        created_at: new Date().toISOString()
+      }));
+
+      // Insert all items
+      const allItems = [...repairOrderItems, ...manualItemsData];
+      if (allItems.length > 0) {
+        const { error: itemsError } = await supabase
+          .from('invoice_items')
+          .insert(allItems);
+
+        if (itemsError) throw itemsError;
+      }
+
+      // Update repair orders status for newly added orders
+      if (selectedOrders.length > 0) {
+        const { error: statusError } = await supabase
+          .from('repair_orders')
+          .update({ invoice_status: 'draft' })
+          .in('id', selectedOrders.map(order => order.id));
+
+        if (statusError) throw statusError;
+      }
+      
+      setHasUnsavedChanges(false);
+      console.log('Auto-save completed successfully');
+      
+    } catch (error) {
+      console.error('Error during auto-save:', error);
+    } finally {
+      setIsAutoSaving(false);
+    }
+  };
+
+  // Set up auto-save timer
+  useEffect(() => {
+    if (hasUnsavedChanges && invoice) {
+      // Clear existing timeout
+      if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+      }
+      
+      // Set new timeout for 30 seconds
+      const timeout = setTimeout(() => {
+        handleAutoSave();
+      }, 30000);
+      
+      setAutoSaveTimeout(timeout);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [hasUnsavedChanges, invoice]);
+
+  // Track form changes
+  useEffect(() => {
+    setHasUnsavedChanges(true);
+  }, [
+    invoiceNumber, invoiceDate, periodStart, periodEnd, invoiceItems, selectedOrders, manualItems
+  ]);
+
+  // Browser warning for unsaved changes
+  useUnsavedChangesWarning(hasUnsavedChanges);
 
   const handleSave = async () => {
     try {
@@ -5265,6 +5608,10 @@ const RechnungBearbeitenPage = () => {
       }
       
       alert('Rechnung erfolgreich gespeichert!');
+      
+      // Clear unsaved changes flag
+      setHasUnsavedChanges(false);
+      
       navigate('/erstellte-rechnungen');
       
     } catch (error) {
@@ -5646,9 +5993,14 @@ const RechnungBearbeitenPage = () => {
           <div style={{ marginBottom: '4px' }}>
             {invoice.customer.billing_street || invoice.customer.street}
           </div>
-          <div>
+          <div style={{ marginBottom: invoice.customer.ust_id ? '4px' : 0 }}>
             {invoice.customer.billing_location || invoice.customer.location}, {invoice.customer.billing_country || invoice.customer.country}
           </div>
+          {invoice.customer.ust_id && (
+            <div style={{ color: '#333' }}>
+              USt-ID-Nr.: {invoice.customer.ust_id}
+            </div>
+          )}
         </div>
       </div>
 
@@ -6188,8 +6540,18 @@ const RechnungBearbeitenPage = () => {
             }
           }}
         >
-          {saving ? 'Speichern...' : 'Änderungen speichern'}
+          {saving ? 'Speichern...' : (isAutoSaving ? 'Auto-Speichern...' : 'Änderungen speichern')}
         </button>
+        {hasUnsavedChanges && !isAutoSaving && !saving && (
+          <span style={{ 
+            fontSize: '12px', 
+            color: '#ffc107', 
+            marginLeft: '8px',
+            fontWeight: '500'
+          }}>
+            • Ungespeicherte Änderungen
+          </span>
+        )}
       </div>
     </div>
   );
@@ -6587,6 +6949,136 @@ function AppContent() {
     }
   };
 
+  // Auto-save state
+  const [autoSaveTimeout, setAutoSaveTimeout] = useState(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+
+  // Auto-save function (without redirect)
+  const handleAutoSave = async () => {
+    if (!selectedCustomer || isAutoSaving) return;
+    
+    try {
+      setIsAutoSaving(true);
+      
+      // Build JSON payloads matching DB columns
+      const fehlerPayload = {
+        ...fehler,
+        manual1: { checked: !!manualFehlerChecked1, text: manualFehler1 || '' },
+        manual2: { checked: !!manualFehlerChecked2, text: manualFehler2 || '' },
+        manual3: { checked: !!manualFehlerChecked3, text: manualFehler3 || '' }
+      };
+
+      const arbeitenPayload = ARBEITEN.reduce((acc, a) => {
+        const checked = !!arbeiten[a.key];
+        const input = arbeitenManual[a.key] || '';
+        acc[a.key] = { checked, input };
+        return acc;
+      }, {});
+
+      // Prepare repair order data (align to Supabase table columns)
+      const repairOrderData = {
+        customer_id: selectedCustomer.id,
+        kommission: kommission || null,
+        hersteller: hersteller || null,
+        geraetetyp: geraetetyp || null,
+        seriennummer: seriennummer || null,
+        werkstatteingang: werkstatteingang || null,
+        zubehoer: zubehoer || null,
+        kv_date: kvDate || null,
+        per_method: perMethod || null,
+        werkstatt_notiz: werkstattNotiz || null,
+        werkstatt_date: werkstattDate || null,
+        werkstattausgang: werkstattausgang || null,
+        gesendet_an_werkstatt: gesaendetAnWerkstatt || null,
+        notes: notes || null,
+        fehlerangaben: fehlerPayload,
+        ['ausgeführte_arbeiten']: arbeitenPayload,
+        kostenvoranschlag_checked: kostenvoranschlagChecked || false,
+        kostenvoranschlag_amount: kostenvoranschlagAmount || null,
+        nettopreis: Number.isFinite(net) ? parseFloat(net.toFixed(2)) : null,
+        porto: Number.isFinite(porto) ? parseFloat(porto.toFixed(2)) : null,
+        freigabe: freigabe || 'Keine angabe',
+        kv_method: kvMethod || 'keine Angabe',
+        kv_date_freigabe: kvFreigabeDate || null,
+        kulanz: kulanz || false,
+        reklamation_date: reklamationDate || null,
+        garantie_date: garantieDate || null,
+        kulanz_porto: kulanzPorto || 'ja',
+        manual_porto: manualPorto || '',
+        ido_hdo: idoHdo || 'IDO',
+        austria_arbeitszeit: austriaArbeitszeit || '26',
+        country: country || 'DE'
+      };
+
+      if (isEditing && editingOrderId) {
+        // Update existing repair order
+        const { error } = await supabase
+          .from('repair_orders')
+          .update({
+            ...repairOrderData,
+            version: (editingOrderId.version || 0) + 1,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingOrderId);
+
+        if (error) throw error;
+      } else {
+        // Create new repair order
+        const { error } = await supabase
+          .from('repair_orders')
+          .insert([repairOrderData]);
+
+        if (error) throw error;
+      }
+      
+      setHasUnsavedChanges(false);
+      console.log('Auto-save completed successfully');
+      
+    } catch (error) {
+      console.error('Error during auto-save:', error);
+    } finally {
+      setIsAutoSaving(false);
+    }
+  };
+
+  // Set up auto-save timer
+  useEffect(() => {
+    if (hasUnsavedChanges && selectedCustomer) {
+      // Clear existing timeout
+      if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+      }
+      
+      // Set new timeout for 30 seconds
+      const timeout = setTimeout(() => {
+        handleAutoSave();
+      }, 30000);
+      
+      setAutoSaveTimeout(timeout);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [hasUnsavedChanges, selectedCustomer]);
+
+  // Track form changes
+  useEffect(() => {
+    setHasUnsavedChanges(true);
+  }, [
+    selectedCustomer, kommission, hersteller, geraetetyp, seriennummer, 
+    werkstatteingang, zubehoer, kvDate, perMethod, werkstattNotiz, 
+    werkstattDate, werkstattausgang, gesaendetAnWerkstatt, notes, 
+    fehler, manualFehlerChecked1, manualFehler1, manualFehlerChecked2, 
+    manualFehler2, manualFehlerChecked3, manualFehler3, arbeiten, 
+    arbeitenManual, kostenvoranschlagChecked, kostenvoranschlagAmount, 
+    freigabe, kvMethod, kvFreigabeDate, kulanz, 
+    reklamationDate, garantieDate, kulanzPorto, manualPorto, 
+    idoHdo, austriaArbeitszeit, country
+  ]);
+
+  // Browser warning for unsaved changes
+  useUnsavedChangesWarning(hasUnsavedChanges);
+
   // Save Repair Order handler
   const handleSaveRepairOrder = async () => {
     try {
@@ -6686,6 +7178,9 @@ function AppContent() {
         setSuccessMessage('Reparaturauftrag erfolgreich gespeichert!');
         setShowSuccessModal(true);
       }
+      
+      // Clear unsaved changes flag
+      setHasUnsavedChanges(false);
       
       // Reset form after successful save/update
       handleReset();
@@ -8761,8 +9256,18 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                 opacity: selectedCustomer ? 1 : 0.6
               }}
             >
-              Speichern
+              {isAutoSaving ? 'Auto-Speichern...' : 'Speichern'}
             </button>
+            {hasUnsavedChanges && !isAutoSaving && (
+              <span style={{ 
+                fontSize: '12px', 
+                color: '#ffc107', 
+                marginLeft: '8px',
+                fontWeight: '500'
+              }}>
+                • Ungespeicherte Änderungen
+              </span>
+            )}
           <button
             type="button"
             onClick={handlePdfExport}

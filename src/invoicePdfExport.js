@@ -90,7 +90,7 @@ const needsPageBreak = (currentY) => {
 };
 
 // Render header (logo + company address)
-const renderHeader = (doc, customer = null) => {
+const renderHeader = (doc) => {
   const { HEADER_TOP, LOGO_LEFT, LOGO_WIDTH, LOGO_HEIGHT, COMPANY_ADDRESS_LEFT, COMPANY_ADDRESS_TOP } = PDF_LAYOUT;
   
   // Company logo (using actual logo from CDN)
@@ -107,11 +107,6 @@ const renderHeader = (doc, customer = null) => {
   doc.text('90443 Nürnberg', COMPANY_ADDRESS_LEFT, COMPANY_ADDRESS_TOP + 12, { align: 'right' });
   doc.text('Tel.: 0911/54 04 944', COMPANY_ADDRESS_LEFT, COMPANY_ADDRESS_TOP + 16, { align: 'right' });
   doc.text('Fax: 0911/54 04 946', COMPANY_ADDRESS_LEFT, COMPANY_ADDRESS_TOP + 20, { align: 'right' });
-  
-  // Show USt-ID for Austrian customers
-  if (customer && customer.country === 'Österreich' && customer.ust_id) {
-    doc.text(`USt-ID-Nr.: ${customer.ust_id}`, COMPANY_ADDRESS_LEFT, COMPANY_ADDRESS_TOP + 44, { align: 'right' });
-  }
 };
 
 // Render shorter header for page 2+ (just logo, 2x smaller)
@@ -181,6 +176,11 @@ const renderCustomerAddress = (doc, customer) => {
   // Country on separate line below
   if (country) {
     doc.text(country, CUSTOMER_ADDRESS_LEFT, currentY);
+    currentY += 4;
+  }
+
+  if (customer.ust_id) {
+    doc.text(`USt-ID-Nr.: ${customer.ust_id}`, CUSTOMER_ADDRESS_LEFT, currentY);
   }
 };
 
@@ -470,7 +470,7 @@ export const generateInvoicePDF = (invoiceData, selectedOrders) => {
     
     // Render header
     if (isFirstPage) {
-      renderHeader(doc, invoiceData.customer);
+      renderHeader(doc);
       renderCustomerAddress(doc, invoiceData.customer);
       renderInvoiceInfo(doc, invoiceData);
     } else {
