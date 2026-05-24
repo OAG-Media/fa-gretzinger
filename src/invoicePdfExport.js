@@ -31,13 +31,14 @@ const PDF_LAYOUT = {
   
   // Invoice info section (Rechnung Nr., Datum, etc.) - moved above table
   INVOICE_INFO_TOP: 100,
-  INVOICE_INFO_HEIGHT: 25,
+  INVOICE_INFO_HEIGHT: 12.5, // vertical gap from "Rechnung Nr." to period text (was 25)
   INVOICE_NUMBER_LEFT: 15,
   INVOICE_DATE_LEFT: 195, // Aligned with right edge of table
-  PERIOD_TEXT_TOP: 125,
+  PERIOD_TEXT_TOP: 112.5, // INVOICE_INFO_TOP + INVOICE_INFO_HEIGHT
+  PERIOD_TEXT_TO_TABLE_GAP: 10,
   
   // Table section
-  TABLE_START_Y: 135,
+  TABLE_START_Y: 122.5, // PERIOD_TEXT_TOP + PERIOD_TEXT_TO_TABLE_GAP
   TABLE_HEADER_HEIGHT: 8,
   TABLE_ROW_HEIGHT: 6,
   
@@ -179,11 +180,6 @@ const renderCustomerAddress = (doc, customer) => {
   // Country on separate line below
   if (country) {
     doc.text(country, CUSTOMER_ADDRESS_LEFT, currentY);
-    currentY += 4;
-  }
-
-  if (customer.ust_id) {
-    doc.text(`USt-ID-Nr.: ${customer.ust_id}`, CUSTOMER_ADDRESS_LEFT, currentY);
   }
 };
 
