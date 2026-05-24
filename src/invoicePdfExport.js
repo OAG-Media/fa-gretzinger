@@ -84,6 +84,8 @@ const PDF_LAYOUT = {
   COLOR_BORDER: '#cccccc'
 };
 
+const COMPANY_UST_ID = 'DE285394860';
+
 // Helper function to check if we need a page break
 const needsPageBreak = (currentY) => {
   return currentY > (PDF_LAYOUT.PAGE_HEIGHT - PDF_LAYOUT.SECURE_ZONE_HEIGHT);
@@ -107,6 +109,7 @@ const renderHeader = (doc) => {
   doc.text('90443 Nürnberg', COMPANY_ADDRESS_LEFT, COMPANY_ADDRESS_TOP + 12, { align: 'right' });
   doc.text('Tel.: 0911/54 04 944', COMPANY_ADDRESS_LEFT, COMPANY_ADDRESS_TOP + 16, { align: 'right' });
   doc.text('Fax: 0911/54 04 946', COMPANY_ADDRESS_LEFT, COMPANY_ADDRESS_TOP + 20, { align: 'right' });
+  doc.text(`Ust.ID Nr. ${COMPANY_UST_ID}`, COMPANY_ADDRESS_LEFT, COMPANY_ADDRESS_TOP + 24, { align: 'right' });
 };
 
 // Render shorter header for page 2+ (just logo, 2x smaller)
