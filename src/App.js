@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, usePa
 import './App.css';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { supabase } from './supabaseClient';
+import { supabase, fetchAllPages } from './supabaseClient';
 
 // Custom hook for handling unsaved changes warnings
 const useUnsavedChangesWarning = (hasUnsavedChanges, message = 'Sind Sie sich sicher, dass die Seite verlassen wollen? Ungespeicherte Änderungen gehen eventuell verloren') => {
@@ -1380,28 +1380,29 @@ const ErstellteReperaturauftragePage = () => {
   const loadRepairOrders = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('repair_orders')
-        .select(`
-          *,
-          customers (
-            company,
-            branch,
-            street,
-            location,
-            country
-          ),
-          invoice_items!repair_order_id (
-            invoice:invoices (
-              invoice_number
+      const data = await fetchAllPages(() =>
+        supabase
+          .from('repair_orders')
+          .select(`
+            *,
+            customers (
+              company,
+              branch,
+              street,
+              location,
+              country
+            ),
+            invoice_items!repair_order_id (
+              invoice:invoices (
+                invoice_number
+              )
             )
-          )
-        `)
-        .eq('archived', showArchived)
-        .order('created_at', { ascending: false });
+          `)
+          .eq('archived', showArchived)
+          .order('created_at', { ascending: false })
+      );
 
-      if (error) throw error;
-      setRepairOrders(data || []);
+      setRepairOrders(data);
     } catch (error) {
       console.error('Error loading repair orders:', error);
       alert('Fehler beim Laden der Reparaturaufträge');
