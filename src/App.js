@@ -6954,10 +6954,19 @@ function AppContent() {
   const [autoSaveTimeout, setAutoSaveTimeout] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const [isSavingRepairOrder, setIsSavingRepairOrder] = useState(false);
 
-  // Auto-save function (without redirect)
+  const clearRepairOrderAutoSaveTimer = () => {
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+      setAutoSaveTimeout(null);
+    }
+  };
+
+  // Auto-save: only update existing orders (never insert — that caused duplicate Reparaturaufträge)
   const handleAutoSave = async () => {
-    if (!selectedCustomer || isAutoSaving) return;
+    if (!selectedCustomer || isAutoSaving || isSavingRepairOrder) return;
+    if (!isEditing || !editingOrderId) return;
     
     try {
       setIsAutoSaving(true);
@@ -7012,26 +7021,22 @@ function AppContent() {
         country: country || 'DE'
       };
 
-      if (isEditing && editingOrderId) {
-        // Update existing repair order
-        const { error } = await supabase
-          .from('repair_orders')
-          .update({
-            ...repairOrderData,
-            version: (editingOrderId.version || 0) + 1,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', editingOrderId);
+      const { data: currentOrder } = await supabase
+        .from('repair_orders')
+        .select('version')
+        .eq('id', editingOrderId)
+        .single();
 
-        if (error) throw error;
-      } else {
-        // Create new repair order
-        const { error } = await supabase
-          .from('repair_orders')
-          .insert([repairOrderData]);
+      const { error } = await supabase
+        .from('repair_orders')
+        .update({
+          ...repairOrderData,
+          version: (currentOrder?.version || 0) + 1,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingOrderId);
 
-        if (error) throw error;
-      }
+      if (error) throw error;
       
       setHasUnsavedChanges(false);
       console.log('Auto-save completed successfully');
@@ -7043,15 +7048,11 @@ function AppContent() {
     }
   };
 
-  // Set up auto-save timer
+  // Set up auto-save timer (edit mode only — new orders must use Speichern once)
   useEffect(() => {
-    if (hasUnsavedChanges && selectedCustomer) {
-      // Clear existing timeout
-      if (autoSaveTimeout) {
-        clearTimeout(autoSaveTimeout);
-      }
+    if (hasUnsavedChanges && selectedCustomer && isEditing && editingOrderId) {
+      clearRepairOrderAutoSaveTimer();
       
-      // Set new timeout for 30 seconds
       const timeout = setTimeout(() => {
         handleAutoSave();
       }, 30000);
@@ -7060,7 +7061,8 @@ function AppContent() {
       
       return () => clearTimeout(timeout);
     }
-  }, [hasUnsavedChanges, selectedCustomer]);
+    clearRepairOrderAutoSaveTimer();
+  }, [hasUnsavedChanges, selectedCustomer, isEditing, editingOrderId]);
 
   // Track form changes
   useEffect(() => {
@@ -7082,12 +7084,17 @@ function AppContent() {
 
   // Save Repair Order handler
   const handleSaveRepairOrder = async () => {
+    if (isSavingRepairOrder || isAutoSaving) return;
+
     try {
       // Validate that a customer is selected
       if (!selectedCustomer) {
         alert('Bitte wählen Sie zuerst einen Kunden aus.');
         return;
       }
+
+      clearRepairOrderAutoSaveTimer();
+      setIsSavingRepairOrder(true);
 
       // Build JSON payloads matching DB columns
       const fehlerPayload = {
@@ -7192,6 +7199,8 @@ function AppContent() {
     } catch (error) {
       console.error('Error saving repair order:', error);
       alert('Fehler beim Speichern des Reparaturauftrags');
+    } finally {
+      setIsSavingRepairOrder(false);
     }
   };
   
@@ -9245,21 +9254,21 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
             <button
               type="button"
               onClick={handleSaveRepairOrder}
-              disabled={!selectedCustomer}
+              disabled={!selectedCustomer || isSavingRepairOrder || isAutoSaving}
               style={{ 
                 padding: '8px 18px', 
                 fontSize: 15, 
-                background: selectedCustomer ? '#28a745' : '#6c757d', 
+                background: selectedCustomer && !isSavingRepairOrder && !isAutoSaving ? '#28a745' : '#6c757d', 
                 color: '#fff', 
                 border: 'none', 
                 borderRadius: 6, 
-                cursor: selectedCustomer ? 'pointer' : 'not-allowed',
-                opacity: selectedCustomer ? 1 : 0.6
+                cursor: selectedCustomer && !isSavingRepairOrder && !isAutoSaving ? 'pointer' : 'not-allowed',
+                opacity: selectedCustomer && !isSavingRepairOrder && !isAutoSaving ? 1 : 0.6
               }}
             >
-              {isAutoSaving ? 'Auto-Speichern...' : 'Speichern'}
+              {isSavingRepairOrder ? 'Speichern...' : isAutoSaving ? 'Auto-Speichern...' : 'Speichern'}
             </button>
-            {hasUnsavedChanges && !isAutoSaving && (
+            {hasUnsavedChanges && !isAutoSaving && !isSavingRepairOrder && (
               <span style={{ 
                 fontSize: '12px', 
                 color: '#ffc107', 
