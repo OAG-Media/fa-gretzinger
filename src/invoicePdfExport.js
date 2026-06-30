@@ -87,6 +87,31 @@ const PDF_LAYOUT = {
 
 const COMPANY_UST_ID = 'DE285394860';
 
+/** Netto-Betrag einer manuellen Position (Gutschrift = negativ). */
+export const getManualItemLineTotal = (item) => {
+  if (item == null) return 0;
+
+  if (item.line_total != null && item.line_total !== '') {
+    const lineTotal = parseFloat(String(item.line_total).replace(',', '.'));
+    if (!Number.isNaN(lineTotal)) return lineTotal;
+  }
+
+  const raw = parseFloat(String(item.amount ?? item.repair_amount ?? 0).replace(',', '.'));
+  if (Number.isNaN(raw)) return 0;
+
+  if (item.type === 'negative') return -Math.abs(raw);
+  if (item.type === 'positive') return Math.abs(raw);
+  return raw;
+};
+
+/** Kommission-Text für manuelle Positionen (Gutschrift in Kommission-Spalte). */
+export const getManualItemKommission = (item) => {
+  if (getManualItemLineTotal(item) < 0 || item.type === 'negative') {
+    return 'Gutschrift';
+  }
+  return '';
+};
+
 // Helper function to check if we need a page break
 const needsPageBreak = (currentY) => {
   return currentY > (PDF_LAYOUT.PAGE_HEIGHT - PDF_LAYOUT.SECURE_ZONE_HEIGHT);
@@ -358,10 +383,10 @@ export const generateInvoicePDF = (invoiceData, selectedOrders) => {
     return sum + repairAmount + porto;
   }, 0);
   
-  const manualItemsSubtotal = (invoiceData.manualItems || []).reduce((sum, item) => {
-    const amount = parseFloat(item.amount) || 0;
-    return sum + (item.type === 'positive' ? amount : -amount);
-  }, 0);
+  const manualItemsSubtotal = (invoiceData.manualItems || []).reduce(
+    (sum, item) => sum + getManualItemLineTotal(item),
+    0
+  );
   
   const subtotal = repairOrdersSubtotal + manualItemsSubtotal;
   const taxRate = invoiceData.customer?.country === 'Österreich' ? 0 : 0.19;
@@ -376,15 +401,6 @@ export const generateInvoicePDF = (invoiceData, selectedOrders) => {
       // Handle different data structures (direct repair order vs invoice item)
       const repairAmount = order.nettopreis || order.repair_amount || 0;
       const porto = order.porto || 0;
-      
-      // Debug: log the order structure to understand the data
-      console.log('PDF Export - Order data:', {
-        kommission: order.kommission,
-        customers: order.customers,
-        branch: order.customers?.branch,
-        filiale: order.filiale,
-        fullOrder: order
-      });
       
       return {
         date: order.werkstattausgang || order.date_performed,
@@ -428,15 +444,18 @@ export const generateInvoicePDF = (invoiceData, selectedOrders) => {
         total: repairAmount + porto
       };
     }),
-    ...(invoiceData.manualItems || []).map(item => ({
-      date: null,
-      kommission: null,
-      description: item.description,
-      branch: null,
-      repairAmount: 0,
-      porto: 0,
-      total: item.type === 'positive' ? parseFloat(item.amount) : -parseFloat(item.amount)
-    }))
+    ...(invoiceData.manualItems || []).map(item => {
+      const lineTotal = getManualItemLineTotal(item);
+      return {
+        date: null,
+        kommission: getManualItemKommission(item),
+        description: item.description,
+        branch: null,
+        repairAmount: lineTotal,
+        porto: 0,
+        total: lineTotal
+      };
+    })
   ];
   
   // Split items into pages (15 items on first page, 30 on subsequent pages)

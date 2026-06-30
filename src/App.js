@@ -1,9 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, useParams } from 'react-router-dom';
 import './App.css';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { supabase, fetchAllPages } from './supabaseClient';
+import { getManualItemLineTotal, getManualItemKommission } from './invoicePdfExport.js';
+import {
+  formatGermanDecimal,
+  calculateInvoicePositionTotals,
+  buildInvoiceExcelRows,
+  downloadInvoicePositionsExcel
+} from './invoiceExportUtils.js';
 
 // Custom hook for handling unsaved changes warnings
 const useUnsavedChangesWarning = (hasUnsavedChanges, message = 'Sind Sie sich sicher, dass die Seite verlassen wollen? Ungespeicherte Änderungen gehen eventuell verloren') => {
@@ -3263,9 +3270,11 @@ const ErstellteRechnungenPage = () => {
         periodStart: invoice.period_start,
         periodEnd: invoice.period_end,
         customer: customerData,
-        manualItems: invoiceItems.filter(item => !item.repair_order).map(item => ({
+        manualItems: invoiceItems.filter(item => !item.repair_order_id).map(item => ({
           description: item.description,
-          amount: item.repair_amount
+          amount: item.line_total ?? item.repair_amount ?? 0,
+          line_total: item.line_total ?? item.repair_amount ?? 0,
+          type: Number(item.line_total ?? item.repair_amount ?? 0) < 0 ? 'negative' : 'positive'
         }))
       };
 
@@ -3291,6 +3300,52 @@ const ErstellteRechnungenPage = () => {
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('Fehler beim Generieren der PDF: ' + error.message);
+    }
+  };
+
+  const handleDownloadInvoiceExcel = async (invoice) => {
+    try {
+      const { data: customerData, error: customerError } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('id', invoice.customer_id)
+        .single();
+
+      if (customerError) throw customerError;
+
+      const { data: invoiceItems, error: itemsError } = await supabase
+        .from('invoice_items')
+        .select('*')
+        .eq('invoice_id', invoice.id)
+        .order('position');
+
+      if (itemsError) throw itemsError;
+
+      const repairItems = invoiceItems.filter((item) => item.repair_order_id);
+      const manualItems = invoiceItems
+        .filter((item) => !item.repair_order_id)
+        .map((item) => ({
+          description: item.description,
+          amount: item.line_total ?? item.repair_amount ?? 0,
+          line_total: item.line_total ?? item.repair_amount ?? 0,
+          type: Number(item.line_total ?? item.repair_amount ?? 0) < 0 ? 'negative' : 'positive'
+        }));
+
+      const rows = buildInvoiceExcelRows({ repairItems, manualItems });
+      const totals = calculateInvoicePositionTotals({
+        repairItems,
+        manualItems,
+        customerCountry: customerData?.country
+      });
+
+      downloadInvoicePositionsExcel({
+        invoiceNumber: invoice.invoice_number,
+        rows,
+        totals
+      });
+    } catch (error) {
+      console.error('Error generating Excel export:', error);
+      alert('Fehler beim Excel-Export: ' + error.message);
     }
   };
 
@@ -3526,6 +3581,33 @@ const ErstellteRechnungenPage = () => {
                   </td>
                   <td style={{ padding: '12px' }}>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+                      {/* Excel Button */}
+                      <button
+                        onClick={() => handleDownloadInvoiceExcel(invoice)}
+                        style={{
+                          background: 'none',
+                          color: '#217346',
+                          border: '1px solid #217346',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          padding: '6px 8px',
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.transform = 'scale(1.05)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.transform = 'scale(1)';
+                        }}
+                        title="Excel exportieren"
+                      >
+                        XLS
+                      </button>
+
                       {/* PDF Button */}
                       <button
                         onClick={() => handleDownloadInvoicePDF(invoice)}
@@ -3656,6 +3738,8 @@ const RechnungErstellenPage = () => {
   const [autoSaveTimeout, setAutoSaveTimeout] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const [draftInvoiceId, setDraftInvoiceId] = useState(null);
+  const draftInvoiceIdRef = useRef(null);
 
   // Get next invoice number
   const getNextInvoiceNumber = async () => {
@@ -3682,18 +3766,23 @@ const RechnungErstellenPage = () => {
   };
 
   // Validate invoice number for duplicates
-  const validateInvoiceNumber = async (number) => {
+  const validateInvoiceNumber = async (number, excludeInvoiceId = null) => {
     if (!number.trim()) {
       setNumberValidation({ isValid: false, message: 'Rechnungsnummer ist erforderlich' });
       return false;
     }
 
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('invoices')
         .select('id')
-        .eq('invoice_number', number.trim())
-        .limit(1);
+        .eq('invoice_number', number.trim());
+
+      if (excludeInvoiceId) {
+        query = query.neq('id', excludeInvoiceId);
+      }
+
+      const { data, error } = await query.limit(1);
 
       if (error) throw error;
 
@@ -3751,104 +3840,136 @@ const RechnungErstellenPage = () => {
     setInvoiceNumber(nextNumber);
   };
 
-  // Auto-save function (without redirect)
-  const handleAutoSave = async () => {
-    if (isAutoSaving || selectedOrders.length === 0) return;
-    
-    try {
-      setIsAutoSaving(true);
-      
-      // Calculate totals
-      const repairTotal = selectedOrders.reduce((sum, order) => sum + (order.nettopreis || 0), 0);
-      const portoTotal = selectedOrders.reduce((sum, order) => sum + (order.porto || 0), 0);
-      const manualTotal = manualItems.reduce((sum, item) => {
-        const amount = parseFloat(item.amount);
-        return sum + (item.type === 'positive' ? amount : -amount);
-      }, 0);
-      
-      const subtotal = repairTotal + portoTotal + manualTotal;
-      const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0 : 0.19;
-      const taxAmount = subtotal * taxRate;
-      const totalAmount = subtotal + taxAmount;
-      
-      // Create invoice data
-      const invoiceData = {
-        invoice_number: invoiceNumber,
-        invoice_date: invoiceDate,
-        period_start: periodStart,
-        period_end: periodEnd,
-        customer_id: selectedOrders[0]?.customers?.id,
-        subtotal: subtotal,
-        tax_amount: taxAmount,
-        tax_rate: taxRate,
-        total_amount: totalAmount,
-        status: 'draft',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
+  const clearInvoiceAutoSaveTimer = () => {
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+      setAutoSaveTimeout(null);
+    }
+  };
 
-      // Save invoice to database
-      const { data: invoice, error: invoiceError } = await supabase
+  const buildInvoiceItemRows = (invoiceId) => {
+    const rows = [];
+
+    selectedOrders.forEach((order, index) => {
+      const repairCost = calculateRepairCost(order);
+      const portoCost = calculatePorto(order);
+
+      rows.push({
+        invoice_id: invoiceId,
+        repair_order_id: order.id,
+        position: index + 1,
+        date_performed: order.werkstattausgang || order.created_at,
+        kommission: order.kommission || '',
+        description: getRepairDescription(order),
+        filiale: order.customers?.branch || '',
+        repair_amount: repairCost,
+        porto: portoCost,
+        line_total: repairCost + portoCost,
+        created_at: new Date().toISOString()
+      });
+    });
+
+    manualItems.forEach((item, index) => {
+      const lineTotal = getManualItemLineTotal(item);
+      rows.push({
+        invoice_id: invoiceId,
+        repair_order_id: null,
+        position: selectedOrders.length + index + 1,
+        date_performed: new Date().toISOString().split('T')[0],
+        kommission: getManualItemKommission(item) || null,
+        description: item.description,
+        filiale: '',
+        repair_amount: lineTotal,
+        porto: 0,
+        line_total: lineTotal,
+        created_at: new Date().toISOString()
+      });
+    });
+
+    return rows;
+  };
+
+  // Insert once, then update — prevents duplicate invoice_number on auto-save + manual save
+  const persistInvoice = async ({ status = 'draft', sentAt = null } = {}) => {
+    const { subtotal, taxRate, totalTax, grandTotal } = calculateInvoiceTotals();
+
+    const invoicePayload = {
+      invoice_number: invoiceNumber.trim(),
+      invoice_date: invoiceDate,
+      customer_id: selectedOrders[0].customers.id,
+      period_start: periodStart || null,
+      period_end: periodEnd || null,
+      status,
+      subtotal,
+      tax_amount: totalTax,
+      tax_rate: taxRate,
+      total_amount: grandTotal,
+      updated_at: new Date().toISOString()
+    };
+
+    if (sentAt) {
+      invoicePayload.sent_at = sentAt;
+    }
+
+    let invoiceId = draftInvoiceIdRef.current;
+
+    if (invoiceId) {
+      const { error: updateError } = await supabase
         .from('invoices')
-        .insert([invoiceData])
+        .update(invoicePayload)
+        .eq('id', invoiceId);
+
+      if (updateError) throw updateError;
+    } else {
+      const { data: invoice, error: insertError } = await supabase
+        .from('invoices')
+        .insert([{ ...invoicePayload, created_at: new Date().toISOString() }])
         .select()
         .single();
 
-      if (invoiceError) throw invoiceError;
+      if (insertError) throw insertError;
+      invoiceId = invoice.id;
+      draftInvoiceIdRef.current = invoiceId;
+      setDraftInvoiceId(invoiceId);
+    }
 
-      // Create invoice items for repair orders
-      const invoiceItems = selectedOrders.map((order, index) => ({
-        invoice_id: invoice.id,
-        repair_order_id: order.id,
-        position: index + 1,
-        date_performed: order.werkstattausgang,
-        kommission: order.kommission,
-        description: getRepairDescription(order),
-        filiale: order.customers?.branch || '',
-        repair_amount: parseFloat(order.nettopreis || 0),
-        porto: parseFloat(order.porto || 0),
-        line_total: parseFloat((order.nettopreis || 0) + (order.porto || 0)),
-        created_at: new Date().toISOString()
-      }));
+    const { error: deleteError } = await supabase
+      .from('invoice_items')
+      .delete()
+      .eq('invoice_id', invoiceId);
 
-      // Create manual items
-      const manualItemsData = manualItems.map((item, index) => ({
-        invoice_id: invoice.id,
-        repair_order_id: null,
-        position: selectedOrders.length + index + 1,
-        date_performed: null,
-        kommission: null,
-        description: item.description,
-        filiale: null,
-        repair_amount: 0.0,
-        porto: 0.0,
-        line_total: parseFloat(item.type === 'positive' ? item.amount : `-${item.amount}`),
-        created_at: new Date().toISOString()
-      }));
+    if (deleteError) throw deleteError;
 
-      // Save invoice items
-      const allItems = [...invoiceItems, ...manualItemsData];
-      if (allItems.length > 0) {
-        const { error: itemsError } = await supabase
-          .from('invoice_items')
-          .insert(allItems);
+    const itemRows = buildInvoiceItemRows(invoiceId);
+    if (itemRows.length > 0) {
+      const { error: itemsError } = await supabase.from('invoice_items').insert(itemRows);
+      if (itemsError) throw itemsError;
+    }
 
-        if (itemsError) throw itemsError;
-      }
+    const repairOrderStatus = status === 'sent' ? 'invoiced' : 'draft';
+    const { error: statusError } = await supabase
+      .from('repair_orders')
+      .update({ invoice_status: repairOrderStatus })
+      .in('id', selectedOrders.map(order => order.id));
 
-      // Update repair orders status
-      const { error: statusError } = await supabase
-        .from('repair_orders')
-        .update({ invoice_status: 'draft' })
-        .in('id', selectedOrders.map(order => order.id));
+    if (statusError) throw statusError;
 
-      if (statusError) throw statusError;
-      
+    return invoiceId;
+  };
+
+  // Auto-save function (without redirect)
+  const handleAutoSave = async () => {
+    if (isAutoSaving || selectedOrders.length === 0) return;
+    if (!invoiceNumber.trim() || !invoiceDate) return;
+
+    try {
+      setIsAutoSaving(true);
+      await persistInvoice({ status: 'draft' });
       setHasUnsavedChanges(false);
       console.log('Auto-save completed successfully');
-      
     } catch (error) {
       console.error('Error during auto-save:', error);
+      alert('Auto-Speichern fehlgeschlagen: ' + error.message);
     } finally {
       setIsAutoSaving(false);
     }
@@ -4059,6 +4180,19 @@ const RechnungErstellenPage = () => {
     return selectedArbeiten.length > 0 ? selectedArbeiten.join(', ') : 'Einzelne Positionen';
   };
 
+  const calculateInvoiceTotals = () => {
+    const totalRepairCost = selectedOrders.reduce((sum, order) => sum + calculateRepairCost(order), 0);
+    const totalPorto = selectedOrders.reduce((sum, order) => sum + calculatePorto(order), 0);
+    const totalManualAmount = manualItems.reduce((sum, item) => sum + getManualItemLineTotal(item), 0);
+    const subtotal = totalRepairCost + totalPorto + totalManualAmount;
+    const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0 : 0.19;
+    const totalTax = subtotal * taxRate;
+    const grandTotal = subtotal + totalTax;
+    return { totalRepairCost, totalPorto, totalManualAmount, subtotal, taxRate, totalTax, grandTotal };
+  };
+
+  const formatGermanDecimal = (value) => Number(value).toFixed(2).replace('.', ',');
+
   // Manual item handlers
   const handleAddManualItem = (type) => {
     setManualItemType(type);
@@ -4079,10 +4213,10 @@ const RechnungErstellenPage = () => {
     }
 
     const newItem = {
-      id: Date.now(), // Temporary ID
+      id: Date.now(),
       description: manualItemForm.description.trim(),
-      amount: manualItemType === 'negative' ? -Math.abs(amount) : Math.abs(amount),
-      type: 'manual'
+      amount: Math.abs(amount),
+      type: manualItemType
     };
 
     setManualItems(prev => [...prev, newItem]);
@@ -4108,13 +4242,7 @@ const RechnungErstellenPage = () => {
       }
 
       // Calculate totals
-      const totalRepairCost = selectedOrders.reduce((sum, order) => sum + calculateRepairCost(order), 0);
-      const totalPorto = selectedOrders.reduce((sum, order) => sum + calculatePorto(order), 0);
-      const totalManualAmount = manualItems.reduce((sum, item) => sum + item.amount, 0);
-      const subtotal = totalRepairCost + totalPorto + totalManualAmount;
-      const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0 : 0.19;
-      const totalTax = subtotal * taxRate;
-      const grandTotal = subtotal + totalTax;
+      const { subtotal, taxRate, totalTax, grandTotal } = calculateInvoiceTotals();
 
       // Create invoice data for PDF
       const invoiceData = {
@@ -4149,6 +4277,60 @@ const RechnungErstellenPage = () => {
     }
   };
 
+  const handleInvoiceExcelExport = () => {
+    if (selectedOrders.length === 0) {
+      alert('Keine Positionen zum Exportieren.');
+      return;
+    }
+
+    const { subtotal, taxRate, totalTax, grandTotal } = calculateInvoiceTotals();
+    const rows = [];
+
+    selectedOrders.forEach((order) => {
+      const repairCost = calculateRepairCost(order);
+      const portoCost = calculatePorto(order);
+      const lineNet = repairCost + portoCost;
+      rows.push([
+        order.werkstattausgang ? new Date(order.werkstattausgang).toLocaleDateString('de-DE') : '',
+        order.kommission || '',
+        getRepairDescription(order),
+        order.customers?.branch || '',
+        formatGermanDecimal(repairCost),
+        formatGermanDecimal(portoCost),
+        formatGermanDecimal(lineNet)
+      ]);
+    });
+
+    manualItems.forEach((item) => {
+      const lineNet = getManualItemLineTotal(item);
+      rows.push([
+        '',
+        getManualItemKommission(item),
+        item.description || '',
+        '',
+        formatGermanDecimal(lineNet),
+        formatGermanDecimal(0),
+        formatGermanDecimal(lineNet)
+      ]);
+    });
+
+    rows.push(['', '', '', '', '', 'Netto', formatGermanDecimal(subtotal)]);
+    rows.push(['', '', '', '', '', `MwSt ${(taxRate * 100).toFixed(0)}%`, formatGermanDecimal(totalTax)]);
+    rows.push(['', '', '', '', '', 'Endbetrag', formatGermanDecimal(grandTotal)]);
+
+    const csvContent = '\uFEFF' + [
+      'Datum;Kommission;Reparatur;Filiale;Rep.kosten;Porto;Gesamt',
+      ...rows.map((row) => row.join(';'))
+    ].join('\r\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `Rechnung_${invoiceNumber || 'Entwurf'}_Positionen.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
   // Invoice saving handlers
   const handleSaveInvoice = async () => {
     try {
@@ -4157,111 +4339,21 @@ const RechnungErstellenPage = () => {
         return;
       }
 
-      if (!numberValidation.isValid) {
+      const isValid = await validateInvoiceNumber(invoiceNumber, draftInvoiceIdRef.current);
+      if (!isValid) {
         alert('Bitte korrigieren Sie die Rechnungsnummer.');
         return;
       }
 
-      // Calculate totals
-      const totalRepairCost = selectedOrders.reduce((sum, order) => sum + calculateRepairCost(order), 0);
-      const totalPorto = selectedOrders.reduce((sum, order) => sum + calculatePorto(order), 0);
-      const totalManualAmount = manualItems.reduce((sum, item) => sum + item.amount, 0);
-      const subtotal = totalRepairCost + totalPorto + totalManualAmount;
-      const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0 : 0.19;
-      const totalTax = subtotal * taxRate;
-      const grandTotal = subtotal + totalTax;
-
-      // Create invoice record
-      const invoiceData = {
-        invoice_number: invoiceNumber,
-        invoice_date: invoiceDate,
-        customer_id: selectedOrders[0].customers.id,
-        period_start: periodStart || null,
-        period_end: periodEnd || null,
-        status: 'draft',
-        subtotal: subtotal,
-        tax_amount: totalTax,
-        tax_rate: taxRate,
-        total_amount: grandTotal,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      // Save invoice to database
-      const { data: invoice, error: invoiceError } = await supabase
-        .from('invoices')
-        .insert([invoiceData])
-        .select()
-        .single();
-
-      if (invoiceError) throw invoiceError;
-
-      // Create invoice items
-      const invoiceItems = [];
-
-      // Add repair orders as invoice items
-      selectedOrders.forEach((order, index) => {
-        const repairCost = calculateRepairCost(order);
-        const portoCost = calculatePorto(order);
-        
-        invoiceItems.push({
-          invoice_id: invoice.id,
-          repair_order_id: order.id,
-          position: index + 1,
-          date_performed: order.werkstattausgang || order.created_at,
-          kommission: order.kommission || '',
-          description: getRepairDescription(order),
-          filiale: order.customers?.branch || '',
-          repair_amount: repairCost,
-          porto: portoCost,
-          line_total: repairCost + portoCost,
-          created_at: new Date().toISOString()
-        });
-      });
-
-      // Add manual items as invoice items
-      manualItems.forEach((item, index) => {
-        invoiceItems.push({
-          invoice_id: invoice.id,
-          repair_order_id: null, // No repair order for manual items
-          position: selectedOrders.length + index + 1,
-          date_performed: new Date().toISOString().split('T')[0],
-          kommission: 'Manual',
-          description: item.description,
-          filiale: '',
-          repair_amount: item.amount,
-          porto: 0,
-          line_total: item.amount,
-          created_at: new Date().toISOString()
-        });
-      });
-
-      // Save invoice items
-      const { error: itemsError } = await supabase
-        .from('invoice_items')
-        .insert(invoiceItems);
-
-      if (itemsError) throw itemsError;
-
-      // Update repair orders status to 'draft'
-      const repairOrderIds = selectedOrders.map(order => order.id);
-      const { error: updateError } = await supabase
-        .from('repair_orders')
-        .update({ invoice_status: 'draft' })
-        .in('id', repairOrderIds);
-
-      if (updateError) throw updateError;
+      clearInvoiceAutoSaveTimer();
+      await persistInvoice({ status: 'draft' });
 
       alert('Rechnung erfolgreich gespeichert!');
-      
-      // Clear unsaved changes flag
       setHasUnsavedChanges(false);
-      
-      // Redirect to invoice list after successful save
+
       setTimeout(() => {
         navigate('/erstellte-rechnungen');
       }, 1000);
-      
     } catch (error) {
       console.error('Error saving invoice:', error);
       alert('Fehler beim Speichern der Rechnung: ' + error.message);
@@ -4275,112 +4367,21 @@ const RechnungErstellenPage = () => {
         return;
       }
 
-      if (!numberValidation.isValid) {
+      const isValid = await validateInvoiceNumber(invoiceNumber, draftInvoiceIdRef.current);
+      if (!isValid) {
         alert('Bitte korrigieren Sie die Rechnungsnummer.');
         return;
       }
 
-      // Calculate totals
-      const totalRepairCost = selectedOrders.reduce((sum, order) => sum + calculateRepairCost(order), 0);
-      const totalPorto = selectedOrders.reduce((sum, order) => sum + calculatePorto(order), 0);
-      const totalManualAmount = manualItems.reduce((sum, item) => sum + item.amount, 0);
-      const subtotal = totalRepairCost + totalPorto + totalManualAmount;
-      const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0 : 0.19;
-      const totalTax = subtotal * taxRate;
-      const grandTotal = subtotal + totalTax;
-
-      // Create invoice record with 'sent' status
-      const invoiceData = {
-        invoice_number: invoiceNumber,
-        invoice_date: invoiceDate,
-        customer_id: selectedOrders[0].customers.id,
-        period_start: periodStart || null,
-        period_end: periodEnd || null,
-        status: 'sent', // Set as sent directly
-        subtotal: subtotal,
-        tax_amount: totalTax,
-        tax_rate: taxRate,
-        total_amount: grandTotal,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        sent_at: new Date().toISOString() // Add sent timestamp
-      };
-
-      // Save invoice to database
-      const { data: invoice, error: invoiceError } = await supabase
-        .from('invoices')
-        .insert([invoiceData])
-        .select()
-        .single();
-
-      if (invoiceError) throw invoiceError;
-
-      // Create invoice items
-      const invoiceItems = [];
-
-      // Add repair orders as invoice items
-      selectedOrders.forEach((order, index) => {
-        const repairCost = calculateRepairCost(order);
-        const portoCost = calculatePorto(order);
-        
-        invoiceItems.push({
-          invoice_id: invoice.id,
-          repair_order_id: order.id,
-          position: index + 1,
-          date_performed: order.werkstattausgang || order.created_at,
-          kommission: order.kommission || '',
-          description: getRepairDescription(order),
-          filiale: order.customers?.branch || '',
-          repair_amount: repairCost,
-          porto: portoCost,
-          line_total: repairCost + portoCost,
-          created_at: new Date().toISOString()
-        });
+      clearInvoiceAutoSaveTimer();
+      await persistInvoice({
+        status: 'sent',
+        sentAt: new Date().toISOString()
       });
 
-      // Add manual items as invoice items
-      manualItems.forEach((item, index) => {
-        invoiceItems.push({
-          invoice_id: invoice.id,
-          repair_order_id: null,
-          position: selectedOrders.length + index + 1,
-          date_performed: new Date().toISOString().split('T')[0],
-          kommission: 'Manual',
-          description: item.description,
-          filiale: '',
-          repair_amount: item.amount,
-          porto: 0,
-          line_total: item.amount,
-          created_at: new Date().toISOString()
-        });
-      });
-
-      // Save invoice items
-      const { error: itemsError } = await supabase
-        .from('invoice_items')
-        .insert(invoiceItems);
-
-      if (itemsError) throw itemsError;
-
-      // Update repair orders status to 'invoiced' (sent)
-      const repairOrderIds = selectedOrders.map(order => order.id);
-      const { error: updateError } = await supabase
-        .from('repair_orders')
-        .update({ invoice_status: 'invoiced' })
-        .in('id', repairOrderIds);
-
-      if (updateError) throw updateError;
-
-      // TODO: Add PDF export here
-      
       alert('Rechnung erfolgreich erstellt und gesendet!');
-      
-      // Clear unsaved changes flag
       setHasUnsavedChanges(false);
-      
-      // Redirect to invoice list
       window.location.href = '/erstellte-rechnungen';
-      
     } catch (error) {
       console.error('Error saving and sending invoice:', error);
       alert('Fehler beim Speichern und Senden der Rechnung: ' + error.message);
@@ -4462,7 +4463,7 @@ const RechnungErstellenPage = () => {
                   onChange={(e) => {
                     setInvoiceNumber(e.target.value);
                     if (e.target.value.trim()) {
-                      validateInvoiceNumber(e.target.value);
+                      validateInvoiceNumber(e.target.value, draftInvoiceIdRef.current);
                     }
                   }}
                   onBlur={() => setIsEditingNumber(false)}
@@ -4933,10 +4934,11 @@ const RechnungErstellenPage = () => {
             })}
             
             {/* Table Rows - Manual Items */}
-            {manualItems.map((item, index) => {
+            {manualItems.map((item) => {
               const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0 : 0.19;
-              const taxAmount = item.amount * taxRate;
-              const total = item.amount + taxAmount;
+              const lineNet = getManualItemLineTotal(item);
+              const taxAmount = lineNet * taxRate;
+              const total = lineNet + taxAmount;
               
               return (
                 <div key={`manual-${item.id}`} style={{
@@ -4949,25 +4951,25 @@ const RechnungErstellenPage = () => {
                   fontSize: '14px',
                   alignItems: 'center',
                   marginBottom: '0.5rem',
-                  background: item.amount < 0 ? '#fff5f5' : '#f0f8f0'
+                  background: lineNet < 0 ? '#fff5f5' : '#f0f8f0'
                 }}>
                   <div>-</div>
-                  <div>Manual</div>
+                  <div>{getManualItemKommission(item) || '—'}</div>
                   <div style={{ fontSize: '13px', lineHeight: '1.3', fontStyle: 'italic' }}>
                     {item.description}
                   </div>
                   <div>-</div>
-                  <div style={{ textAlign: 'right', fontWeight: '500' }}>
-                    {item.amount.toFixed(2)}€
+                  <div style={{ textAlign: 'right', fontWeight: '500', color: lineNet < 0 ? '#dc3545' : '#333' }}>
+                    {formatGermanDecimal(lineNet)}€
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    0.00€
+                    0,00€
                   </div>
                   <div style={{ textAlign: 'right', fontSize: '12px', color: '#666' }}>
                     {(taxRate * 100).toFixed(0)}%
                   </div>
-                  <div style={{ textAlign: 'right', fontWeight: '600', color: item.amount < 0 ? '#dc3545' : '#28a745' }}>
-                    {total.toFixed(2)}€
+                  <div style={{ textAlign: 'right', fontWeight: '600', color: lineNet < 0 ? '#dc3545' : '#28a745' }}>
+                    {formatGermanDecimal(total)}€
                   </div>
                   <div style={{ textAlign: 'center' }}>
                     <button
@@ -5003,14 +5005,7 @@ const RechnungErstellenPage = () => {
             
             {/* Summary Row */}
             {(() => {
-              const totalRepairCost = selectedOrders.reduce((sum, order) => sum + calculateRepairCost(order), 0);
-              const totalPorto = selectedOrders.reduce((sum, order) => sum + calculatePorto(order), 0);
-              const totalManualAmount = manualItems.reduce((sum, item) => sum + item.amount, 0);
-              const subtotal = totalRepairCost + totalPorto + totalManualAmount;
-              // Use tax rate from first customer (assuming all same country for now)
-              const taxRate = selectedOrders[0]?.customers?.country === 'Österreich' ? 0 : 0.19;
-              const totalTax = subtotal * taxRate;
-              const grandTotal = subtotal + totalTax;
+              const { totalRepairCost, totalPorto, totalManualAmount, subtotal, taxRate, totalTax, grandTotal } = calculateInvoiceTotals();
               
               return (
                 <div style={{
@@ -5031,12 +5026,37 @@ const RechnungErstellenPage = () => {
                   <div>SUMME</div>
                   <div></div>
                   <div style={{ textAlign: 'right' }}>
-                    {(totalRepairCost + totalManualAmount).toFixed(2)}€
+                    {formatGermanDecimal(totalRepairCost + totalManualAmount)}€
                   </div>
-                  <div style={{ textAlign: 'right' }}>{totalPorto.toFixed(2)}€</div>
-                  <div style={{ textAlign: 'right' }}>{totalTax.toFixed(2)}€</div>
-                  <div style={{ textAlign: 'right', fontSize: '16px' }}>{grandTotal.toFixed(2)}€</div>
+                  <div style={{ textAlign: 'right' }}>{formatGermanDecimal(totalPorto)}€</div>
+                  <div style={{ textAlign: 'right' }}>{formatGermanDecimal(totalTax)}€</div>
+                  <div style={{ textAlign: 'right', fontSize: '16px' }}>{formatGermanDecimal(grandTotal)}€</div>
                   <div></div>
+                </div>
+              );
+            })()}
+
+            {/* Endsumme */}
+            {(() => {
+              const { subtotal, taxRate, totalTax, grandTotal } = calculateInvoiceTotals();
+              return (
+                <div style={{
+                  marginTop: '1.5rem',
+                  padding: '1rem 1.5rem',
+                  background: '#eef3f8',
+                  border: '2px solid #1d426a',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: '2rem',
+                  alignItems: 'center',
+                  flexWrap: 'wrap'
+                }}>
+                  <div><strong>Netto:</strong> {formatGermanDecimal(subtotal)} €</div>
+                  <div><strong>MwSt {(taxRate * 100).toFixed(0)}%:</strong> {formatGermanDecimal(totalTax)} €</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#1d426a' }}>
+                    <strong>Endbetrag:</strong> {formatGermanDecimal(grandTotal)} €
+                  </div>
                 </div>
               );
             })()}
@@ -5044,7 +5064,24 @@ const RechnungErstellenPage = () => {
         )}
         
         {selectedOrders.length > 0 && (
-          <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center', gap: '1rem' }}>
+          <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            <button
+              onClick={handleInvoiceExcelExport}
+              style={{
+                background: '#217346',
+                color: 'white',
+                border: 'none',
+                padding: '12px 16px',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              title="Positionen als Excel-Datei exportieren"
+            >
+              Excel exportieren
+            </button>
             <button
               onClick={handleInvoicePDFExport}
               style={{
@@ -5361,7 +5398,8 @@ const RechnungBearbeitenPage = () => {
         id: item.id,
         type: item.line_total >= 0 ? 'positive' : 'negative',
         description: item.description,
-        amount: Math.abs(item.line_total).toFixed(2)
+        amount: Math.abs(item.line_total ?? item.repair_amount ?? 0),
+        line_total: item.line_total ?? item.repair_amount ?? 0
       })));
 
       // Set form state
@@ -5385,19 +5423,7 @@ const RechnungBearbeitenPage = () => {
     try {
       setIsAutoSaving(true);
       
-      // Calculate totals
-      const allOrders = [...invoiceItems, ...selectedOrders];
-      const repairTotal = allOrders.reduce((sum, order) => sum + (order.nettopreis || order.repair_amount || 0), 0);
-      const portoTotal = allOrders.reduce((sum, order) => sum + (order.porto || 0), 0);
-      const manualTotal = manualItems.reduce((sum, item) => {
-        const amount = parseFloat(item.amount);
-        return sum + (item.type === 'positive' ? amount : -amount);
-      }, 0);
-      
-      const subtotal = repairTotal + portoTotal + manualTotal;
-      const taxRate = invoice.customer.country === 'Österreich' ? 0 : 0.19;
-      const taxAmount = subtotal * taxRate;
-      const totalAmount = subtotal + taxAmount;
+      const { subtotal, taxRate, totalTax: taxAmount, grandTotal: totalAmount } = calculateInvoiceTotals();
       
       // Update invoice
       const { error: updateError } = await supabase
@@ -5425,6 +5451,8 @@ const RechnungBearbeitenPage = () => {
 
       if (deleteError) throw deleteError;
 
+      const allOrders = [...invoiceItems, ...selectedOrders];
+
       // Create new invoice items for repair orders
       const repairOrderItems = allOrders.map((order, index) => ({
         invoice_id: id,
@@ -5441,19 +5469,22 @@ const RechnungBearbeitenPage = () => {
       }));
 
       // Create manual items
-      const manualItemsData = manualItems.map((item, index) => ({
-        invoice_id: id,
-        repair_order_id: null,
-        position: allOrders.length + index + 1,
-        date_performed: null,
-        kommission: null,
-        description: item.description,
-        filiale: null,
-        repair_amount: 0.0,
-        porto: 0.0,
-        line_total: parseFloat(item.type === 'positive' ? item.amount : `-${item.amount}`),
-        created_at: new Date().toISOString()
-      }));
+      const manualItemsData = manualItems.map((item, index) => {
+        const lineTotal = getManualItemLineTotal(item);
+        return {
+          invoice_id: id,
+          repair_order_id: null,
+          position: allOrders.length + index + 1,
+          date_performed: null,
+          kommission: getManualItemKommission(item) || null,
+          description: item.description,
+          filiale: null,
+          repair_amount: lineTotal,
+          porto: 0.0,
+          line_total: lineTotal,
+          created_at: new Date().toISOString()
+        };
+      });
 
       // Insert all items
       const allItems = [...repairOrderItems, ...manualItemsData];
@@ -5518,19 +5549,7 @@ const RechnungBearbeitenPage = () => {
     try {
       setSaving(true);
       
-      // Calculate totals
-      const allOrders = [...invoiceItems, ...selectedOrders];
-      const repairTotal = allOrders.reduce((sum, order) => sum + (order.nettopreis || order.repair_amount || 0), 0);
-      const portoTotal = allOrders.reduce((sum, order) => sum + (order.porto || 0), 0);
-      const manualTotal = manualItems.reduce((sum, item) => {
-        const amount = parseFloat(item.amount);
-        return sum + (item.type === 'positive' ? amount : -amount);
-      }, 0);
-      
-      const subtotal = repairTotal + portoTotal + manualTotal;
-      const taxRate = invoice.customer.country === 'Österreich' ? 0 : 0.19;
-      const taxAmount = subtotal * taxRate;
-      const totalAmount = subtotal + taxAmount;
+      const { subtotal, taxRate, totalTax: taxAmount, grandTotal: totalAmount } = calculateInvoiceTotals();
       
       // Update invoice
       const { error: updateError } = await supabase
@@ -5558,6 +5577,8 @@ const RechnungBearbeitenPage = () => {
 
       if (deleteError) throw deleteError;
 
+      const allOrders = [...invoiceItems, ...selectedOrders];
+
       // Create new invoice items for repair orders
       const repairOrderItems = allOrders.map((order, index) => ({
         invoice_id: id,
@@ -5574,19 +5595,22 @@ const RechnungBearbeitenPage = () => {
       }));
 
       // Create manual items
-      const manualItemsData = manualItems.map((item, index) => ({
-        invoice_id: id,
-        repair_order_id: null,
-        position: allOrders.length + index + 1,
-        date_performed: null,
-        kommission: null,
-        description: item.description,
-        filiale: null,
-        repair_amount: 0.0,
-        porto: 0.0,
-        line_total: parseFloat(item.type === 'positive' ? item.amount : `-${item.amount}`),
-        created_at: new Date().toISOString()
-      }));
+      const manualItemsData = manualItems.map((item, index) => {
+        const lineTotal = getManualItemLineTotal(item);
+        return {
+          invoice_id: id,
+          repair_order_id: null,
+          position: allOrders.length + index + 1,
+          date_performed: null,
+          kommission: getManualItemKommission(item) || null,
+          description: item.description,
+          filiale: null,
+          repair_amount: lineTotal,
+          porto: 0.0,
+          line_total: lineTotal,
+          created_at: new Date().toISOString()
+        };
+      });
 
       // Insert all items
       const allItems = [...repairOrderItems, ...manualItemsData];
@@ -5640,6 +5664,30 @@ const RechnungBearbeitenPage = () => {
     }
     
     return 'Reparatur: Einzelne Positionen';
+  };
+
+  const calculateInvoiceTotals = () => calculateInvoicePositionTotals({
+    repairItems: invoiceItems,
+    manualItems,
+    selectedOrders,
+    customerCountry: invoice?.customer?.country
+  });
+
+  const handleExcelExport = () => {
+    if (!invoice) return;
+
+    const rows = buildInvoiceExcelRows({
+      repairItems: invoiceItems,
+      manualItems,
+      selectedOrders,
+      getRepairDescription
+    });
+
+    downloadInvoicePositionsExcel({
+      invoiceNumber,
+      rows,
+      totals: calculateInvoiceTotals()
+    });
   };
 
   // PDF Export function
@@ -5793,7 +5841,7 @@ const RechnungBearbeitenPage = () => {
         id: Date.now(), // Temporary ID
         type: manualItemType,
         description: manualItemForm.description.trim(),
-        amount: parseFloat(manualItemForm.amount).toFixed(2)
+        amount: Math.abs(parseFloat(manualItemForm.amount))
       };
       
       setManualItems(prev => [...prev, newItem]);
@@ -6217,27 +6265,31 @@ const RechnungBearbeitenPage = () => {
             ))}
             
             {/* Manual items */}
-            {manualItems.map((item, index) => (
+            {manualItems.map((item) => {
+              const lineNet = getManualItemLineTotal(item);
+              return (
               <tr key={`manual-${item.id}`} style={{ 
                 borderBottom: '1px solid #f0f0f0',
-                backgroundColor: item.type === 'positive' ? '#f8f9fa' : '#fff5f5'
+                backgroundColor: lineNet < 0 ? '#fff5f5' : '#f8f9fa'
               }}>
                 <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>-</td>
-                <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>-</td>
+                <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>{getManualItemKommission(item) || '—'}</td>
                 <td style={{ padding: '12px', fontSize: '14px', fontStyle: 'italic', textAlign: 'center' }}>
                   {item.description}
                 </td>
                 <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>-</td>
-                <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>-</td>
-                <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>-</td>
+                <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center', fontWeight: '500', color: lineNet < 0 ? '#dc3545' : '#333' }}>
+                  {formatGermanDecimal(lineNet)}€
+                </td>
+                <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center' }}>0,00€</td>
                 <td style={{ 
                   padding: '12px', 
                   fontSize: '14px', 
                   textAlign: 'center', 
                   fontWeight: '600',
-                  color: item.type === 'positive' ? '#28a745' : '#dc3545'
+                  color: lineNet < 0 ? '#dc3545' : '#28a745'
                 }}>
-                  {item.type === 'positive' ? '+' : '-'}{item.amount}€
+                  {formatGermanDecimal(lineNet)}€
                 </td>
                 <td style={{ padding: '12px', textAlign: 'center' }}>
                   <button
@@ -6257,9 +6309,33 @@ const RechnungBearbeitenPage = () => {
                   </button>
                 </td>
               </tr>
-            ))}
+            );})}
           </tbody>
         </table>
+
+        {(() => {
+          const { subtotal, taxRate, totalTax, grandTotal } = calculateInvoiceTotals();
+          return (
+            <div style={{
+              marginTop: '1.5rem',
+              padding: '1rem 1.5rem',
+              background: '#eef3f8',
+              border: '2px solid #1d426a',
+              borderRadius: '8px',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '2rem',
+              alignItems: 'center',
+              flexWrap: 'wrap'
+            }}>
+              <div><strong>Netto:</strong> {formatGermanDecimal(subtotal)} €</div>
+              <div><strong>MwSt {(taxRate * 100).toFixed(0)}%:</strong> {formatGermanDecimal(totalTax)} €</div>
+              <div style={{ fontSize: '18px', fontWeight: 700, color: '#1d426a' }}>
+                <strong>Endbetrag:</strong> {formatGermanDecimal(grandTotal)} €
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Add repair order section */}
         {availableOrders.length > 0 && (
@@ -6477,6 +6553,24 @@ const RechnungBearbeitenPage = () => {
             Als Entwurf zurücksetzen
           </button>
         )}
+
+        <button
+          onClick={handleExcelExport}
+          disabled={saving}
+          style={{
+            background: '#217346',
+            color: 'white',
+            border: 'none',
+            padding: '12px 24px',
+            borderRadius: '6px',
+            fontSize: '14px',
+            cursor: saving ? 'not-allowed' : 'pointer',
+            opacity: saving ? 0.6 : 1,
+            transition: 'all 0.2s ease'
+          }}
+        >
+          Excel exportieren
+        </button>
 
         <button
           onClick={handlePDFExport}
