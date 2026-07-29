@@ -412,9 +412,11 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
 
     const exactIds = new Set(exactGroups.flat().map(c => c.id));
 
-    // Similar: same/similar company name, not large chains, not already in exact groups
+    // Similar: same/similar company name, not large chains, not already in exact groups,
+    // and not user-confirmed as OK (duplicate_ok)
     const similarMap = new Map();
     active.forEach((c) => {
+      if (c.duplicate_ok) return;
       if (exactIds.has(c.id)) return;
       if (isLargeChain(c.company)) return;
       const companyKey = normalizeAkustikerText(c.company);
@@ -578,6 +580,38 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
     }
   };
 
+  const handleMarkDuplicateOk = async (customerOrGroup) => {
+    const list = Array.isArray(customerOrGroup) ? customerOrGroup : [customerOrGroup];
+    const ids = list.map((c) => c.id);
+    const label = list.length === 1
+      ? (list[0].branch && list[0].branch !== list[0].company
+        ? `${list[0].company} – ${list[0].branch}`
+        : list[0].company)
+      : `${list.length} Einträge (${list[0].company})`;
+
+    if (!window.confirm(
+      `„${label}“ als in Ordnung markieren?\n\nDiese Einträge erscheinen danach nicht mehr unter „Ähnlich“.`
+    )) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('customers')
+        .update({ duplicate_ok: true, updated_at: new Date().toISOString() })
+        .in('id', ids);
+      if (error) throw error;
+      await loadCustomers();
+    } catch (error) {
+      console.error('Error marking duplicate ok:', error);
+      alert('Fehler beim Bestätigen: ' + error.message);
+    }
+  };
+
+  const handleRefreshDuplicates = async () => {
+    await loadCustomers();
+  };
+
   return (
     <div style={{ fontFamily: 'Arial, sans-serif', background: '#fff', minHeight: '100vh' }}>
       {/* Header */}
@@ -739,6 +773,31 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
 
         {showDuplicates ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={handleRefreshDuplicates}
+                title="Liste aktualisieren"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 14px',
+                  background: '#fff',
+                  color: '#1d426a',
+                  border: '1px solid #1d426a',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: 500
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7c2.76 0 5 2.24 5 5a5 5 0 0 1-8.9 3.1L6.7 16.5A7.97 7.97 0 0 0 20 12c0-2.21-.9-4.21-2.35-5.65zM6 12c0-1.19.34-2.3.94-3.24L5.5 7.32A7.97 7.97 0 0 0 4 12c0 4.08 3.05 7.44 7 7.93v-2.02c-2.84-.48-5-2.94-5-5.91z"/>
+                </svg>
+                Aktualisieren
+              </button>
+            </div>
             <div>
               <h3 style={{ color: '#1d426a', margin: '0 0 0.5rem 0' }}>
                 Sehr gleich (gleicher Name + Straße)
@@ -788,6 +847,7 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
               </h3>
               <p style={{ color: '#666', margin: '0 0 1rem 0', fontSize: '14px' }}>
                 Ähnliche Firmennamen mit wenigen Standorten. Ketten wie Langer (viele Filialen) werden ausgeblendet.
+                Mit dem grünen Haken markieren Sie Einträge als in Ordnung — sie verschwinden dann aus dieser Liste.
               </p>
               {duplicateAnalysis.similarGroups.length === 0 ? (
                 <div style={{ padding: '1.5rem', background: '#f8f9fa', borderRadius: 8, color: '#666' }}>
@@ -802,8 +862,41 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                     overflow: 'hidden',
                     background: '#fffbeb'
                   }}>
-                    <div style={{ padding: '10px 14px', background: '#fff3cd', fontWeight: 600, color: '#664d03' }}>
-                      {group.length} ähnliche Einträge — {group[0].company}
+                    <div style={{
+                      padding: '10px 14px',
+                      background: '#fff3cd',
+                      fontWeight: 600,
+                      color: '#664d03',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 12,
+                      flexWrap: 'wrap'
+                    }}>
+                      <span>{group.length} ähnliche Einträge — {group[0].company}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleMarkDuplicateOk(group)}
+                        title="Gesamte Gruppe als in Ordnung markieren"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '4px 10px',
+                          background: '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: 4,
+                          cursor: 'pointer',
+                          fontSize: 12,
+                          fontWeight: 600
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        Gruppe OK
+                      </button>
                     </div>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
@@ -823,6 +916,27 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                             <td style={{ padding: '10px 14px' }}>{customer.street || '—'}</td>
                             <td style={{ padding: '10px 14px' }}>{customer.location || '—'}</td>
                             <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleMarkDuplicateOk(customer)}
+                                title="Passt so — nicht mehr als Duplikat anzeigen"
+                                style={{
+                                  marginRight: 8,
+                                  padding: '4px 8px',
+                                  border: '1px solid #28a745',
+                                  background: '#e8f5e9',
+                                  color: '#28a745',
+                                  borderRadius: 4,
+                                  cursor: 'pointer',
+                                  verticalAlign: 'middle',
+                                  display: 'inline-flex',
+                                  alignItems: 'center'
+                                }}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                </svg>
+                              </button>
                               <button onClick={() => handleEditCustomer(customer)} style={{ marginRight: 8, padding: '4px 10px', border: '1px solid #1d426a', background: 'none', color: '#1d426a', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Bearbeiten</button>
                               <button onClick={() => handleArchiveCustomer(customer)} style={{ padding: '4px 10px', border: '1px solid #dc3545', background: 'none', color: '#dc3545', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Archivieren</button>
                             </td>
