@@ -278,6 +278,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('company'); // 'company', 'branch', 'contact_person', 'street', 'location'
   const [sortOrder, setSortOrder] = useState('asc'); // 'asc', 'desc'
+  const [showArchived, setShowArchived] = useState(false);
+  const [showDuplicates, setShowDuplicates] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [editForm, setEditForm] = useState({
@@ -295,6 +297,7 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
   
   // Filter and sort customers
   const filteredAndSortedCustomers = customers
+    .filter(customer => !!customer.archived === showArchived)
     .filter(customer => {
       if (!searchTerm.trim()) return true;
       const search = searchTerm.toLowerCase();
@@ -343,6 +346,112 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
              }
      });
 
+  const activeCustomersCount = customers.filter(c => !c.archived).length;
+  const archivedCustomersCount = customers.filter(c => !!c.archived).length;
+
+  const normalizeAkustikerText = (value) =>
+    (value || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9äöüß]/gi, '')
+      .trim();
+
+  const stringSimilarity = (a, b) => {
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+    const longer = a.length > b.length ? a : b;
+    const shorter = a.length > b.length ? b : a;
+    if (longer.includes(shorter) && shorter.length >= 4) {
+      return shorter.length / longer.length;
+    }
+    // Dice coefficient on bigrams
+    if (a.length < 2 || b.length < 2) return 0;
+    const bigrams = (s) => {
+      const map = new Map();
+      for (let i = 0; i < s.length - 1; i++) {
+        const bg = s.slice(i, i + 2);
+        map.set(bg, (map.get(bg) || 0) + 1);
+      }
+      return map;
+    };
+    const aMap = bigrams(a);
+    const bMap = bigrams(b);
+    let intersection = 0;
+    aMap.forEach((count, bg) => {
+      if (bMap.has(bg)) intersection += Math.min(count, bMap.get(bg));
+    });
+    return (2 * intersection) / (a.length - 1 + b.length - 1);
+  };
+
+  // Duplicate / similar acousticians (exclude large multi-branch chains like Langer)
+  const MULTI_BRANCH_THRESHOLD = 6;
+  const duplicateAnalysis = (() => {
+    const active = customers.filter(c => !c.archived);
+    const companyStreetCounts = {};
+    active.forEach((c) => {
+      const key = normalizeAkustikerText(c.company);
+      if (!companyStreetCounts[key]) companyStreetCounts[key] = new Set();
+      companyStreetCounts[key].add(normalizeAkustikerText(c.street) || `id:${c.id}`);
+    });
+
+    const isLargeChain = (company) =>
+      (companyStreetCounts[normalizeAkustikerText(company)]?.size || 0) >= MULTI_BRANCH_THRESHOLD;
+
+    // Exact / very same: same company + street
+    const exactMap = new Map();
+    active.forEach((c) => {
+      const key = `${normalizeAkustikerText(c.company)}|${normalizeAkustikerText(c.street)}`;
+      if (!normalizeAkustikerText(c.company) || !normalizeAkustikerText(c.street)) return;
+      if (!exactMap.has(key)) exactMap.set(key, []);
+      exactMap.get(key).push(c);
+    });
+    const exactGroups = [...exactMap.values()]
+      .filter(group => group.length >= 2)
+      .sort((a, b) => b.length - a.length);
+
+    const exactIds = new Set(exactGroups.flat().map(c => c.id));
+
+    // Similar: same/similar company name, not large chains, not already in exact groups
+    const similarMap = new Map();
+    active.forEach((c) => {
+      if (exactIds.has(c.id)) return;
+      if (isLargeChain(c.company)) return;
+      const companyKey = normalizeAkustikerText(c.company);
+      if (!companyKey) return;
+      // Find existing similar bucket
+      let matchedKey = null;
+      for (const key of similarMap.keys()) {
+        if (stringSimilarity(companyKey, key) >= 0.82) {
+          matchedKey = key;
+          break;
+        }
+      }
+      const bucketKey = matchedKey || companyKey;
+      if (!similarMap.has(bucketKey)) similarMap.set(bucketKey, []);
+      similarMap.get(bucketKey).push(c);
+    });
+
+    const similarGroups = [...similarMap.values()]
+      .filter(group => {
+        if (group.length < 2) return false;
+        // Prefer cases with overlapping/similar streets or near-identical names
+        const streets = new Set(group.map(c => normalizeAkustikerText(c.street)));
+        const names = group.map(c => normalizeAkustikerText(c.company));
+        const nameVariants = new Set(names).size > 1;
+        const fewStreets = streets.size <= Math.max(2, Math.ceil(group.length / 2));
+        return nameVariants || fewStreets || group.length >= 2;
+      })
+      // Still hide pure multi-street chains that slipped through
+      .filter(group => {
+        const streets = new Set(group.map(c => normalizeAkustikerText(c.street)));
+        return streets.size < MULTI_BRANCH_THRESHOLD;
+      })
+      .sort((a, b) => b.length - a.length);
+
+    return { exactGroups, similarGroups };
+  })();
+
   // Edit customer handlers
   const handleEditCustomer = (customer) => {
     setEditingCustomer(customer);
@@ -368,6 +477,7 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
       const otherAcousticians = customers.filter(customer => 
         customer.company === editForm.company && 
         customer.id !== editingCustomer.id &&
+        !customer.archived &&
         (!customer.billing_street && !customer.billing_location && !customer.billing_country)
       );
 
@@ -429,6 +539,42 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
     } catch (error) {
       console.error('Error updating customer:', error);
       alert('Fehler beim Aktualisieren des Akustikers: ' + error.message);
+    }
+  };
+
+  const handleArchiveCustomer = async (customer) => {
+    const label = customer.branch && customer.branch !== customer.company
+      ? `${customer.company} – ${customer.branch}`
+      : customer.company;
+    if (!window.confirm(`Möchten Sie den Akustiker "${label}" wirklich archivieren?\n\nEr erscheint danach nicht mehr bei neuen Reparaturaufträgen.`)) {
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from('customers')
+        .update({ archived: true, updated_at: new Date().toISOString() })
+        .eq('id', customer.id);
+      if (error) throw error;
+      await loadCustomers();
+      alert('Akustiker erfolgreich archiviert.');
+    } catch (error) {
+      console.error('Error archiving customer:', error);
+      alert('Fehler beim Archivieren: ' + error.message);
+    }
+  };
+
+  const handleRestoreCustomer = async (customer) => {
+    try {
+      const { error } = await supabase
+        .from('customers')
+        .update({ archived: false, updated_at: new Date().toISOString() })
+        .eq('id', customer.id);
+      if (error) throw error;
+      await loadCustomers();
+      alert('Akustiker wiederhergestellt.');
+    } catch (error) {
+      console.error('Error restoring customer:', error);
+      alert('Fehler beim Wiederherstellen: ' + error.message);
     }
   };
 
@@ -525,32 +671,176 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
             </div>
           </div>
           
-          {/* Add New Akustiker Button */}
-          <button
-            onClick={() => setShowAddAkustikerModal(true)}
-            style={{
-              padding: '12px 24px',
-              background: '#28a745',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: '500',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-            }}
-          >
-            <span style={{ fontSize: '20px' }}>+</span>
-            Neuen Akustiker anlegen
-          </button>
+          {/* Add New Akustiker / Archive / Duplicates Toggle */}
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => {
+                setShowDuplicates(!showDuplicates);
+                if (!showDuplicates) setShowArchived(false);
+              }}
+              style={{
+                padding: '12px 20px',
+                background: showDuplicates ? '#1d426a' : '#fff',
+                color: showDuplicates ? 'white' : '#1d426a',
+                border: '2px solid #1d426a',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '15px',
+                fontWeight: '500'
+              }}
+            >
+              {showDuplicates
+                ? 'Liste anzeigen'
+                : `Mehrfacheinträge anzeigen (${duplicateAnalysis.exactGroups.length + duplicateAnalysis.similarGroups.length})`}
+            </button>
+            {!showDuplicates && (
+              <button
+                onClick={() => setShowArchived(!showArchived)}
+                style={{
+                  padding: '12px 20px',
+                  background: showArchived ? '#6c757d' : '#fff',
+                  color: showArchived ? 'white' : '#1d426a',
+                  border: '2px solid #1d426a',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: '500'
+                }}
+              >
+                {showArchived
+                  ? `Aktive anzeigen (${activeCustomersCount})`
+                  : `Archivierte anzeigen (${archivedCustomersCount})`}
+              </button>
+            )}
+            {!showArchived && !showDuplicates && (
+              <button
+                onClick={() => setShowAddAkustikerModal(true)}
+                style={{
+                  padding: '12px 24px',
+                  background: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  fontWeight: '500',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}
+              >
+                <span style={{ fontSize: '20px' }}>+</span>
+                Neuen Akustiker anlegen
+              </button>
+            )}
+          </div>
         </div>
 
+        {showDuplicates ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+            <div>
+              <h3 style={{ color: '#1d426a', margin: '0 0 0.5rem 0' }}>
+                Sehr gleich (gleicher Name + Straße)
+              </h3>
+              <p style={{ color: '#666', margin: '0 0 1rem 0', fontSize: '14px' }}>
+                Einträge mit identischem Firmennamen und gleicher Straße — sehr wahrscheinlich Doppelte.
+              </p>
+              {duplicateAnalysis.exactGroups.length === 0 ? (
+                <div style={{ padding: '1.5rem', background: '#f8f9fa', borderRadius: 8, color: '#666' }}>
+                  Keine exakten Mehrfacheinträge gefunden.
+                </div>
+              ) : (
+                duplicateAnalysis.exactGroups.map((group, gIdx) => (
+                  <div key={`exact-${gIdx}`} style={{
+                    marginBottom: '1rem',
+                    border: '1px solid #f5c2c7',
+                    borderRadius: 8,
+                    overflow: 'hidden',
+                    background: '#fff5f5'
+                  }}>
+                    <div style={{ padding: '10px 14px', background: '#f8d7da', fontWeight: 600, color: '#842029' }}>
+                      {group.length}× {group[0].company} — {group[0].street}
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <tbody>
+                        {group.map((customer) => (
+                          <tr key={customer.id} style={{ borderTop: '1px solid #f0f0f0' }}>
+                            <td style={{ padding: '10px 14px' }}>{customer.branch || '—'}</td>
+                            <td style={{ padding: '10px 14px' }}>{customer.location || '—'}</td>
+                            <td style={{ padding: '10px 14px' }}>{customer.country || '—'}</td>
+                            <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                              <button onClick={() => handleEditCustomer(customer)} style={{ marginRight: 8, padding: '4px 10px', border: '1px solid #1d426a', background: 'none', color: '#1d426a', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Bearbeiten</button>
+                              <button onClick={() => handleArchiveCustomer(customer)} style={{ padding: '4px 10px', border: '1px solid #dc3545', background: 'none', color: '#dc3545', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Archivieren</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div>
+              <h3 style={{ color: '#1d426a', margin: '0 0 0.5rem 0' }}>
+                Ähnlich (ohne große Filialketten)
+              </h3>
+              <p style={{ color: '#666', margin: '0 0 1rem 0', fontSize: '14px' }}>
+                Ähnliche Firmennamen mit wenigen Standorten. Ketten wie Langer (viele Filialen) werden ausgeblendet.
+              </p>
+              {duplicateAnalysis.similarGroups.length === 0 ? (
+                <div style={{ padding: '1.5rem', background: '#f8f9fa', borderRadius: 8, color: '#666' }}>
+                  Keine ähnlichen Mehrfacheinträge gefunden.
+                </div>
+              ) : (
+                duplicateAnalysis.similarGroups.map((group, gIdx) => (
+                  <div key={`similar-${gIdx}`} style={{
+                    marginBottom: '1rem',
+                    border: '1px solid #ffe69c',
+                    borderRadius: 8,
+                    overflow: 'hidden',
+                    background: '#fffbeb'
+                  }}>
+                    <div style={{ padding: '10px 14px', background: '#fff3cd', fontWeight: 600, color: '#664d03' }}>
+                      {group.length} ähnliche Einträge — {group[0].company}
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ background: '#fff8e1', fontSize: 12, color: '#666' }}>
+                          <th style={{ padding: '8px 14px', textAlign: 'left' }}>Firma</th>
+                          <th style={{ padding: '8px 14px', textAlign: 'left' }}>Filiale</th>
+                          <th style={{ padding: '8px 14px', textAlign: 'left' }}>Straße</th>
+                          <th style={{ padding: '8px 14px', textAlign: 'left' }}>Ort</th>
+                          <th style={{ padding: '8px 14px' }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {group.map((customer) => (
+                          <tr key={customer.id} style={{ borderTop: '1px solid #f0f0f0' }}>
+                            <td style={{ padding: '10px 14px' }}>{customer.company}</td>
+                            <td style={{ padding: '10px 14px' }}>{customer.branch || '—'}</td>
+                            <td style={{ padding: '10px 14px' }}>{customer.street || '—'}</td>
+                            <td style={{ padding: '10px 14px' }}>{customer.location || '—'}</td>
+                            <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              <button onClick={() => handleEditCustomer(customer)} style={{ marginRight: 8, padding: '4px 10px', border: '1px solid #1d426a', background: 'none', color: '#1d426a', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Bearbeiten</button>
+                              <button onClick={() => handleArchiveCustomer(customer)} style={{ padding: '4px 10px', border: '1px solid #dc3545', background: 'none', color: '#dc3545', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Archivieren</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
         {/* Results Count */}
         <div style={{ marginBottom: '1rem', color: '#666', fontSize: '14px' }}>
-          {filteredAndSortedCustomers.length} von {customers.length} Akustikern gefunden
+          {filteredAndSortedCustomers.length} von {showArchived ? archivedCustomersCount : activeCustomersCount}{' '}
+          {showArchived ? 'archivierten' : 'aktiven'} Akustikern gefunden
         </div>
 
         {/* Akustiker List */}
@@ -609,31 +899,71 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                     {customer.country || '-'}
                   </td>
                   <td style={{ padding: '16px', textAlign: 'center' }}>
-                                                             <button
-                      onClick={() => handleEditCustomer(customer)}
-                      style={{
-                        background: 'none',
-                        color: '#1d426a',
-                        border: 'none',
-                        cursor: 'pointer',
-                        padding: '8px',
-                        borderRadius: '4px',
-                        transition: 'all 0.2s ease',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.target.style.transform = 'scale(1.05)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.target.style.transform = 'scale(1)';
-                      }}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-                      </svg>
-                    </button>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '4px' }}>
+                      {!showArchived && (
+                        <button
+                          onClick={() => handleEditCustomer(customer)}
+                          title="Bearbeiten"
+                          style={{
+                            background: 'none',
+                            color: '#1d426a',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '8px',
+                            borderRadius: '4px',
+                            transition: 'all 0.2s ease',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                          </svg>
+                        </button>
+                      )}
+                      {showArchived ? (
+                        <button
+                          onClick={() => handleRestoreCustomer(customer)}
+                          title="Wiederherstellen"
+                          style={{
+                            background: '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '6px 12px',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            fontWeight: '500'
+                          }}
+                        >
+                          Wiederherstellen
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleArchiveCustomer(customer)}
+                          title="Archivieren"
+                          style={{
+                            background: 'none',
+                            color: '#dc3545',
+                            border: '1px solid #dc3545',
+                            cursor: 'pointer',
+                            padding: '6px 10px',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            fontWeight: '500'
+                          }}
+                        >
+                          Archivieren
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -653,9 +983,15 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
           }}>
             <div style={{ fontSize: '18px', marginBottom: '0.5rem' }}>Keine Akustiker gefunden</div>
             <div style={{ fontSize: '14px' }}>
-              {searchTerm ? 'Versuchen Sie einen anderen Suchbegriff.' : 'Fügen Sie den ersten Akustiker hinzu.'}
+              {searchTerm
+                ? 'Versuchen Sie einen anderen Suchbegriff.'
+                : showArchived
+                  ? 'Keine archivierten Akustiker vorhanden.'
+                  : 'Fügen Sie den ersten Akustiker hinzu.'}
             </div>
           </div>
+        )}
+          </>
         )}
       </div>
 
@@ -3202,6 +3538,12 @@ const getInputStyleWithValidation = (currentValue, maxLength, baseStyle) => {
 const ErstellteRechnungenPage = () => {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedAkustiker, setSelectedAkustiker] = useState('');
 
   // Load invoices from database
   const loadInvoices = async () => {
@@ -3235,6 +3577,96 @@ const ErstellteRechnungenPage = () => {
   useEffect(() => {
     loadInvoices();
   }, []);
+
+  const handleMonthSelection = (year, month) => {
+    const endOfMonth = new Date(year, month, 0);
+    const startDateString = `${year}-${String(month).padStart(2, '0')}-01`;
+    const endDateString = `${year}-${String(month).padStart(2, '0')}-${String(endOfMonth.getDate()).padStart(2, '0')}`;
+    setDateFrom(startDateString);
+    setDateTo(endDateString);
+    setShowMonthPicker(false);
+  };
+
+  const clearDateFilter = () => {
+    setDateFrom('');
+    setDateTo('');
+  };
+
+  const akustikerOptions = [...new Set(
+    invoices
+      .map((invoice) => invoice.customers?.company)
+      .filter((company) => company && company.trim())
+  )].sort((a, b) => a.localeCompare(b, 'de'));
+
+  const normalizeSearchAmount = (value) =>
+    String(value ?? '')
+      .replace(/\s/g, '')
+      .replace('€', '')
+      .replace(/\./g, '')
+      .replace(',', '.')
+      .trim();
+
+  const filteredInvoices = invoices.filter((invoice) => {
+    // Akustiker / company filter
+    if (selectedAkustiker && invoice.customers?.company !== selectedAkustiker) {
+      return false;
+    }
+
+    // Date range filter (invoice_date)
+    if (dateFrom || dateTo) {
+      const invDate = invoice.invoice_date || '';
+      if (dateFrom && invDate < dateFrom) return false;
+      if (dateTo && invDate > dateTo) return false;
+    }
+
+    if (!searchTerm.trim()) return true;
+
+    const term = searchTerm.toLowerCase().trim();
+    const amountTerm = normalizeSearchAmount(searchTerm);
+
+    const searchableText = [
+      invoice.invoice_number,
+      invoice.status,
+      invoice.customers?.company,
+      invoice.customers?.branch,
+      invoice.customers?.street,
+      invoice.customers?.location,
+      invoice.customers?.country,
+      invoice.invoice_date,
+      invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('de-DE') : '',
+      invoice.period_start,
+      invoice.period_end,
+      invoice.subtotal != null ? Number(invoice.subtotal).toFixed(2) : '',
+      invoice.subtotal != null ? Number(invoice.subtotal).toFixed(2).replace('.', ',') : '',
+      invoice.tax_amount != null ? Number(invoice.tax_amount).toFixed(2) : '',
+      invoice.tax_amount != null ? Number(invoice.tax_amount).toFixed(2).replace('.', ',') : '',
+      invoice.total_amount != null ? Number(invoice.total_amount).toFixed(2) : '',
+      invoice.total_amount != null ? Number(invoice.total_amount).toFixed(2).replace('.', ',') : ''
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    if (searchableText.includes(term)) return true;
+
+    // Amount search (netto / brutto / mwst)
+    if (amountTerm && !Number.isNaN(Number(amountTerm))) {
+      const needle = Number(amountTerm);
+      const amounts = [
+        Number(invoice.subtotal),
+        Number(invoice.tax_amount),
+        Number(invoice.total_amount)
+      ].filter((n) => !Number.isNaN(n));
+
+      // Exact or starts-with on formatted amounts
+      if (amounts.some((n) => Math.abs(n - needle) < 0.005)) return true;
+      if (amounts.some((n) => n.toFixed(2).startsWith(amountTerm) || n.toFixed(2).replace('.', ',').startsWith(searchTerm.trim()))) {
+        return true;
+      }
+    }
+
+    return false;
+  });
 
   // Invoice action handlers
   const handleDownloadInvoicePDF = async (invoice) => {
@@ -3270,6 +3702,11 @@ const ErstellteRechnungenPage = () => {
         periodStart: invoice.period_start,
         periodEnd: invoice.period_end,
         customer: customerData,
+        taxRate: Number(invoice.tax_rate),
+        forceReverseCharge:
+          Number(invoice.tax_rate) === 0
+          || customerData?.country === 'Österreich'
+          || (customerData?.company || '').toLowerCase().includes('optik bauer'),
         manualItems: invoiceItems.filter(item => !item.repair_order_id).map(item => ({
           description: item.description,
           amount: item.line_total ?? item.repair_amount ?? 0,
@@ -3504,6 +3941,161 @@ const ErstellteRechnungenPage = () => {
         </button>
       </div>
 
+      {/* Live search + date filters */}
+      {invoices.length > 0 && (
+        <div style={{
+          marginBottom: '1.5rem',
+          padding: '1rem',
+          background: '#f8f9fa',
+          borderRadius: 8,
+          border: '1px solid #e9ecef',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1rem'
+        }}>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Suche: Rechnungsnr., Kunde, Datum, Netto, Brutto, MwSt. …"
+            style={{
+              padding: '12px 16px',
+              border: '2px solid #e1e5e9',
+              borderRadius: 8,
+              fontSize: 16,
+              width: '100%',
+              boxSizing: 'border-box'
+            }}
+          />
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
+            <span style={{ fontSize: 14, color: '#666' }}>Akustiker:</span>
+            <select
+              value={selectedAkustiker}
+              onChange={(e) => setSelectedAkustiker(e.target.value)}
+              style={{
+                padding: '6px 12px',
+                border: '1px solid #e1e5e9',
+                borderRadius: 4,
+                fontSize: 14,
+                minWidth: 220,
+                maxWidth: 320,
+                background: 'white'
+              }}
+            >
+              <option value="">Alle Akustiker</option>
+              {akustikerOptions.map((company) => (
+                <option key={company} value={company}>{company}</option>
+              ))}
+            </select>
+
+            <span style={{ fontSize: 14, color: '#666' }}>Zeitraum:</span>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              style={{ padding: '6px 8px', border: '1px solid #e1e5e9', borderRadius: 4, fontSize: 14 }}
+            />
+            <span style={{ fontSize: 14, color: '#666' }}>bis</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              style={{ padding: '6px 8px', border: '1px solid #e1e5e9', borderRadius: 4, fontSize: 14 }}
+            />
+
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setShowMonthPicker(!showMonthPicker)}
+                style={{
+                  padding: '6px 12px',
+                  background: '#1d426a',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  fontSize: 14
+                }}
+              >
+                Monat
+              </button>
+              {showMonthPicker && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  zIndex: 1000,
+                  background: 'white',
+                  border: '1px solid #e1e5e9',
+                  borderRadius: 6,
+                  padding: '1rem',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  minWidth: 220
+                }}>
+                  <label style={{ fontSize: 14, color: '#666' }}>Jahr:</label>
+                  <select
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
+                    style={{ width: '100%', marginBottom: 8, padding: 6 }}
+                  >
+                    {[0, 1, 2, 3, 4].map((offset) => {
+                      const year = new Date().getFullYear() - offset;
+                      return <option key={year} value={year}>{year}</option>;
+                    })}
+                  </select>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+                    {['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'].map((label, idx) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => handleMonthSelection(selectedYear, idx + 1)}
+                        style={{
+                          padding: '8px 4px',
+                          border: '1px solid #ddd',
+                          borderRadius: 4,
+                          background: 'white',
+                          cursor: 'pointer',
+                          fontSize: 13
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {(dateFrom || dateTo || searchTerm || selectedAkustiker) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedAkustiker('');
+                  clearDateFilter();
+                }}
+                style={{
+                  padding: '6px 12px',
+                  background: 'none',
+                  border: '1px solid #ccc',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  color: '#666'
+                }}
+              >
+                Filter zurücksetzen
+              </button>
+            )}
+
+            <span style={{ fontSize: 14, color: '#666', marginLeft: 'auto' }}>
+              {filteredInvoices.length} von {invoices.length} Rechnungen
+            </span>
+          </div>
+        </div>
+      )}
+
       {invoices.length === 0 ? (
         <div style={{
           textAlign: 'center',
@@ -3512,6 +4104,18 @@ const ErstellteRechnungenPage = () => {
         }}>
           <h3>Noch keine Rechnungen erstellt</h3>
           <p>Erstellen Sie Ihre erste Rechnung über die Reparaturaufträge.</p>
+        </div>
+      ) : filteredInvoices.length === 0 ? (
+        <div style={{
+          textAlign: 'center',
+          padding: '3rem',
+          color: '#666',
+          background: '#f8f9fa',
+          borderRadius: 8,
+          border: '1px solid #e0e0e0'
+        }}>
+          <h3 style={{ marginTop: 0 }}>Keine Treffer</h3>
+          <p>Keine Rechnung entspricht der Suche / dem Zeitraum.</p>
         </div>
       ) : (
         <div style={{ 
@@ -3535,9 +4139,9 @@ const ErstellteRechnungenPage = () => {
               </tr>
             </thead>
             <tbody>
-              {invoices.map((invoice, index) => (
+              {filteredInvoices.map((invoice, index) => (
                 <tr key={invoice.id} style={{ 
-                  borderBottom: index < invoices.length - 1 ? '1px solid #f0f0f0' : 'none',
+                  borderBottom: index < filteredInvoices.length - 1 ? '1px solid #f0f0f0' : 'none',
                   backgroundColor: 'transparent'
                 }}>
                   <td style={{ padding: '12px', textAlign: 'center' }}>
@@ -5729,6 +6333,8 @@ const RechnungBearbeitenPage = () => {
       periodStart: periodStart,
       periodEnd: periodEnd,
       customer: invoice.customer,
+      taxRate: invoice.customer?.country === 'Österreich' ? 0 : 0.19,
+      forceReverseCharge: invoice.customer?.country === 'Österreich' || Number(invoice.tax_rate) === 0,
       manualItems: manualItems
     };
 
@@ -7009,7 +7615,8 @@ function AppContent() {
         billing_street: newAkustiker.billing_street,
         billing_location: newAkustiker.billing_location,
         billing_country: newAkustiker.billing_country === 'DE' ? 'Deutschland' : 'Österreich',
-        ust_id: newAkustiker.ust_id || null
+        ust_id: newAkustiker.ust_id || null,
+        archived: false
       };
       
       const { data, error } = await supabase
@@ -7351,8 +7958,9 @@ function AppContent() {
     }
   };
 
-  // Group customers by company
-  const groupedCustomers = customers.reduce((acc, customer) => {
+  // Group customers by company (active only — archived excluded from repair orders)
+  const activeCustomers = customers.filter(customer => !customer.archived);
+  const groupedCustomers = activeCustomers.reduce((acc, customer) => {
     const companyKey = customer.company;
     if (!acc[companyKey]) {
       acc[companyKey] = {
@@ -7391,7 +7999,7 @@ function AppContent() {
   // Get branches for selected company
   const selectedCompanyBranches = selectedCompany ? groupedCustomers[selectedCompany]?.branches || [] : [];
 
-  const filteredCustomers = customers.filter(customer => {
+  const filteredCustomers = activeCustomers.filter(customer => {
     if (!customerSearch.trim()) return false;
     
     const searchTerm = customerSearch.toLowerCase().trim();

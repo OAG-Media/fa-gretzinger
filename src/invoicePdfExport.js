@@ -333,15 +333,44 @@ const renderCalculations = (doc, startY, totals) => {
   return startY + CALC_BOX_HEIGHT;
 };
 
+// Reverse charge note for Austrian customers (e.g. Optik Bauer)
+const normalizeCountry = (value) =>
+  (value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+
+const needsReverseChargeNote = (customer, extras = {}) => {
+  const country = normalizeCountry(customer?.country || customer?.billing_country);
+  const company = (customer?.company || '').toLowerCase();
+  const taxRate = Number(extras.taxRate);
+
+  if (country.includes('osterreich') || country === 'at') return true;
+  if (company.includes('optik bauer') || company.includes('optik akustik bauer')) return true;
+  // Existing Austrian invoices often have 0% MwSt stored
+  if (!Number.isNaN(taxRate) && taxRate === 0 && (country || company)) {
+    if (country.includes('osterreich') || country === 'at' || company.includes('bauer')) return true;
+  }
+  if (!Number.isNaN(taxRate) && taxRate === 0 && extras.forceReverseCharge) return true;
+  return false;
+};
+
 // Render footer with page counter and invoice number
-const renderFooter = (doc, currentPage, totalPages, invoiceNumber) => {
+const renderFooter = (doc, currentPage, totalPages, invoiceNumber, customer = null, extras = {}) => {
   const { FOOTER_TOP, MARGIN_LEFT, PAGE_WIDTH, MARGIN_RIGHT } = PDF_LAYOUT;
   
   doc.setFontSize(PDF_LAYOUT.FONT_SIZE_SMALL);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(0, 0, 0);
   
-  let currentY = FOOTER_TOP;
+  const showReverseCharge = needsReverseChargeNote(customer, extras);
+  let currentY = showReverseCharge ? FOOTER_TOP - 4 : FOOTER_TOP;
+
+  if (showReverseCharge) {
+    doc.text('Steuerschuldnerschaft des Leistungsempfängers', MARGIN_LEFT, currentY);
+    currentY += 4;
+  }
   
   // Payment instruction
   doc.text('Rechnungsbetrag bitte innerhalb 10 Tagen nach Erhalt auf folgendes Konto überweisen:', MARGIN_LEFT, currentY);
@@ -389,11 +418,23 @@ export const generateInvoicePDF = (invoiceData, selectedOrders) => {
   );
   
   const subtotal = repairOrdersSubtotal + manualItemsSubtotal;
-  const taxRate = invoiceData.customer?.country === 'Österreich' ? 0 : 0.19;
-  const taxAmount = subtotal * taxRate;
-  const total = subtotal + taxAmount;
+  const taxRate = invoiceData.taxRate != null
+    ? Number(invoiceData.taxRate)
+    : (invoiceData.customer?.country === 'Österreich' ? 0 : 0.19);
+  const taxAmount = invoiceData.taxAmount != null
+    ? Number(invoiceData.taxAmount)
+    : subtotal * taxRate;
+  const total = invoiceData.total != null
+    ? Number(invoiceData.total)
+    : subtotal + taxAmount;
   
   const totals = { subtotal, taxRate, taxAmount, total };
+  const reverseChargeExtras = {
+    taxRate,
+    forceReverseCharge: invoiceData.forceReverseCharge === true
+      || taxRate === 0
+      || needsReverseChargeNote(invoiceData.customer, { taxRate })
+  };
   
   // Prepare items for table
   const tableItems = [
@@ -517,8 +558,15 @@ export const generateInvoicePDF = (invoiceData, selectedOrders) => {
       currentY = renderCalculations(doc, currentY, totals);
     }
     
-    // Add footer to all pages
-    renderFooter(doc, pageIndex + 1, totalPages, invoiceData.invoiceNumber);
+    // Add footer to all pages (incl. reverse-charge note for AT / existing 0% invoices)
+    renderFooter(
+      doc,
+      pageIndex + 1,
+      totalPages,
+      invoiceData.invoiceNumber,
+      invoiceData.customer,
+      reverseChargeExtras
+    );
   });
   
   // Save PDF
