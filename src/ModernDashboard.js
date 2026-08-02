@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase, fetchAllPages } from './supabaseClient';
+import { useAdminDashboardPrefs } from './dashboardPrefs';
 import './ModernDashboard.css';
 
 const MONTHS_DE = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+const MONTHS_DE_FULL = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 
-const Icon = ({ name }) => {
+export const Icon = ({ name }) => {
   const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
   switch (name) {
     case 'home':
@@ -47,6 +49,13 @@ const Icon = ({ name }) => {
           <path d="M9 8h6M9 12h6M9 16h3.5" />
         </svg>
       );
+    case 'finance':
+      return (
+        <svg className="md-nav-icon" viewBox="0 0 24 24" {...common}>
+          <path d="M4 19V5M4 19h16" />
+          <path d="M8 15v-4M12 15V8M16 15v-6" />
+        </svg>
+      );
     case 'settings':
       return (
         <svg className="md-nav-icon" viewBox="0 0 24 24" {...common}>
@@ -59,6 +68,34 @@ const Icon = ({ name }) => {
         <svg className="md-nav-icon" viewBox="0 0 24 24" {...common}>
           <path d="M10 5H6.5A1.5 1.5 0 0 0 5 6.5v11A1.5 1.5 0 0 0 6.5 19H10" />
           <path d="M14 8l4 4-4 4M18 12H10" />
+        </svg>
+      );
+    case 'chart-bar':
+      return (
+        <svg viewBox="0 0 24 24" {...common}>
+          <path d="M5 19V10M12 19V5M19 19v-7" />
+        </svg>
+      );
+    case 'chart-line':
+      return (
+        <svg viewBox="0 0 24 24" {...common}>
+          <path d="M4 16l5-5 4 3 7-8" />
+          <path d="M4 19h16" />
+        </svg>
+      );
+    case 'chart-donut':
+      return (
+        <svg viewBox="0 0 24 24" {...common}>
+          <circle cx="12" cy="12" r="7.5" />
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 4.5V8" />
+        </svg>
+      );
+    case 'chart-list':
+      return (
+        <svg viewBox="0 0 24 24" {...common}>
+          <path d="M8 7h11M8 12h11M8 17h11" />
+          <path d="M4 7h.01M4 12h.01M4 17h.01" />
         </svg>
       );
     default:
@@ -85,21 +122,121 @@ function useCountUp(target, duration = 1100, decimals = 0) {
   return decimals > 0 ? value.toFixed(decimals) : Math.round(value);
 }
 
-function formatEuro(n) {
+export function formatEuro(n) {
   return Number(n || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 }
 
-function parseDate(value) {
+export function parseDate(value) {
   if (!value) return null;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function monthKey(d) {
+export function monthKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function BarChart({ series }) {
+/** Months Jan..Dec for a year, truncated to current month when year === this year */
+export function monthKeysForYear(year) {
+  const now = new Date();
+  let lastIdx = 11;
+  if (year === now.getFullYear()) lastIdx = now.getMonth();
+  else if (year > now.getFullYear()) lastIdx = -1;
+  const keys = [];
+  for (let m = 0; m <= lastIdx; m++) {
+    keys.push({
+      key: `${year}-${String(m + 1).padStart(2, '0')}`,
+      label: MONTHS_DE[m],
+      monthIndex: m
+    });
+  }
+  return keys;
+}
+
+export function orderAmount(o) {
+  return (parseFloat(o.nettopreis) || 0) + (parseFloat(o.porto) || 0);
+}
+
+export function customerLabel(o) {
+  const c = o.customers;
+  if (!c) return 'Unbekannt';
+  const company = (c.company || '').trim() || 'Ohne Name';
+  const branch = (c.branch || '').trim();
+  return branch ? `${company} · ${branch}` : company;
+}
+
+function startOfDay(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function endOfDay(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+}
+
+export function inPeriod(d, period, year, dateFrom = '', dateTo = '', monthKeyStr = '') {
+  if (!d) return false;
+  const now = new Date();
+  if (period === 'all') return true;
+  if (period === 'month') {
+    if (monthKeyStr && /^\d{4}-\d{2}$/.test(monthKeyStr)) {
+      const [y, m] = monthKeyStr.split('-').map(Number);
+      return d.getFullYear() === y && d.getMonth() === m - 1;
+    }
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  }
+  if (period === 'untilToday') return d <= endOfDay(now);
+  if (period === 'range') {
+    if (dateFrom) {
+      const from = parseDate(dateFrom);
+      if (from && d < startOfDay(from)) return false;
+    }
+    if (dateTo) {
+      const to = parseDate(dateTo);
+      if (to && d > endOfDay(to)) return false;
+    }
+    return true;
+  }
+  return d.getFullYear() === year;
+}
+
+export function monthLabelDe(monthKeyStr, full = false) {
+  if (!monthKeyStr || !/^\d{4}-\d{2}$/.test(monthKeyStr)) return '';
+  const [y, m] = monthKeyStr.split('-').map(Number);
+  const name = (full ? MONTHS_DE_FULL : MONTHS_DE)[m - 1];
+  return `${name} ${y}`;
+}
+
+export function monthNameDe(monthKeyStr) {
+  if (!monthKeyStr || !/^\d{4}-\d{2}$/.test(monthKeyStr)) return '';
+  const m = Number(monthKeyStr.split('-')[1]);
+  return MONTHS_DE_FULL[m - 1] || '';
+}
+
+export function listAvailableMonths(dateList) {
+  const set = new Set();
+  dateList.forEach((value) => {
+    const d = parseDate(value);
+    if (!d) return;
+    set.add(monthKey(d));
+  });
+  return [...set].sort((a, b) => b.localeCompare(a));
+}
+
+function polar(cx, cy, r, angleDeg) {
+  const a = ((angleDeg - 90) * Math.PI) / 180;
+  return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+}
+
+function donutSlicePath(cx, cy, rInner, rOuter, a0, a1) {
+  const p0 = polar(cx, cy, rOuter, a0);
+  const p1 = polar(cx, cy, rOuter, a1);
+  const p2 = polar(cx, cy, rInner, a1);
+  const p3 = polar(cx, cy, rInner, a0);
+  const large = a1 - a0 > 180 ? 1 : 0;
+  return `M ${p0.x} ${p0.y} A ${rOuter} ${rOuter} 0 ${large} 1 ${p1.x} ${p1.y} L ${p2.x} ${p2.y} A ${rInner} ${rInner} 0 ${large} 0 ${p3.x} ${p3.y} Z`;
+}
+
+export function BarChart({ series, valueFormatter = formatEuro }) {
   const w = 640;
   const h = 240;
   const pad = { t: 16, r: 12, b: 36, l: 48 };
@@ -110,7 +247,7 @@ function BarChart({ series }) {
   const barW = Math.max(8, (innerW - gap * (series.length - 1)) / Math.max(series.length, 1));
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Balkendiagramm Umsatz">
+    <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Balkendiagramm">
       {[0, 0.25, 0.5, 0.75, 1].map((p) => {
         const y = pad.t + innerH * (1 - p);
         return (
@@ -127,7 +264,7 @@ function BarChart({ series }) {
         const x = pad.l + i * (barW + gap);
         const y = pad.t + innerH - bh;
         return (
-          <g key={s.label}>
+          <g key={`${s.label}-${i}`}>
             <rect
               className="md-bar"
               x={x}
@@ -138,7 +275,7 @@ function BarChart({ series }) {
               fill={i % 2 === 0 ? '#1d426a' : '#f0a04b'}
               style={{ animationDelay: `${i * 0.05}s` }}
             >
-              <title>{`${s.label}: ${formatEuro(s.value)}`}</title>
+              <title>{`${s.label}: ${valueFormatter(s.value)}`}</title>
             </rect>
             <text x={x + barW / 2} y={h - 12} textAnchor="middle" fontSize="10" fill="#6a7a8c">
               {s.label}
@@ -150,7 +287,7 @@ function BarChart({ series }) {
   );
 }
 
-function LineChart({ series }) {
+export function LineChart({ series, valueFormatter = formatEuro }) {
   const w = 640;
   const h = 240;
   const pad = { t: 16, r: 12, b: 36, l: 48 };
@@ -166,7 +303,7 @@ function LineChart({ series }) {
   const area = `${path} L ${points[points.length - 1]?.x || pad.l} ${pad.t + innerH} L ${pad.l} ${pad.t + innerH} Z`;
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Liniendiagramm Umsatz">
+    <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Liniendiagramm">
       <defs>
         <linearGradient id="mdArea" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#1d426a" stopOpacity="0.28" />
@@ -181,13 +318,13 @@ function LineChart({ series }) {
       {points.length > 0 && (
         <path className="md-line-path" d={path} fill="none" stroke="#1d426a" strokeWidth="2.6" />
       )}
-      {points.map((p) => (
-        <circle key={p.label} cx={p.x} cy={p.y} r="4" fill="#f0a04b" stroke="#fff" strokeWidth="1.5">
-          <title>{`${p.label}: ${formatEuro(p.value)}`}</title>
+      {points.map((p, i) => (
+        <circle key={`${p.label}-${i}`} cx={p.x} cy={p.y} r="4" fill="#f0a04b" stroke="#fff" strokeWidth="1.5">
+          <title>{`${p.label}: ${valueFormatter(p.value)}`}</title>
         </circle>
       ))}
-      {points.map((p) => (
-        <text key={`t-${p.label}`} x={p.x} y={h - 12} textAnchor="middle" fontSize="10" fill="#6a7a8c">
+      {points.map((p, i) => (
+        <text key={`t-${p.label}-${i}`} x={p.x} y={h - 12} textAnchor="middle" fontSize="10" fill="#6a7a8c">
           {p.label}
         </text>
       ))}
@@ -195,68 +332,237 @@ function LineChart({ series }) {
   );
 }
 
-function DonutChart({ slices }) {
-  const total = Math.max(slices.reduce((s, x) => s + x.value, 0), 1);
-  const size = 168;
+export function DonutChart({ slices, centerLabel = 'Summe', valueFormatter = (v) => String(v) }) {
+  const [hoverIdx, setHoverIdx] = useState(null);
+  const [tip, setTip] = useState(null);
+  const chartRef = React.useRef(null);
+  const total = Math.max(slices.reduce((s, x) => s + x.value, 0), 0.0001);
+  const size = 220;
   const cx = size / 2;
-  const r = 52;
-  const stroke = 16;
-  const c = 2 * Math.PI * r;
-  let offset = 0;
-  const colors = ['#1d426a', '#f0a04b', '#3d7ab5', '#7eb0d6', '#c97b3a', '#5c6f82'];
+  const cy = size / 2;
+  const rOuter = 90;
+  const rInner = 54;
+  const colors = ['#1d426a', '#f0a04b', '#3d7ab5', '#7eb0d6', '#c97b3a', '#5c6f82', '#8ab4a5', '#d4a5a5'];
+
+  let angle = 0;
+  const arcs = slices.map((s, i) => {
+    const sweep = (s.value / total) * 360;
+    const a0 = angle;
+    const a1 = angle + Math.max(sweep, 0.01);
+    angle = a1;
+    return { ...s, i, a0, a1, color: colors[i % colors.length] };
+  });
+
+  const active = hoverIdx != null ? arcs[hoverIdx] : null;
+  const centerValue = active ? valueFormatter(active.value) : valueFormatter(total);
+  const centerSub = active ? active.label : centerLabel;
+
+  const updateTip = (e, s) => {
+    const box = chartRef.current?.getBoundingClientRect();
+    if (!box) return;
+    setHoverIdx(s.i);
+    setTip({
+      x: e.clientX - box.left + 14,
+      y: e.clientY - box.top + 10,
+      label: s.label,
+      value: valueFormatter(s.value)
+    });
+  };
 
   return (
-    <div className="md-donut-wrap">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="md-donut-svg">
-        <g transform={`translate(${cx},${cx}) rotate(-90)`}>
-          <circle r={r} fill="none" stroke="#eef2f6" strokeWidth={stroke} />
-          {slices.map((s, i) => {
-            const len = (s.value / total) * c;
-            const el = (
-              <circle
-                key={s.label}
-                className="md-donut-seg"
-                r={r}
-                fill="none"
-                stroke={colors[i % colors.length]}
-                strokeWidth={stroke}
-                strokeDasharray={`${len} ${c - len}`}
-                strokeDashoffset={-offset}
-                strokeLinecap="butt"
-              >
-                <title>{`${s.label}: ${s.value}`}</title>
-              </circle>
-            );
-            offset += len;
-            return el;
-          })}
-        </g>
-        <text x={cx} y={cx - 4} textAnchor="middle" fontSize="18" fontWeight="700" fill="#1d426a">
-          {total}
-        </text>
-        <text x={cx} y={cx + 14} textAnchor="middle" fontSize="10" fill="#8a97a6">
-          Aufträge
-        </text>
-      </svg>
-      <div className="md-legend md-donut-legend">
-        {slices.map((s, i) => (
-          <span key={s.label}>
-            <span className="md-legend-dot" style={{ background: colors[i % colors.length] }} />
-            {s.label}: {s.value}
-          </span>
+    <div className="md-donut-wrap md-donut-side">
+      <div
+        className="md-donut-chart"
+        ref={chartRef}
+        onMouseLeave={() => { setHoverIdx(null); setTip(null); }}
+      >
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="md-donut-svg">
+          <circle cx={cx} cy={cy} r={(rOuter + rInner) / 2} fill="none" stroke="#eef2f6" strokeWidth={rOuter - rInner} />
+          {arcs.map((s) => (
+            <path
+              key={`${s.label}-${s.i}`}
+              className={`md-donut-seg${hoverIdx === s.i ? ' is-hot' : ''}${hoverIdx != null && hoverIdx !== s.i ? ' is-dim' : ''}`}
+              d={donutSlicePath(cx, cy, rInner, rOuter, s.a0, s.a1)}
+              fill={s.color}
+              onMouseEnter={(e) => updateTip(e, s)}
+              onMouseMove={(e) => updateTip(e, s)}
+            />
+          ))}
+          <text x={cx} y={cy - 6} textAnchor="middle" fontSize="15" fontWeight="700" fill="#1d426a">
+            {String(centerValue).replace(' €', '')}
+          </text>
+          <text x={cx} y={cy + 14} textAnchor="middle" fontSize="11" fill="#8a97a6">
+            {centerSub.length > 18 ? `${centerSub.slice(0, 16)}…` : centerSub}
+          </text>
+        </svg>
+        {tip && (
+          <div className="md-donut-tip" style={{ left: tip.x, top: tip.y }}>
+            <strong>{tip.label}</strong>
+            <span>{tip.value}</span>
+          </div>
+        )}
+      </div>
+      <div className="md-donut-legend-side">
+        {arcs.map((s) => (
+          <button
+            type="button"
+            key={`${s.label}-${s.i}`}
+            className={`md-donut-legend-item${hoverIdx === s.i ? ' is-hot' : ''}`}
+            onMouseEnter={() => { setHoverIdx(s.i); setTip(null); }}
+            onMouseLeave={() => setHoverIdx(null)}
+          >
+            <span className="md-legend-dot" style={{ background: s.color }} />
+            <span className="md-donut-legend-label">{s.label}</span>
+            <span className="md-donut-legend-val">{valueFormatter(s.value)}</span>
+          </button>
         ))}
       </div>
     </div>
   );
 }
 
+export function RankingList({ items, valueFormatter = formatEuro, emptyText = 'Keine Daten' }) {
+  const max = Math.max(...items.map((i) => i.value), 1);
+  if (!items.length) return <div className="md-empty">{emptyText}</div>;
+  return (
+    <div className="md-rank-list">
+      {items.map((item, idx) => (
+        <div key={`${item.label}-${idx}`} className="md-rank-row" style={{ animationDelay: `${idx * 0.04}s` }}>
+          <div className="md-rank-meta">
+            <span className="md-rank-pos">{idx + 1}</span>
+            <span className="md-rank-name" title={item.label}>{item.label}</span>
+            <span className="md-rank-value">{valueFormatter(item.value)}</span>
+          </div>
+          <div className="md-rank-track">
+            <div className="md-rank-fill" style={{ width: `${(item.value / max) * 100}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const CHART_ICONS = {
+  bar: 'chart-bar',
+  line: 'chart-line',
+  donut: 'chart-donut',
+  list: 'chart-list'
+};
+
+/** Minimalist single-button cycle switcher for chart/list modes */
+export function ViewModeSwitcher({ value, options, onChange, title = 'Ansicht wechseln' }) {
+  const idx = Math.max(0, options.indexOf(value));
+  const next = () => onChange(options[(idx + 1) % options.length]);
+  const icon = CHART_ICONS[value] || 'chart-bar';
+  return (
+    <button type="button" className="md-view-cycle" onClick={next} title={title} aria-label={title}>
+      <Icon name={icon} />
+    </button>
+  );
+}
+
+export function PeriodSelect({
+  period,
+  year,
+  years,
+  dateFrom = '',
+  dateTo = '',
+  month = '',
+  months = [],
+  onPeriod,
+  onYear,
+  onDateFrom,
+  onDateTo,
+  onMonth,
+  showRange = true
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const nowKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+  return (
+    <div className="md-tile-tools">
+      {(showRange
+        ? [['month', 'Monat'], ['year', 'Jahr'], ['range', 'Von–Bis'], ['untilToday', 'Bis heute'], ['all', 'Alles']]
+        : [['month', 'Monat'], ['year', 'Jahr'], ['all', 'Alles']]
+      ).map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          className={`md-mini-chip${period === id ? ' active' : ''}`}
+          onClick={() => onPeriod(id)}
+        >
+          {label}
+        </button>
+      ))}
+      {period === 'year' && (
+        <select
+          className="md-mini-select"
+          value={year}
+          onChange={(e) => onYear(Number(e.target.value))}
+        >
+          {years.map((y) => (
+            <option key={y} value={y}>{y}</option>
+          ))}
+        </select>
+      )}
+      {period === 'month' && onMonth && (
+        <select
+          className="md-mini-select"
+          value={month || nowKey}
+          onChange={(e) => onMonth(e.target.value)}
+        >
+          {(months.length ? months : [nowKey]).map((mk) => (
+            <option key={mk} value={mk}>
+              {monthLabelDe(mk, true)}{mk === nowKey ? ' (aktuell)' : ''}
+            </option>
+          ))}
+        </select>
+      )}
+      {period === 'range' && onDateFrom && onDateTo && (
+        <div className="md-range-inputs">
+          <input
+            type="date"
+            className="md-mini-date"
+            value={dateFrom || ''}
+            onChange={(e) => onDateFrom(e.target.value)}
+          />
+          <input
+            type="date"
+            className="md-mini-date"
+            value={dateTo || ''}
+            onChange={(e) => onDateTo(e.target.value)}
+          />
+          <button
+            type="button"
+            className="md-mini-chip"
+            title="Enddatum auf heute setzen"
+            onClick={() => onDateTo(today)}
+          >
+            Bis heute
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ChartBody({ type, series, ranking, euro = true, centerLabel }) {
+  const fmt = euro ? formatEuro : (v) => String(Math.round(v));
+  if (type === 'list') {
+    return <RankingList items={ranking || series} valueFormatter={fmt} />;
+  }
+  if (!series?.length) return <div className="md-empty">Keine Daten für den Zeitraum</div>;
+  if (type === 'line') return <LineChart series={series} valueFormatter={fmt} />;
+  if (type === 'donut') {
+    return <DonutChart slices={series} valueFormatter={fmt} centerLabel={centerLabel || (euro ? 'Umsatz' : 'Aufträge')} />;
+  }
+  return <BarChart series={series} valueFormatter={fmt} />;
+}
+
 const ModernHome = () => {
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState([]);
   const [invoices, setInvoices] = useState([]);
-  const [period, setPeriod] = useState('year'); // month | year | all
-  const [chartType, setChartType] = useState('bar'); // bar | line | donut
-  const [year, setYear] = useState(new Date().getFullYear());
+  const { prefs, setPrefs, patchTile } = useAdminDashboardPrefs();
 
   useEffect(() => {
     let cancelled = false;
@@ -267,7 +573,7 @@ const ModernHome = () => {
           fetchAllPages(() =>
             supabase
               .from('repair_orders')
-              .select('id, created_at, werkstattausgang, werkstatteingang, nettopreis, porto, freigabe, archived')
+              .select('id, created_at, werkstattausgang, werkstatteingang, nettopreis, porto, freigabe, archived, customer_id, customers(company, branch)')
               .eq('archived', false)
               .order('created_at', { ascending: false })
           ),
@@ -308,38 +614,97 @@ const ModernHome = () => {
   }, [orders, invoices]);
 
   useEffect(() => {
-    if (!availableYears.includes(year)) setYear(availableYears[0]);
-  }, [availableYears, year]);
+    if (!availableYears.includes(prefs.kpiYear)) {
+      setPrefs((p) => ({ ...p, kpiYear: availableYears[0] }));
+    }
+  }, [availableYears, prefs.kpiYear, setPrefs]);
+
+  const buildMonthly = (year, metric) => {
+    const buckets = monthKeysForYear(year);
+    const map = {};
+    buckets.forEach((b) => { map[b.key] = { label: b.label, value: 0 }; });
+    orders.forEach((o) => {
+      const d = parseDate(o.werkstattausgang || o.created_at);
+      if (!d || d.getFullYear() !== year) return;
+      const mk = monthKey(d);
+      if (!map[mk]) return;
+      if (metric === 'revenue') map[mk].value += orderAmount(o);
+      else map[mk].value += 1;
+    });
+    return buckets.map((b) => ({
+      label: b.label,
+      value: metric === 'revenue' ? Math.round(map[b.key].value * 100) / 100 : map[b.key].value
+    }));
+  };
+
+  const buildCustomerRanking = (period, year, metric, dateFrom = '', dateTo = '', month = '') => {
+    const map = {};
+    orders.forEach((o) => {
+      const d = parseDate(o.werkstattausgang || o.created_at);
+      if (!inPeriod(d, period, year, dateFrom, dateTo, month)) return;
+      const label = customerLabel(o);
+      if (!map[label]) map[label] = 0;
+      map[label] += metric === 'revenue' ? orderAmount(o) : 1;
+    });
+    return Object.entries(map)
+      .map(([label, value]) => ({
+        label,
+        value: metric === 'revenue' ? Math.round(value * 100) / 100 : value
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 12);
+  };
+
+  const buildRangeMonthly = (period, year, dateFrom, dateTo, metric, month = '') => {
+    const map = {};
+    orders.forEach((o) => {
+      const d = parseDate(o.werkstattausgang || o.created_at);
+      if (!inPeriod(d, period, year, dateFrom, dateTo, month)) return;
+      const mk = monthKey(d);
+      if (!map[mk]) {
+        map[mk] = {
+          label: `${MONTHS_DE[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`,
+          value: 0,
+          sort: mk
+        };
+      }
+      map[mk].value += metric === 'revenue' ? orderAmount(o) : 1;
+    });
+    return Object.values(map)
+      .sort((a, b) => a.sort.localeCompare(b.sort))
+      .map((m) => ({
+        label: m.label,
+        value: metric === 'revenue' ? Math.round(m.value * 100) / 100 : m.value
+      }));
+  };
+
+  const availableMonths = useMemo(() => {
+    const dates = [
+      ...orders.map((o) => o.werkstattausgang || o.created_at),
+      ...invoices.map((inv) => inv.invoice_date || inv.created_at)
+    ];
+    const list = listAvailableMonths(dates);
+    const nowKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    if (!list.includes(nowKey)) list.unshift(nowKey);
+    return list;
+  }, [orders, invoices]);
 
   const stats = useMemo(() => {
     const now = new Date();
     const thisMonth = now.getMonth();
     const thisYear = now.getFullYear();
-
-    const orderAmount = (o) => (parseFloat(o.nettopreis) || 0) + (parseFloat(o.porto) || 0);
+    const period = prefs.kpiPeriod;
+    const year = prefs.kpiYear;
+    const dateFrom = prefs.kpiDateFrom;
+    const dateTo = prefs.kpiDateTo;
+    const month = prefs.kpiMonth;
     const invAmount = (inv) => parseFloat(inv.total_amount) || parseFloat(inv.subtotal) || 0;
-
-    const inScopeOrder = (d) => {
-      if (!d) return false;
-      if (period === 'all') return true;
-      if (period === 'year') return d.getFullYear() === year;
-      return d.getFullYear() === thisYear && d.getMonth() === thisMonth;
-    };
-
-    const inScopeInvoice = inScopeOrder;
 
     let revenueOrders = 0;
     let revenueInvoices = 0;
     let orderCount = 0;
     let orderCountMonth = 0;
     let revenueMonth = 0;
-
-    const byMonth = {};
-    for (let m = 0; m < 12; m++) {
-      byMonth[`${year}-${String(m + 1).padStart(2, '0')}`] = { label: MONTHS_DE[m], revenue: 0, orders: 0 };
-    }
-
-    const freigabeCounts = {};
 
     orders.forEach((o) => {
       const d = parseDate(o.werkstattausgang || o.created_at);
@@ -349,37 +714,17 @@ const ModernHome = () => {
         orderCountMonth += 1;
         revenueMonth += amt;
       }
-      if (inScopeOrder(d)) {
+      if (inPeriod(d, period, year, dateFrom, dateTo, month)) {
         orderCount += 1;
         revenueOrders += amt;
-        const key = o.freigabe || 'Keine Angabe';
-        freigabeCounts[key] = (freigabeCounts[key] || 0) + 1;
-      }
-      if (d.getFullYear() === year) {
-        const mk = monthKey(d);
-        if (byMonth[mk]) {
-          byMonth[mk].revenue += amt;
-          byMonth[mk].orders += 1;
-        }
       }
     });
 
     invoices.forEach((inv) => {
       const d = parseDate(inv.invoice_date || inv.created_at);
       if (!d) return;
-      if (inScopeInvoice(d)) revenueInvoices += invAmount(inv);
+      if (inPeriod(d, period, year, dateFrom, dateTo, month)) revenueInvoices += invAmount(inv);
     });
-
-    const monthSeries = Object.values(byMonth).map((m) => ({
-      label: m.label,
-      value: Math.round(m.revenue * 100) / 100,
-      orders: m.orders
-    }));
-
-    const freigabeSlices = Object.entries(freigabeCounts)
-      .map(([label, value]) => ({ label, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 6);
 
     return {
       revenueOrders,
@@ -387,8 +732,6 @@ const ModernHome = () => {
       orderCount,
       orderCountMonth,
       revenueMonth,
-      monthSeries,
-      freigabeSlices,
       ordersThisWeek: orders.filter((o) => {
         const d = parseDate(o.werkstattausgang || o.created_at);
         if (!d) return false;
@@ -396,62 +739,163 @@ const ModernHome = () => {
         return diff >= 0 && diff < 7;
       }).length
     };
-  }, [orders, invoices, period, year]);
+  }, [orders, invoices, prefs.kpiPeriod, prefs.kpiYear, prefs.kpiDateFrom, prefs.kpiDateTo, prefs.kpiMonth]);
 
+  const revenueSeries = useMemo(() => {
+    const { period, year, dateFrom, dateTo, month } = prefs.revenue;
+    if (period === 'month') {
+      let value = 0;
+      orders.forEach((o) => {
+        const d = parseDate(o.werkstattausgang || o.created_at);
+        if (inPeriod(d, 'month', year, '', '', month)) value += orderAmount(o);
+      });
+      return [{ label: monthLabelDe(month).split(' ')[0] || 'Monat', value: Math.round(value * 100) / 100 }];
+    }
+    if (period === 'all' || period === 'untilToday' || period === 'range') {
+      return buildRangeMonthly(period, year, dateFrom, dateTo, 'revenue', month);
+    }
+    return buildMonthly(year, 'revenue');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders, prefs.revenue.period, prefs.revenue.year, prefs.revenue.dateFrom, prefs.revenue.dateTo, prefs.revenue.month]);
+
+  const ordersSeries = useMemo(() => {
+    const { period, year, chartType, dateFrom, dateTo, month } = prefs.orders;
+    if (chartType === 'list') return [];
+    if (period === 'month') {
+      let value = 0;
+      orders.forEach((o) => {
+        const d = parseDate(o.werkstattausgang || o.created_at);
+        if (inPeriod(d, 'month', year, '', '', month)) value += 1;
+      });
+      return [{ label: monthLabelDe(month).split(' ')[0] || 'Monat', value }];
+    }
+    if (period === 'all' || period === 'untilToday' || period === 'range') {
+      return buildRangeMonthly(period, year, dateFrom, dateTo, 'orders', month);
+    }
+    return buildMonthly(year, 'orders');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders, prefs.orders.period, prefs.orders.year, prefs.orders.chartType, prefs.orders.dateFrom, prefs.orders.dateTo, prefs.orders.month]);
+
+  const ordersRanking = useMemo(
+    () => buildCustomerRanking(prefs.orders.period, prefs.orders.year, 'orders', prefs.orders.dateFrom, prefs.orders.dateTo, prefs.orders.month),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [orders, prefs.orders.period, prefs.orders.year, prefs.orders.dateFrom, prefs.orders.dateTo, prefs.orders.month]
+  );
+
+  const customerRanking = useMemo(
+    () => buildCustomerRanking(prefs.customers.period, prefs.customers.year, 'revenue', prefs.customers.dateFrom, prefs.customers.dateTo, prefs.customers.month),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [orders, prefs.customers.period, prefs.customers.year, prefs.customers.dateFrom, prefs.customers.dateTo, prefs.customers.month]
+  );
   const revenueDisplay = useCountUp(stats.revenueOrders, 1200, 2);
   const invoiceDisplay = useCountUp(stats.revenueInvoices, 1200, 2);
   const ordersDisplay = useCountUp(stats.orderCount, 900, 0);
   const weekDisplay = useCountUp(stats.ordersThisWeek, 900, 0);
 
-  const periodLabel =
-    period === 'month' ? 'dieser Monat' : period === 'year' ? `Jahr ${year}` : 'gesamter Zeitraum';
+  const nowMonthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
+  const kpiLabel =
+    prefs.kpiPeriod === 'month'
+      ? (prefs.kpiMonth === nowMonthKey
+        ? `Aktueller Monat ${monthNameDe(prefs.kpiMonth)}`
+        : `Monat ${monthLabelDe(prefs.kpiMonth, true)}`)
+      : prefs.kpiPeriod === 'year'
+        ? `Jahr ${prefs.kpiYear}`
+        : prefs.kpiPeriod === 'untilToday'
+          ? 'bis heute'
+          : prefs.kpiPeriod === 'range'
+            ? `${prefs.kpiDateFrom || '…'} – ${prefs.kpiDateTo || '…'}`
+            : 'gesamter Zeitraum';
+
+  const periodHint = (tile) => {
+    if (tile.period === 'month') {
+      const mk = tile.month || nowMonthKey;
+      return mk === nowMonthKey
+        ? `Aktueller Monat ${monthNameDe(mk)}`
+        : `Monat ${monthLabelDe(mk, true)}`;
+    }
+    if (tile.period === 'all') return 'gesamter Zeitraum';
+    if (tile.period === 'untilToday') return 'bis heute';
+    if (tile.period === 'range') return `${tile.dateFrom || '…'} – ${tile.dateTo || '…'}`;
+    const keys = monthKeysForYear(tile.year);
+    if (!keys.length) return String(tile.year);
+    if (keys.length < 12) return `${keys[0].label}–${keys[keys.length - 1].label} ${tile.year}`;
+    return `Jahr ${tile.year}`;
+  };
+
+  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <>
       <div className="md-header">
         <div>
           <h1>Übersicht</h1>
-          <p>Einnahmen & Reparaturaufträge — {periodLabel}</p>
+          <p>Einnahmen & Reparaturaufträge — {kpiLabel}</p>
         </div>
         <div className="md-toolbar">
-          {['month', 'year', 'all'].map((p) => (
+          {[
+            ['month', 'Monat'],
+            ['year', 'Jahr'],
+            ['range', 'Von–Bis'],
+            ['untilToday', 'Bis heute'],
+            ['all', 'Alles']
+          ].map(([id, label]) => (
             <button
-              key={p}
+              key={id}
               type="button"
-              className={`md-chip${period === p ? ' active' : ''}`}
-              onClick={() => setPeriod(p)}
+              className={`md-chip${prefs.kpiPeriod === id ? ' active' : ''}`}
+              onClick={() => setPrefs((prev) => ({ ...prev, kpiPeriod: id }))}
             >
-              {p === 'month' ? 'Monat' : p === 'year' ? 'Jahr' : 'Alles'}
+              {label}
             </button>
           ))}
-          {(period === 'year' || chartType !== 'donut') && (
+          {prefs.kpiPeriod === 'year' && (
             <select
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-              style={{
-                borderRadius: 999,
-                border: '1px solid #cfd8e3',
-                padding: '0.4rem 0.75rem',
-                background: '#fff',
-                color: '#1d426a',
-                fontSize: '0.82rem'
-              }}
+              className="md-mini-select"
+              value={prefs.kpiYear}
+              onChange={(e) => setPrefs((prev) => ({ ...prev, kpiYear: Number(e.target.value) }))}
             >
               {availableYears.map((y) => (
                 <option key={y} value={y}>{y}</option>
               ))}
             </select>
           )}
-          {['bar', 'line', 'donut'].map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={`md-chip${chartType === t ? ' active' : ''}`}
-              onClick={() => setChartType(t)}
+          {prefs.kpiPeriod === 'month' && (
+            <select
+              className="md-mini-select"
+              value={prefs.kpiMonth || nowMonthKey}
+              onChange={(e) => setPrefs((prev) => ({ ...prev, kpiMonth: e.target.value }))}
             >
-              {t === 'bar' ? 'Balken' : t === 'line' ? 'Linie' : 'Kreis'}
-            </button>
-          ))}
+              {availableMonths.map((mk) => (
+                <option key={mk} value={mk}>
+                  {monthLabelDe(mk, true)}{mk === nowMonthKey ? ' (aktuell)' : ''}
+                </option>
+              ))}
+            </select>
+          )}
+          {prefs.kpiPeriod === 'range' && (
+            <div className="md-range-inputs">
+              <input
+                type="date"
+                className="md-mini-date"
+                value={prefs.kpiDateFrom || ''}
+                onChange={(e) => setPrefs((prev) => ({ ...prev, kpiDateFrom: e.target.value }))}
+              />
+              <input
+                type="date"
+                className="md-mini-date"
+                value={prefs.kpiDateTo || ''}
+                onChange={(e) => setPrefs((prev) => ({ ...prev, kpiDateTo: e.target.value }))}
+              />
+              <button
+                type="button"
+                className="md-chip"
+                onClick={() => setPrefs((prev) => ({ ...prev, kpiDateTo: today }))}
+              >
+                Bis heute
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -462,7 +906,7 @@ const ModernHome = () => {
           <div className="md-kpi-grid">
             <div className="md-kpi accent">
               <div className="md-kpi-glow" />
-              <div className="md-kpi-label">Werkstatt-Umsatz ({periodLabel})</div>
+              <div className="md-kpi-label">Werkstatt-Umsatz ({kpiLabel})</div>
               <div className="md-kpi-value">
                 {Number(revenueDisplay).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
               </div>
@@ -487,40 +931,115 @@ const ModernHome = () => {
             </div>
           </div>
 
-          <div className="md-grid-2">
+          <div className="md-grid-3">
             <div className="md-card">
               <div className="md-card-head">
-                <h2>
-                  {chartType === 'donut'
-                    ? 'Freigabe-Verteilung'
-                    : `Umsatz nach Monat (${year})`}
-                </h2>
+                <div>
+                  <h2>Umsatz nach Monat</h2>
+                  <div className="md-card-sub">{periodHint(prefs.revenue)}</div>
+                </div>
+                <div className="md-card-controls">
+                  <PeriodSelect
+                    period={prefs.revenue.period}
+                    year={prefs.revenue.year}
+                    years={availableYears}
+                    dateFrom={prefs.revenue.dateFrom}
+                    dateTo={prefs.revenue.dateTo}
+                    month={prefs.revenue.month}
+                    months={availableMonths}
+                    onPeriod={(period) => patchTile('revenue', { period })}
+                    onYear={(year) => patchTile('revenue', { year })}
+                    onDateFrom={(dateFrom) => patchTile('revenue', { dateFrom })}
+                    onDateTo={(dateTo) => patchTile('revenue', { dateTo })}
+                    onMonth={(month) => patchTile('revenue', { month })}
+                  />
+                  <ViewModeSwitcher
+                    value={prefs.revenue.chartType}
+                    options={['bar', 'line', 'donut']}
+                    onChange={(chartType) => patchTile('revenue', { chartType })}
+                  />
+                </div>
               </div>
-              <div className="md-chart-wrap">
-                {chartType === 'bar' && <BarChart series={stats.monthSeries} />}
-                {chartType === 'line' && <LineChart series={stats.monthSeries} />}
-                {chartType === 'donut' && (
-                  stats.freigabeSlices.length ? (
-                    <DonutChart slices={stats.freigabeSlices} />
-                  ) : (
-                    <div className="md-empty">Keine Daten für den Zeitraum</div>
-                  )
-                )}
+              <div className="md-chart-wrap md-chart-wrap-donut">
+                <ChartBody type={prefs.revenue.chartType} series={revenueSeries} euro centerLabel="Umsatz" />
               </div>
             </div>
 
             <div className="md-card">
               <div className="md-card-head">
-                <h2>Aufträge / Monat ({year})</h2>
+                <div>
+                  <h2>Aufträge</h2>
+                  <div className="md-card-sub">
+                    {prefs.orders.chartType === 'list'
+                      ? `Ranking Kunden · ${periodHint(prefs.orders)}`
+                      : periodHint(prefs.orders)}
+                  </div>
+                </div>
+                <div className="md-card-controls">
+                  <PeriodSelect
+                    period={prefs.orders.period}
+                    year={prefs.orders.year}
+                    years={availableYears}
+                    dateFrom={prefs.orders.dateFrom}
+                    dateTo={prefs.orders.dateTo}
+                    month={prefs.orders.month}
+                    months={availableMonths}
+                    onPeriod={(period) => patchTile('orders', { period })}
+                    onYear={(year) => patchTile('orders', { year })}
+                    onDateFrom={(dateFrom) => patchTile('orders', { dateFrom })}
+                    onDateTo={(dateTo) => patchTile('orders', { dateTo })}
+                    onMonth={(month) => patchTile('orders', { month })}
+                  />
+                  <ViewModeSwitcher
+                    value={prefs.orders.chartType}
+                    options={['bar', 'line', 'donut', 'list']}
+                    onChange={(chartType) => patchTile('orders', { chartType })}
+                    title="Diagramm / Kunden-Ranking"
+                  />
+                </div>
               </div>
-              <div className="md-chart-wrap" style={{ height: 260 }}>
-                <BarChart
-                  series={stats.monthSeries.map((m) => ({ label: m.label, value: m.orders }))}
+              <div className="md-chart-wrap md-chart-wrap-scroll md-chart-wrap-donut">
+                <ChartBody
+                  type={prefs.orders.chartType}
+                  series={ordersSeries}
+                  ranking={ordersRanking}
+                  euro={false}
+                  centerLabel="Aufträge"
                 />
               </div>
-              <div className="md-legend" style={{ justifyContent: 'space-between' }}>
-                <span>Aktueller Monat: <strong>{stats.orderCountMonth}</strong> Aufträge</span>
-                <span>Umsatz Monat: <strong>{formatEuro(stats.revenueMonth)}</strong></span>
+              {prefs.orders.chartType !== 'list' && (
+                <div className="md-legend" style={{ justifyContent: 'space-between' }}>
+                  <span>Aktueller Monat: <strong>{stats.orderCountMonth}</strong> Aufträge</span>
+                  <span>Umsatz Monat: <strong>{formatEuro(stats.revenueMonth)}</strong></span>
+                </div>
+              )}
+            </div>
+
+            <div className="md-card">
+              <div className="md-card-head">
+                <div>
+                  <h2>Top Kunden nach Umsatz</h2>
+                  <div className="md-card-sub">{periodHint(prefs.customers)}</div>
+                </div>
+                <div className="md-card-controls">
+                  <PeriodSelect
+                    period={prefs.customers.period}
+                    year={prefs.customers.year}
+                    years={availableYears}
+                    dateFrom={prefs.customers.dateFrom}
+                    dateTo={prefs.customers.dateTo}
+                    month={prefs.customers.month}
+                    months={availableMonths}
+                    onPeriod={(period) => patchTile('customers', { period })}
+                    onYear={(year) => patchTile('customers', { year })}
+                    onDateFrom={(dateFrom) => patchTile('customers', { dateFrom })}
+                    onDateTo={(dateTo) => patchTile('customers', { dateTo })}
+                    onMonth={(month) => patchTile('customers', { month })}
+                  />
+                </div>
+              </div>
+              <div className="md-chart-wrap md-chart-wrap-scroll">
+                <ChartBody type="list" ranking={customerRanking} euro centerLabel="Umsatz" />
               </div>
             </div>
           </div>
@@ -548,37 +1067,12 @@ export function DashboardViewSwitcher({ view, onChange }) {
   );
 }
 
-/** Mitarbeiter-Home: Kacheln im neuen Design (ohne Umsatz-Dashboard, ohne Rechnungen) */
 export function ModernStaffHome({ navigate }) {
   const tiles = [
-    {
-      id: 'akustiker',
-      title: 'Akustiker',
-      text: 'Kunden verwalten und bearbeiten',
-      path: '/akustiker',
-      icon: 'users'
-    },
-    {
-      id: 'erstellen',
-      title: 'Reparaturauftrag erstellen',
-      text: 'Neuen Reparaturauftrag anlegen',
-      path: '/reperaturauftrag',
-      icon: 'plus'
-    },
-    {
-      id: 'auftraege',
-      title: 'Erstellte Reparaturaufträge',
-      text: 'Alle Reparaturaufträge anzeigen',
-      path: '/erstellte-reperaturauftrage',
-      icon: 'list'
-    },
-    {
-      id: 'einstellungen',
-      title: 'Einstellungen',
-      text: 'Länder, Steuern und Portokosten',
-      path: '/einstellungen',
-      icon: 'settings'
-    }
+    { id: 'akustiker', title: 'Akustiker', text: 'Kunden verwalten und bearbeiten', path: '/akustiker', icon: 'users' },
+    { id: 'erstellen', title: 'Reparaturauftrag erstellen', text: 'Neuen Reparaturauftrag anlegen', path: '/reperaturauftrag', icon: 'plus' },
+    { id: 'auftraege', title: 'Erstellte Reparaturaufträge', text: 'Alle Reparaturaufträge anzeigen', path: '/erstellte-reperaturauftrage', icon: 'list' },
+    { id: 'einstellungen', title: 'Einstellungen', text: 'Länder, Steuern und Portokosten', path: '/einstellungen', icon: 'settings' }
   ];
 
   return (
@@ -618,6 +1112,9 @@ export function ModernShell({ onLogout, navigate, role = 'mitarbeiter', children
 
   const navItems = [
     { id: 'home', label: 'Home', icon: 'home', path: '/', match: (p) => p === '/' },
+    ...(showInvoices
+      ? [{ id: 'finanzen', label: 'Finanzen', icon: 'finance', path: '/finanzen', match: (p) => p.startsWith('/finanzen') }]
+      : []),
     { id: 'akustiker', label: 'Akustiker', icon: 'users', path: '/akustiker', match: (p) => p.startsWith('/akustiker') },
     { id: 'erstellen', label: 'Auftrag erstellen', icon: 'plus', path: '/reperaturauftrag', match: (p) => p.startsWith('/reperaturauftrag') },
     { id: 'auftraege', label: 'Reparaturaufträge', icon: 'list', path: '/erstellte-reperaturauftrage', match: (p) => p.startsWith('/erstellte-reperaturauftrage') },

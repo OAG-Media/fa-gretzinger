@@ -13,6 +13,7 @@ import {
   downloadInvoicePositionsExcel
 } from './invoiceExportUtils.js';
 import ModernHome, { ModernShell, DashboardViewSwitcher, ModernStaffHome } from './ModernDashboard';
+import FinanzenPage from './FinanzenPage';
 import { useDashboardView } from './dashboardView';
 import {
   resolveLogin,
@@ -355,13 +356,22 @@ const Dashboard = ({ setIsLoggedIn, navigate, role = 'mitarbeiter' }) => {
       button: 'Reparaturaufträge anzeigen'
     },
     ...(showInvoices
-      ? [{
-          id: 'rechnungen',
-          title: 'Erstellte Rechnungen',
-          text: 'Alle Rechnungen verwalten und einsehen',
-          path: '/erstellte-rechnungen',
-          button: 'Rechnungen anzeigen'
-        }]
+      ? [
+          {
+            id: 'rechnungen',
+            title: 'Erstellte Rechnungen',
+            text: 'Alle Rechnungen verwalten und einsehen',
+            path: '/erstellte-rechnungen',
+            button: 'Rechnungen anzeigen'
+          },
+          {
+            id: 'finanzen',
+            title: 'Finanzen',
+            text: 'Umsatz analysieren, filtern und als PDF exportieren',
+            path: '/finanzen',
+            button: 'Finanzen öffnen'
+          }
+        ]
       : []),
     {
       id: 'einstellungen',
@@ -8566,7 +8576,7 @@ function AppContent() {
     if (!isLoggedIn) return;
     if (canAccessInvoices(userRole)) return;
     const p = location.pathname;
-    if (p.startsWith('/erstellte-rechnungen') || p.startsWith('/rechnung-erstellen') || p.startsWith('/rechnung-bearbeiten')) {
+    if (p.startsWith('/erstellte-rechnungen') || p.startsWith('/rechnung-erstellen') || p.startsWith('/rechnung-bearbeiten') || p.startsWith('/finanzen')) {
       navigate('/', { replace: true });
     }
   }, [isLoggedIn, userRole, location.pathname, navigate]);
@@ -9302,6 +9312,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
         <Route path="/rechnung-erstellen" element={<RechnungErstellenPage />} />
         <Route path="/rechnung-bearbeiten/:id" element={<RechnungBearbeitenPage />} />
         <Route path="/erstellte-rechnungen" element={<ErstellteRechnungenPage />} />
+        <Route path="/finanzen" element={<FinanzenPage />} />
         <Route path="/einstellungen" element={<EinstellungenPage navigate={navigate} />} />
         <Route path="/reperaturauftrag" element={
             <>
