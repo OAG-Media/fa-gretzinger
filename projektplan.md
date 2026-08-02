@@ -24,8 +24,8 @@ App läuft produktiv auf Vercel (`fa-gretzinger.vercel.app`), Daten in Supabase 
 - Arbeiten: Noahlink/nEARcom-Label, Preisfelder rechtsbündig, max. 3 manuelle Positionen (+ Linie)
 - Einstellungen-Kachel: Länder/Steuer/Porto (Tabelle `country_settings`)
 - Modern-Dashboard (Sidebar, KPIs, Charts), Switcher, Default „Neu“
-- Rollen: Mitarbeiter (ohne Rechnungen/Umsatz) + Admin (`A-Gretz` / `Loefish2026!`)
-- Hinweis: Logins in `src/authRoles.js` (nicht Supabase/Vercel-Env)
+- Rollen: Mitarbeiter (ohne Rechnungen/Umsatz) + Admin (`A-Gretz`)
+- Hinweis: Logins früher hardcoded — siehe Security-Abschnitt unten
 
 ## Erledigt (2026-08-02 Admin-Analytics)
 - Admin-Home: Kacheln mit eigenem Zeitraum + Chart-Switcher (Icon-Cycle), Prefs in `localStorage`
@@ -33,10 +33,21 @@ App läuft produktiv auf Vercel (`fa-gretzinger.vercel.app`), Daten in Supabase 
 - Top-Kunden-Umsatz-Ranking; Aufträge umschaltbar auf Kunden-Ranking (Anzahl)
 - Menü **Finanzen** (Admin): Filter 35% / Visualisierung 65% + Kunden-Tabelle + Analyse-PDF (kein Rechnungs-PDF)
 
+## Erledigt (2026-08-02 Security — Supabase Auth + RLS)
+- Login über **Supabase Auth** (gleiche UX, gehashte Passwörter nur in Supabase)
+  - Mitarbeiter: `Fa-Gretzinger` / `2026-GretzFa!$`
+  - Admin: `A-Gretz` / `Loefish2026!` (unverändert)
+- **Keine Passwörter mehr im Frontend-Code**
+- RLS auf allen Tabellen aktiv: ohne Login → keine API-Daten
+- `invoices` / `invoice_items`: nur Rolle **admin**
+- `customers` / `repair_orders` / `country_settings`: nur **authenticated**
+- Alte `localStorage`-only-Sessions werden verworfen (erneut anmelden)
+
 ## Offen / Hinweise
-- RLS auf `invoices` / `invoice_items` ist deaktiviert (Security-Hinweis, bewusst nicht auto-gefixt)
+- Optional: Postgres-Upgrade in Supabase Dashboard; HaveIBeenPwned / MFA später
 - Eventuell bestehende Entwürfe mit doppelter Nummer-Historie manuell prüfen
 - Production Branch in Vercel sollte `master` sein (sonst nur Preview)
+- **Security-Deploy:** Auth+RLS ist in Supabase schon live; App-Code zuerst auf Localhost testen, dann auf `master` pushen
 
 ## E-Rechnung / Pflicht ab 01.01.2028 — Gap-Analyse
 **Kurzantwort: Noch nicht erfüllt.** Aktuell nur klassisches **PDF** (`jsPDF`) — das gilt **nicht** als E-Rechnung.

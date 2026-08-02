@@ -1,38 +1,46 @@
+/** Auth helpers — keine Passwörter im Frontend (nur in Supabase Auth). */
+
 export const ROLE_KEY = 'gretzinger_user_role';
 
-/** Existing shared login → Mitarbeiter (bleibt unverändert) */
-export const STAFF_CREDENTIALS = {
-  user: 'Fa.Gretzinger@t-online.de',
-  password: 'GretBrunn2025!',
-  role: 'mitarbeiter'
-};
+/** Admin tippt „A-Gretz“ → interne Auth-E-Mail */
+export const ADMIN_AUTH_EMAIL = 'a-gretz@fa-gretzinger.internal';
+export const ADMIN_DISPLAY_LOGIN = 'A-Gretz';
 
-/** Papa / Admin */
-export const ADMIN_CREDENTIALS = {
-  user: 'A-Gretz',
-  password: 'Loefish2026!',
-  role: 'admin'
-};
+/** Mitarbeiter tippt „Fa-Gretzinger“ → interne Auth-E-Mail */
+export const STAFF_AUTH_EMAIL = 'fa-gretzinger@fa-gretzinger.internal';
+export const STAFF_DISPLAY_LOGIN = 'Fa-Gretzinger';
 
 function normalizeUser(user) {
   return (user || '').trim().toLowerCase();
 }
 
-export function resolveLogin(user, password) {
+/**
+ * Mappt die gewohnte Login-Eingabe auf die Supabase-Auth-E-Mail.
+ * Mitarbeiter: „Fa-Gretzinger“
+ * Admin: „A-Gretz“
+ */
+export function toAuthEmail(user) {
   const u = normalizeUser(user);
-  const p = password || '';
-
-  // Mitarbeiter: E-Mail case-insensitive, Passwort exakt
-  if (u === normalizeUser(STAFF_CREDENTIALS.user) && p === STAFF_CREDENTIALS.password) {
-    return STAFF_CREDENTIALS.role;
+  if (!u) return '';
+  if (u === normalizeUser(ADMIN_DISPLAY_LOGIN) || u === normalizeUser(ADMIN_AUTH_EMAIL)) {
+    return ADMIN_AUTH_EMAIL;
   }
-
-  // Admin: Benutzer case-insensitive, Passwort exakt
-  if (u === normalizeUser(ADMIN_CREDENTIALS.user) && p === ADMIN_CREDENTIALS.password) {
-    return ADMIN_CREDENTIALS.role;
+  if (u === normalizeUser(STAFF_DISPLAY_LOGIN) || u === normalizeUser(STAFF_AUTH_EMAIL)) {
+    return STAFF_AUTH_EMAIL;
   }
+  // Legacy: alte Mitarbeiter-E-Mail noch akzeptieren und auf neuen Account mappen
+  if (u === 'fa.gretzinger@t-online.de') {
+    return STAFF_AUTH_EMAIL;
+  }
+  return (user || '').trim();
+}
 
-  return null;
+export function roleFromSessionUser(user) {
+  const role =
+    user?.app_metadata?.role ||
+    user?.user_metadata?.role ||
+    null;
+  return role === 'admin' || role === 'mitarbeiter' ? role : 'mitarbeiter';
 }
 
 export function getStoredRole() {

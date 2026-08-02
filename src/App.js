@@ -16,7 +16,8 @@ import ModernHome, { ModernShell, DashboardViewSwitcher, ModernStaffHome } from 
 import FinanzenPage from './FinanzenPage';
 import { useDashboardView } from './dashboardView';
 import {
-  resolveLogin,
+  toAuthEmail,
+  roleFromSessionUser,
   getStoredRole,
   setStoredRole,
   clearStoredRole,
@@ -329,7 +330,7 @@ const EinstellungenPage = ({ navigate }) => {
 };
 
 // Dashboard Component - Classic tiles (default). Modern shell is handled in AppContent.
-const Dashboard = ({ setIsLoggedIn, navigate, role = 'mitarbeiter' }) => {
+const Dashboard = ({ onLogout, navigate, role = 'mitarbeiter' }) => {
   const [hoveredButton, setHoveredButton] = useState(null);
   const showInvoices = canAccessInvoices(role);
 
@@ -416,11 +417,7 @@ const Dashboard = ({ setIsLoggedIn, navigate, role = 'mitarbeiter' }) => {
         ))}
       </div>
       <button 
-        onClick={() => {
-          setIsLoggedIn(false);
-          try { localStorage.removeItem('isLoggedIn'); } catch (_) {}
-          try { clearStoredRole(); } catch (_) {}
-        }}
+        onClick={onLogout}
         onMouseEnter={(e) => {
           e.target.style.transform = 'scale(1.05)';
           setHoveredButton('abmelden');
@@ -7676,24 +7673,45 @@ function AppContent() {
   const [dashboardView, setDashboardView] = useDashboardView();
   const isModernView = dashboardView === 'modern';
   const [userRole, setUserRole] = useState(() => getStoredRole() || 'mitarbeiter');
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    // Check localStorage on component mount
-    const savedLoginState = localStorage.getItem('isLoggedIn');
-    return savedLoginState === 'true';
-  });
+  const [authReady, setAuthReady] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loginBusy, setLoginBusy] = useState(false);
 
-  // Bestehende Session (z.B. Fa.Gretzinger) nicht verlieren: Rolle nachziehen, Session behalten
+  // Supabase-Session ist die einzige gültige Anmeldung (alte localStorage-Logins verfallen)
   useEffect(() => {
-    if (!isLoggedIn) return;
-    const stored = getStoredRole();
-    if (!stored) {
-      // Alte Session ohne Rolle → als Mitarbeiter weiterführen (kein Logout)
-      setStoredRole('mitarbeiter');
-      setUserRole('mitarbeiter');
-    } else if (stored !== userRole) {
-      setUserRole(stored);
-    }
-  }, [isLoggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
+    let mounted = true;
+
+    const applySession = (session) => {
+      if (!mounted) return;
+      if (session?.user) {
+        const role = roleFromSessionUser(session.user);
+        setIsLoggedIn(true);
+        setUserRole(role);
+        setStoredRole(role);
+        try { localStorage.setItem('isLoggedIn', 'true'); } catch (_) { /* ignore */ }
+      } else {
+        setIsLoggedIn(false);
+        setUserRole('mitarbeiter');
+        clearStoredRole();
+        try { localStorage.removeItem('isLoggedIn'); } catch (_) { /* ignore */ }
+      }
+    };
+
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      applySession(session);
+      if (mounted) setAuthReady(true);
+    })();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      applySession(session);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -8546,26 +8564,44 @@ function AppContent() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Login handler
-  const handleLogin = (e) => {
+  // Login via Supabase Auth (gleiche Benutzer/Passwörter wie bisher)
+  const handleLogin = async (e) => {
     e.preventDefault();
-    const role = resolveLogin(loginEmail, loginPassword);
-    if (role) {
+    setLoginError('');
+    setLoginBusy(true);
+    try {
+      const email = toAuthEmail(loginEmail);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password: loginPassword
+      });
+      if (error || !data?.session?.user) {
+        setLoginError('Ungültige Anmeldedaten');
+        return;
+      }
+      const role = roleFromSessionUser(data.user);
       setIsLoggedIn(true);
       setUserRole(role);
       setStoredRole(role);
-      localStorage.setItem('isLoggedIn', 'true');
-      setLoginError('');
-    } else {
-      setLoginError('Ungültige Anmeldedaten');
+      try { localStorage.setItem('isLoggedIn', 'true'); } catch (_) { /* ignore */ }
+    } catch (err) {
+      console.error('Login error:', err);
+      setLoginError('Anmeldung fehlgeschlagen. Bitte erneut versuchen.');
+    } finally {
+      setLoginBusy(false);
     }
   };
 
-  // Logout handler — nur bei explizitem Abmelden
-  const handleLogout = () => {
+  // Logout — beendet Supabase-Session (API-Zugriff fällt weg)
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
     setIsLoggedIn(false);
     setUserRole('mitarbeiter');
-    localStorage.removeItem('isLoggedIn');
+    try { localStorage.removeItem('isLoggedIn'); } catch (_) { /* ignore */ }
     clearStoredRole();
     setLoginEmail('');
     setLoginPassword('');
@@ -8580,6 +8616,23 @@ function AppContent() {
       navigate('/', { replace: true });
     }
   }, [isLoggedIn, userRole, location.pathname, navigate]);
+
+  // Session-Check läuft noch
+  if (!authReady) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #1d426a 0%, #2a5a8a 100%)',
+        color: '#fff',
+        fontFamily: 'Segoe UI, system-ui, sans-serif'
+      }}>
+        Sitzung wird geprüft…
+      </div>
+    );
+  }
 
   // If not logged in, show login form
   if (!isLoggedIn) {
@@ -8698,20 +8751,21 @@ function AppContent() {
 
             <button
               type="submit"
+              disabled={loginBusy}
               style={{
                 width: '100%',
                 padding: '14px',
-                background: '#1d426a',
+                background: loginBusy ? '#7a93ab' : '#1d426a',
                 color: 'white',
                 border: 'none',
                 borderRadius: '8px',
                 fontSize: '16px',
                 fontWeight: '600',
-                cursor: 'pointer',
+                cursor: loginBusy ? 'wait' : 'pointer',
                 transition: 'background-color 0.2s'
               }}
             >
-              Anmelden
+              {loginBusy ? 'Anmelden…' : 'Anmelden'}
             </button>
           </form>
         </div>
@@ -9305,7 +9359,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
         <Route path="/" element={
           isModernView
             ? (canAccessInvoices(userRole) ? <ModernHome /> : <ModernStaffHome navigate={navigate} />)
-            : <Dashboard setIsLoggedIn={setIsLoggedIn} navigate={navigate} role={userRole} />
+            : <Dashboard onLogout={handleLogout} navigate={navigate} role={userRole} />
         } />
         <Route path="/akustiker" element={<AkustikerPage customers={customers} setShowAddAkustikerModal={setShowAddAkustikerModal} showAddAkustikerModal={showAddAkustikerModal} newAkustiker={newAkustiker} setNewAkustiker={setNewAkustiker} handleAddAkustiker={handleAddAkustiker} navigate={navigate} loadCustomers={loadCustomers} />} />
         <Route path="/erstellte-reperaturauftrage" element={<ErstellteReperaturauftragePage userRole={userRole} />} />
