@@ -60,8 +60,8 @@ const useUnsavedChangesWarning = (hasUnsavedChanges, message = 'Sind Sie sich si
 };
 
 const COUNTRY_OPTIONS = [
-  { key: 'DE', label: 'Deutschland', arbeitszeit: 22.0, porto: 5.95 },
-  { key: 'AT', label: 'Österreich', arbeitszeit: 26.0, porto: 9.0 },
+  { key: 'DE', label: 'Deutschland', arbeitszeit: 22.0, porto: 5.95, tax_rate: 0.19 },
+  { key: 'AT', label: 'Österreich', arbeitszeit: 26.0, porto: 9.0, tax_rate: 0.0 },
 ];
 
 const FREIGABE_OPTIONS = [
@@ -115,10 +115,13 @@ const ARBEITEN = [
   { key: 'reinigung', label: 'Reinigung', price: 5.0 },
   { key: 'verglasen', label: 'Verglasen, bzw. Antirutschb.' },
   { key: 'kleinmaterial', label: 'Kleinmaterial', price: 2.0 },
-  { key: 'nearcom', label: 'nEARcom-Reparaturpauschale' },
+  { key: 'nearcom', label: 'Noahlink / nEARcom Rep. Pauschale' },
   { key: 'arbeitszeit', label: 'Arbeitszeit', price: 'country' },
   { key: 'endkontrolle', label: 'Endkontrolle', price: 3.0 },
 ];
+
+const MAX_CUSTOM_ARBEITEN = 3;
+const PDF_VERSION_CURRENT = 2;
 
 // Global helper function to draw checkboxes in PDF
 const drawCheckbox = (doc, x, y, checked) => {
@@ -130,6 +133,188 @@ const drawCheckbox = (doc, x, y, checked) => {
     doc.line(x + 3.3, y + 0.7, x + 0.7, y + 3.3);
     doc.setLineWidth(0.2);
   }
+};
+
+// Settings: manage country tax / porto / arbeitszeit defaults
+const EinstellungenPage = ({ navigate }) => {
+  const [countries, setCountries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    country_code: '',
+    country_label: '',
+    tax_rate: '0.19',
+    porto: '5.95',
+    arbeitszeit: '22'
+  });
+
+  const loadCountries = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('country_settings')
+        .select('*')
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+      setCountries(data || []);
+    } catch (error) {
+      console.error('Error loading country settings:', error);
+      alert('Fehler beim Laden der Ländereinstellungen: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCountries();
+  }, []);
+
+  const handleSave = async (country) => {
+    try {
+      setSaving(true);
+      const { error } = await supabase
+        .from('country_settings')
+        .update({
+          country_label: country.country_label,
+          tax_rate: parseFloat(String(country.tax_rate).replace(',', '.')),
+          porto: parseFloat(String(country.porto).replace(',', '.')),
+          arbeitszeit: parseFloat(String(country.arbeitszeit).replace(',', '.')),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', country.id);
+      if (error) throw error;
+      await loadCountries();
+      alert('Einstellungen gespeichert.');
+    } catch (error) {
+      alert('Fehler beim Speichern: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAdd = async () => {
+    if (!form.country_code.trim() || !form.country_label.trim()) {
+      alert('Bitte Ländercode und Name ausfüllen.');
+      return;
+    }
+    try {
+      setSaving(true);
+      const { error } = await supabase.from('country_settings').insert([{
+        country_code: form.country_code.trim().toUpperCase(),
+        country_label: form.country_label.trim(),
+        tax_rate: parseFloat(String(form.tax_rate).replace(',', '.')) || 0,
+        porto: parseFloat(String(form.porto).replace(',', '.')) || 0,
+        arbeitszeit: parseFloat(String(form.arbeitszeit).replace(',', '.')) || 0,
+        sort_order: (countries.length || 0) + 1,
+        active: true
+      }]);
+      if (error) throw error;
+      setForm({ country_code: '', country_label: '', tax_rate: '0.19', porto: '5.95', arbeitszeit: '22' });
+      await loadCountries();
+    } catch (error) {
+      alert('Fehler beim Anlegen: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: '2rem', maxWidth: 900, margin: '0 auto' }}>
+      <header style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #eee', paddingBottom: '1rem' }}>
+        <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 60, marginRight: 24 }} />
+        <h1 style={{ fontWeight: 400, color: '#1d426a', fontSize: '1.8rem', margin: 0 }}>Einstellungen</h1>
+      </header>
+
+      <button
+        onClick={() => navigate('/')}
+        style={{ marginBottom: '1.5rem', padding: '8px 16px', background: '#6c757d', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+      >
+        ← Zurück zum Hauptmenü
+      </button>
+
+      <div style={{ background: 'white', border: '1px solid #e0e0e0', borderRadius: 8, padding: '1.5rem', marginBottom: '1.5rem' }}>
+        <h2 style={{ color: '#1d426a', marginTop: 0 }}>Länder / Steuer / Porto</h2>
+        <p style={{ color: '#666', fontSize: 14 }}>
+          Diese Werte sind die Voreinstellung für neue Reparaturaufträge. Porto kann weiterhin pro Auftrag manuell angepasst werden.
+        </p>
+
+        {loading ? (
+          <p>Lade…</p>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid #e0e0e0', textAlign: 'left' }}>
+                <th style={{ padding: 8 }}>Code</th>
+                <th style={{ padding: 8 }}>Land</th>
+                <th style={{ padding: 8 }}>MwSt (z.B. 0,19)</th>
+                <th style={{ padding: 8 }}>Porto €</th>
+                <th style={{ padding: 8 }}>Arbeitszeit €</th>
+                <th style={{ padding: 8 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {countries.map((c) => (
+                <tr key={c.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                  <td style={{ padding: 8 }}>{c.country_code}</td>
+                  <td style={{ padding: 8 }}>
+                    <input
+                      value={c.country_label}
+                      onChange={(e) => setCountries((prev) => prev.map((x) => x.id === c.id ? { ...x, country_label: e.target.value } : x))}
+                      style={{ padding: 6, width: '100%', boxSizing: 'border-box' }}
+                    />
+                  </td>
+                  <td style={{ padding: 8 }}>
+                    <input
+                      value={c.tax_rate}
+                      onChange={(e) => setCountries((prev) => prev.map((x) => x.id === c.id ? { ...x, tax_rate: e.target.value } : x))}
+                      style={{ padding: 6, width: 90 }}
+                    />
+                  </td>
+                  <td style={{ padding: 8 }}>
+                    <input
+                      value={c.porto}
+                      onChange={(e) => setCountries((prev) => prev.map((x) => x.id === c.id ? { ...x, porto: e.target.value } : x))}
+                      style={{ padding: 6, width: 90 }}
+                    />
+                  </td>
+                  <td style={{ padding: 8 }}>
+                    <input
+                      value={c.arbeitszeit}
+                      onChange={(e) => setCountries((prev) => prev.map((x) => x.id === c.id ? { ...x, arbeitszeit: e.target.value } : x))}
+                      style={{ padding: 6, width: 90 }}
+                    />
+                  </td>
+                  <td style={{ padding: 8 }}>
+                    <button
+                      onClick={() => handleSave(c)}
+                      disabled={saving}
+                      style={{ padding: '6px 12px', background: '#1d426a', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+                    >
+                      Speichern
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div style={{ background: 'white', border: '1px solid #e0e0e0', borderRadius: 8, padding: '1.5rem' }}>
+        <h3 style={{ color: '#1d426a', marginTop: 0 }}>Land hinzufügen</h3>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <input placeholder="Code (z.B. CH)" value={form.country_code} onChange={(e) => setForm({ ...form, country_code: e.target.value })} style={{ padding: 8, width: 100 }} />
+          <input placeholder="Name" value={form.country_label} onChange={(e) => setForm({ ...form, country_label: e.target.value })} style={{ padding: 8, flex: 1, minWidth: 140 }} />
+          <input placeholder="MwSt" value={form.tax_rate} onChange={(e) => setForm({ ...form, tax_rate: e.target.value })} style={{ padding: 8, width: 80 }} />
+          <input placeholder="Porto" value={form.porto} onChange={(e) => setForm({ ...form, porto: e.target.value })} style={{ padding: 8, width: 80 }} />
+          <input placeholder="Arbeitszeit" value={form.arbeitszeit} onChange={(e) => setForm({ ...form, arbeitszeit: e.target.value })} style={{ padding: 8, width: 90 }} />
+          <button onClick={handleAdd} disabled={saving} style={{ padding: '8px 16px', background: '#28a745', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+            Hinzufügen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // Dashboard Component - You'll actually see this!
@@ -243,6 +428,32 @@ const Dashboard = ({ setIsLoggedIn, navigate }) => {
             }}
           >
             Rechnungen anzeigen
+          </button>
+        </div>
+        <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '1.2rem 1.5rem', boxShadow: '0 1px 4px #0001' }}>
+          <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Einstellungen</h3>
+          <p style={{ color: '#666', marginBottom: '1rem' }}>Länder, Steuern und Portokosten verwalten</p>
+          <button 
+            onClick={() => navigate('/einstellungen')}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'scale(1.05)';
+              setHoveredButton('einstellungen');
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'scale(1)';
+              setHoveredButton(null);
+            }}
+            style={{ 
+              padding: '10px 20px', 
+              background: hoveredButton === 'einstellungen' ? '#2a5a8a' : '#1d426a', 
+              color: 'white', 
+              border: 'none', 
+              borderRadius: '6px', 
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            Einstellungen öffnen
           </button>
         </div>
       </div>
@@ -1829,7 +2040,6 @@ const ErstellteReperaturauftragePage = () => {
   
   // Invoice Status Filtering State
   const [showOnlyUnused, setShowOnlyUnused] = useState(false);
-  const [isCreatingSplitInvoices, setIsCreatingSplitInvoices] = useState(false);
   
   // Selection State
   const [selectedOrders, setSelectedOrders] = useState(new Set());
@@ -2268,93 +2478,7 @@ const ErstellteReperaturauftragePage = () => {
     )].sort((a, b) => a.localeCompare(b, 'de'));
   };
 
-  const getNextInvoiceNumber = async () => {
-    const { data, error } = await supabase
-      .from('invoices')
-      .select('invoice_number')
-      .order('id', { ascending: false })
-      .limit(1);
-    if (error) throw error;
-    if (data && data.length > 0) {
-      const lastNumber = parseInt(data[0].invoice_number, 10);
-      return (Number.isNaN(lastNumber) ? 8125 : lastNumber + 1).toString();
-    }
-    return '8125';
-  };
-
-  const buildSimpleRepairDescription = (order) => {
-    if (order.freigabe === 'Reparatur laut KV durchführen' || order.freigabe === 'Kostenpflichtige Reparatur') {
-      return 'einzelne Positionen';
-    }
-    if (order.freigabe === 'Garantie') return 'Garantie';
-    if (order.freigabe === 'Reklamation') return 'Reklamation';
-    if (order.freigabe === 'Unrepariert zurückschicken') return 'Unrepariert zurück';
-    if (order.freigabe === 'Verschrotten') return 'Verschrotten';
-    if (order.kulanz) return 'Kulanz';
-    return 'einzelne Positionen';
-  };
-
-  const createDraftInvoiceForOrders = async (orders, invoiceNumber) => {
-    const taxRate = orders[0]?.customers?.country === 'Österreich' ? 0 : 0.19;
-    let subtotal = 0;
-    orders.forEach((order) => {
-      subtotal += parseFloat(order.nettopreis || 0) + parseFloat(order.porto || 0);
-    });
-    const taxAmount = subtotal * taxRate;
-    const totalAmount = subtotal + taxAmount;
-
-    const { data: invoice, error: invoiceError } = await supabase
-      .from('invoices')
-      .insert([{
-        invoice_number: invoiceNumber,
-        invoice_date: new Date().toISOString().split('T')[0],
-        customer_id: orders[0].customer_id,
-        period_start: dateFrom || null,
-        period_end: dateTo || null,
-        status: 'draft',
-        subtotal,
-        tax_amount: taxAmount,
-        tax_rate: taxRate,
-        total_amount: totalAmount,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }])
-      .select()
-      .single();
-
-    if (invoiceError) throw invoiceError;
-
-    const items = orders.map((order, index) => {
-      const repairAmount = parseFloat(order.nettopreis || 0);
-      const porto = parseFloat(order.porto || 0);
-      return {
-        invoice_id: invoice.id,
-        repair_order_id: order.id,
-        position: index + 1,
-        date_performed: order.werkstattausgang || order.created_at,
-        kommission: order.kommission || '',
-        description: buildSimpleRepairDescription(order),
-        filiale: order.customers?.branch || '',
-        repair_amount: repairAmount,
-        porto,
-        line_total: repairAmount + porto,
-        created_at: new Date().toISOString()
-      };
-    });
-
-    const { error: itemsError } = await supabase.from('invoice_items').insert(items);
-    if (itemsError) throw itemsError;
-
-    const { error: statusError } = await supabase
-      .from('repair_orders')
-      .update({ invoice_status: 'draft' })
-      .in('id', orders.map((o) => o.id));
-    if (statusError) throw statusError;
-
-    return invoice;
-  };
-
-  const handleCreateInvoiceFromSelection = async () => {
+  const handleCreateInvoiceFromSelection = () => {
     const selected = repairOrders.filter((order) => selectedOrders.has(order.id));
     const available = selected.filter((order) => !isOrderAlreadyBilled(order));
     const blocked = selected.filter((order) => isOrderAlreadyBilled(order));
@@ -2375,66 +2499,12 @@ const ErstellteReperaturauftragePage = () => {
       return;
     }
 
-    // Group by Filiale (branch), fallback company if branch empty
-    const groups = new Map();
-    available.forEach((order) => {
-      const branch = (order.customers?.branch || '').trim() || 'Ohne Filiale';
-      const company = order.customers?.company || '';
-      const key = `${company}|||${branch}`;
-      if (!groups.has(key)) {
-        groups.set(key, { company, branch, orders: [] });
-      }
-      groups.get(key).orders.push(order);
-    });
-
-    if (groups.size === 1) {
-      const params = new URLSearchParams();
-      params.set('orders', available.map((o) => o.id).join(','));
-      if (dateFrom) params.set('periodStart', dateFrom);
-      if (dateTo) params.set('periodEnd', dateTo);
-      window.location.href = `/rechnung-erstellen?${params.toString()}`;
-      return;
-    }
-
-    const summary = [...groups.values()]
-      .map((g) => `• ${g.branch}${g.company ? ` (${g.company})` : ''}: ${g.orders.length} Auftrag/Aufträge`)
-      .join('\n');
-
-    const confirmSplit = window.confirm(
-      `Mehrere Filialen ausgewählt (${groups.size}).\n\n` +
-      `Es werden automatisch ${groups.size} separate Rechnungsentwürfe erstellt:\n\n` +
-      `${summary}\n\n` +
-      `Fortfahren und aufteilen?`
-    );
-
-    if (!confirmSplit) return;
-
-    try {
-      setIsCreatingSplitInvoices(true);
-      const createdNumbers = [];
-      let nextNumber = parseInt(await getNextInvoiceNumber(), 10);
-
-      for (const group of groups.values()) {
-        const invoice = await createDraftInvoiceForOrders(group.orders, String(nextNumber));
-        createdNumbers.push(`${invoice.invoice_number} – ${group.branch}`);
-        nextNumber += 1;
-      }
-
-      setSelectedOrders(new Set());
-      setSelectAll(false);
-      await loadRepairOrders();
-      alert(
-        `${createdNumbers.length} Rechnungsentwürfe erstellt:\n\n` +
-        createdNumbers.map((line) => `• ${line}`).join('\n') +
-        `\n\nSie finden die Entwürfe unter „Erstellte Rechnungen“.`
-      );
-      window.location.href = '/erstellte-rechnungen';
-    } catch (error) {
-      console.error('Error creating split invoices:', error);
-      alert('Fehler beim Aufteilen der Rechnungen: ' + error.message);
-    } finally {
-      setIsCreatingSplitInvoices(false);
-    }
+    // Eine Rechnung für die gesamte Auswahl (Filiale-Filter in der Liste reicht zum Eingrenzen)
+    const params = new URLSearchParams();
+    params.set('orders', available.map((o) => o.id).join(','));
+    if (dateFrom) params.set('periodStart', dateFrom);
+    if (dateTo) params.set('periodEnd', dateTo);
+    window.location.href = `/rechnung-erstellen?${params.toString()}`;
   };
 
   if (loading) {
@@ -3387,38 +3457,33 @@ const ErstellteReperaturauftragePage = () => {
           
           <button
             onClick={handleCreateInvoiceFromSelection}
-            disabled={isCreatingSplitInvoices}
             style={{
               padding: '0.75rem 1.5rem',
-              background: isCreatingSplitInvoices ? '#6c757d' : '#28a745',
+              background: '#28a745',
               color: 'white',
               border: 'none',
               borderRadius: '6px',
               fontSize: '14px',
               fontWeight: '500',
-              cursor: isCreatingSplitInvoices ? 'wait' : 'pointer',
+              cursor: 'pointer',
               transition: 'all 0.2s ease',
               display: 'flex',
               alignItems: 'center',
               gap: '8px'
             }}
             onMouseEnter={(e) => {
-              if (!isCreatingSplitInvoices) {
-                e.currentTarget.style.background = '#218838';
-                e.currentTarget.style.transform = 'scale(1.02)';
-              }
+              e.currentTarget.style.background = '#218838';
+              e.currentTarget.style.transform = 'scale(1.02)';
             }}
             onMouseLeave={(e) => {
-              if (!isCreatingSplitInvoices) {
-                e.currentTarget.style.background = '#28a745';
-                e.currentTarget.style.transform = 'scale(1)';
-              }
+              e.currentTarget.style.background = '#28a745';
+              e.currentTarget.style.transform = 'scale(1)';
             }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
             </svg>
-            {isCreatingSplitInvoices ? 'Rechnungen werden erstellt…' : 'Rechnung aus Auswahl erstellen'}
+            Rechnung aus Auswahl erstellen
           </button>
         </div>
       )}
@@ -7708,6 +7773,15 @@ function AppContent() {
   const [kostenvoranschlagChecked, setKostenvoranschlagChecked] = useState(false);
   const [kostenvoranschlagAmount, setKostenvoranschlagAmount] = useState('');
 
+  // Unrepariert zurück: kostenlos ohne Porto
+  const [unrepariertKostenlos, setUnrepariertKostenlos] = useState(false);
+  // Manuelle Zusatzpositionen (max 3) zwischen nEARcom und Arbeitszeit
+  const [customArbeiten, setCustomArbeiten] = useState([]);
+  // PDF layout version: 1 = alt (Sendedatum), 2+ = neu (Auftrag von)
+  const [pdfVersion, setPdfVersion] = useState(PDF_VERSION_CURRENT);
+  // Länder aus Einstellungen (Fallback: COUNTRY_OPTIONS)
+  const [countryOptions, setCountryOptions] = useState(COUNTRY_OPTIONS);
+
   // Add New Akustiker Modal State
   const [showAddAkustikerModal, setShowAddAkustikerModal] = useState(false);
   const [newAkustiker, setNewAkustiker] = useState({
@@ -7740,6 +7814,32 @@ function AppContent() {
   // Load customers when component mounts
   useEffect(() => {
     loadCustomers();
+  }, []);
+
+  // Load country defaults from Einstellungen (porto / arbeitszeit / tax)
+  useEffect(() => {
+    const loadCountrySettings = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('country_settings')
+          .select('*')
+          .eq('active', true)
+          .order('sort_order', { ascending: true });
+        if (error) throw error;
+        if (data && data.length > 0) {
+          setCountryOptions(data.map((c) => ({
+            key: c.country_code,
+            label: c.country_label,
+            arbeitszeit: parseFloat(c.arbeitszeit) || 0,
+            porto: parseFloat(c.porto) || 0,
+            tax_rate: parseFloat(c.tax_rate) || 0
+          })));
+        }
+      } catch (err) {
+        console.warn('country_settings nicht ladbar, nutze Fallback:', err.message);
+      }
+    };
+    loadCountrySettings();
   }, []);
 
   // Reset handler
@@ -7782,6 +7882,9 @@ function AppContent() {
     // Reset Kostenvoranschlag
     setKostenvoranschlagChecked(false);
     setKostenvoranschlagAmount('');
+    setUnrepariertKostenlos(false);
+    setCustomArbeiten([]);
+    setPdfVersion(PDF_VERSION_CURRENT);
     
     // Reset editing state
     setIsEditing(false);
@@ -7859,6 +7962,8 @@ function AppContent() {
       // Set Kostenvoranschlag
       setKostenvoranschlagChecked(order.kostenvoranschlag_checked || false);
       setKostenvoranschlagAmount(order.kostenvoranschlag_amount || '');
+      setUnrepariertKostenlos(!!order.unrepariert_kostenlos);
+      setPdfVersion(order.pdf_version != null ? order.pdf_version : 1);
       
       // Set arbeiten and fehler
       if (order['ausgeführte_arbeiten']) {
@@ -7867,13 +7972,19 @@ function AppContent() {
         const newArbeitenManual = {};
         
         Object.keys(arbeiten).forEach(key => {
-          if (arbeiten[key].checked) {
+          if (key === '_custom') {
+            setCustomArbeiten(Array.isArray(arbeiten[key]) ? arbeiten[key].slice(0, MAX_CUSTOM_ARBEITEN) : []);
+            return;
+          }
+          if (arbeiten[key] && arbeiten[key].checked) {
             newArbeiten[key] = true;
             if (arbeiten[key].input) {
               newArbeitenManual[key] = arbeiten[key].input;
             }
           }
         });
+        
+        if (!arbeiten._custom) setCustomArbeiten([]);
         
         setArbeiten(newArbeiten);
         setArbeitenManual(newArbeitenManual);
@@ -7885,6 +7996,7 @@ function AppContent() {
       } else {
         // No arbeiten data, so selectAllStandard should be false
         setSelectAllStandard(false);
+        setCustomArbeiten([]);
       }
       
       if (order.fehlerangaben) {
@@ -7928,7 +8040,9 @@ function AppContent() {
   const handleCountry = (e) => setCountry(e.target.value);
   const handleFreigabe = (val) => {
     setFreigabe(val);
-    
+    if (val !== 'Unrepariert zurückschicken') {
+      setUnrepariertKostenlos(false);
+    }
     // If switching from Garantie/Reklamation to Keine angabe, recalculate prices
     if ((freigabe === 'Garantie' || freigabe === 'Reklamation') && val === 'Keine angabe') {
       // The net calculation will automatically recalculate when the component re-renders
@@ -8068,6 +8182,7 @@ function AppContent() {
         acc[a.key] = { checked, input };
         return acc;
       }, {});
+      arbeitenPayload._custom = customArbeiten.slice(0, MAX_CUSTOM_ARBEITEN);
 
       // Prepare repair order data (align to Supabase table columns)
       const repairOrderData = {
@@ -8101,7 +8216,9 @@ function AppContent() {
         manual_porto: manualPorto || '',
         ido_hdo: idoHdo || 'IDO',
         austria_arbeitszeit: austriaArbeitszeit || '26',
-        country: country || 'DE'
+        country: country || 'DE',
+        unrepariert_kostenlos: freigabe === 'Unrepariert zurückschicken' ? !!unrepariertKostenlos : false,
+        pdf_version: isEditing ? (pdfVersion || 1) : PDF_VERSION_CURRENT
       };
 
       const { data: currentOrder } = await supabase
@@ -8159,7 +8276,7 @@ function AppContent() {
     arbeitenManual, kostenvoranschlagChecked, kostenvoranschlagAmount, 
     freigabe, kvMethod, kvFreigabeDate, kulanz, 
     reklamationDate, garantieDate, kulanzPorto, manualPorto, 
-    idoHdo, austriaArbeitszeit, country
+    idoHdo, austriaArbeitszeit, country, unrepariertKostenlos, customArbeiten
   ]);
 
   // Browser warning for unsaved changes
@@ -8193,6 +8310,7 @@ function AppContent() {
         acc[a.key] = { checked, input };
         return acc;
       }, {});
+      arbeitenPayload._custom = customArbeiten.slice(0, MAX_CUSTOM_ARBEITEN);
 
       // Prepare repair order data (align to Supabase table columns)
       const repairOrderData = {
@@ -8227,8 +8345,9 @@ function AppContent() {
         manual_porto: manualPorto || '',
         ido_hdo: idoHdo || 'IDO',
         austria_arbeitszeit: austriaArbeitszeit || '26',
-        country: country || 'DE'
-
+        country: country || 'DE',
+        unrepariert_kostenlos: freigabe === 'Unrepariert zurückschicken' ? !!unrepariertKostenlos : false,
+        pdf_version: isEditing ? (pdfVersion || 1) : PDF_VERSION_CURRENT
       };
 
       // Add version tracking and timestamp for updates
@@ -8605,7 +8724,7 @@ function AppContent() {
   }
 
   // Calculation
-  const countryObj = COUNTRY_OPTIONS.find((c) => c.key === country);
+  const countryObj = countryOptions.find((c) => c.key === country) || COUNTRY_OPTIONS.find((c) => c.key === country);
   let net = 0;
   let porto = countryObj ? countryObj.porto : 0;
   let arbeitszeit = countryObj ? countryObj.arbeitszeit : 0;
@@ -8636,8 +8755,12 @@ function AppContent() {
   }
 
   if (freigabe === 'Unrepariert zurückschicken') {
-    net = 14.50;
-    // Keep porto calculation from country settings - don't override to 0
+    if (unrepariertKostenlos) {
+      net = 0;
+      // Porto bleibt über Porto & Verpackung wählbar
+    } else {
+      net = 14.50;
+    }
   } else if (freigabe === 'Verschrotten') {
     net = 0;
     porto = 0;
@@ -8658,6 +8781,12 @@ function AppContent() {
         }
       }
     });
+    // Custom Zusatzpositionen
+    customArbeiten.forEach((row) => {
+      if (row.checked && row.price) {
+        net += parseFloat(String(row.price).replace(',', '.')) || 0;
+      }
+    });
     // net is now the base price only - DO NOT add porto here
   } else if (kulanz) {
     net = 0;
@@ -8673,12 +8802,13 @@ function AppContent() {
   // PDF Export function
   const handlePdfExport = () => {
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const FONT = 'times'; // Times-Roman ≈ Times New Roman (jsPDF Standard)
     const zeile = 12;
     const leftX = 20;
     const leftxRow = 65;
     const rightXstop = 192;
     // Header
-    doc.setFont('helvetica', '');
+    doc.setFont(FONT, 'normal');
     doc.setFontSize(8);
     doc.text('HG Gretzinger UG, Hörgeräteservice', leftX, zeile);
     doc.text('Gibitzenhofstr. 86', leftX, zeile+4);
@@ -8696,23 +8826,23 @@ function AppContent() {
     const customerInfo = zeile+18;
     if (selectedCustomer) {
       doc.setFontSize(8);
-      doc.setFont(undefined, 'bold');
+      doc.setFont(FONT, 'bold');
       doc.text('Akustikername / Absender bzw. Firmenstempel:',leftX, customerInfo);
-      doc.setFont(undefined, 'normal');
+      doc.setFont(FONT, 'normal');
       doc.setFontSize(11);
       doc.text(selectedCustomer.company, leftX, customerInfo+5);
       doc.text(selectedCustomer.street, leftX, customerInfo+9);
       doc.text(`${selectedCustomer.location}, ${selectedCustomer.country}`, leftX, customerInfo+13);
     }
 
-    // Title
-    const repauftrag = customerInfo+19;
+    // Title — etwas Abstand zur Akustiker-Adresse
+    const repauftrag = customerInfo + 26;
 
+    doc.setFont(FONT, 'bold');
     doc.setFontSize(22);
-    doc.setFont(undefined, 'bold');
     doc.text('Reparaturauftrag', leftX+85, repauftrag+3, { align: 'center' });
-    doc.setFontSize(12);
-    doc.setFont(undefined, 'normal');
+    doc.setFont(FONT, 'normal');
+    doc.setFontSize(10);
 
 
     
@@ -8722,7 +8852,7 @@ function AppContent() {
     // Always show the table, even if empty (will show dashes)
     {
       doc.setFontSize(10);
-      doc.setFont(undefined, 'bold');
+      doc.setFont(FONT, 'bold');
       
       // Table headers with 1px padding
       const tableY = y + 1; // Reduced to 1px top padding
@@ -8813,7 +8943,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
             doc.text('Zubehör', zubehoerTextX, tableHeadingY);
             
             // Data row with padding - always show with fixed length and dashes for empty fields
-            doc.setFont(undefined, 'normal');
+            doc.setFont(FONT, 'normal');
             doc.setFontSize(10.5);
             doc.text(kommission || '-', komissionTextX, tableContentY);
             doc.text(hersteller || '-', herstellerTextX, tableContentY);
@@ -8837,101 +8967,109 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
       doc.text(werkstatteingangFormatted, werkstatteingangTextX, tableContentY);
       doc.text(zubehoer || '-', zubehoerTextX, tableContentY);
       
-      // Workshop Notes
-      if (kvDate || perMethod || werkstattNotiz) {
-        doc.setFontSize(8);
-        let notesY = tableY + 15;
-        doc.setFont(undefined, 'bold');
-        doc.text('Rep. werkstatt Notiz: KV am:', repWerkstattNotiz, notesY);
-        doc.setFont(undefined, 'normal');
-        
-        if (kvDate) {
-          const [yyyy, mm, dd] = kvDate.split('-');
-          doc.text(` ${dd}.${mm}.${yyyy}`, repWerkstattNotiz+37, notesY);
-        }
-        const gesendetanwerkstattX = leftX+139;
-        const gesendetanwerkstattY = customerInfo;
+      // Eine Zeile unter der Tabelle: Kostenvoranschlag (links) + Rep. werkstatt Notiz (rechts)
+      const notesY = tableY + 15;
+      const checkboxYOffsetKv = 2.8;
 
-                // Workshop Date Section (Top Right)
-                if (werkstattDate) {
-                  doc.setFontSize(8);
-                  doc.setFont(undefined, 'bold');
-                  doc.text('Sendedatum:', gesendetanwerkstattX, gesendetanwerkstattY);
-                  doc.setFont(undefined, 'normal');
-                  
-                  // Format date as DD.MM.YYYY
-                  const [yyyy, mm, dd] = werkstattDate.split('-');
-                  doc.setFontSize(10);
-                  doc.text(`${dd}.${mm}.${yyyy}`, gesendetanwerkstattX +17, gesendetanwerkstattY);
-                }
+      doc.setFontSize(8);
+      doc.setFont(FONT, 'bold');
+      const kvLabel = 'Kostenvoranschlag:';
+      doc.text(kvLabel, leftX, notesY);
+      const kvLabelW = doc.getTextWidth(kvLabel);
+      const kvCheckX = leftX + kvLabelW + 2;
+      drawCheckbox(doc, kvCheckX, notesY - checkboxYOffsetKv, kostenvoranschlagChecked);
+      doc.setFont(FONT, 'normal');
+      doc.text('ab', kvCheckX + 6, notesY);
+      if (kostenvoranschlagChecked && kostenvoranschlagAmount) {
+        doc.text(`${kostenvoranschlagAmount} € - netto`, kvCheckX + 12, notesY);
+      } else {
+        doc.text('_____ € - netto', kvCheckX + 12, notesY);
+      }
 
-                // Werkstattausgang Section (Top Right)
-                const werkstattausgangY = 265;
-                const werkstattausgangX = 144;
-                doc.setFontSize(10);
-                doc.setFont(undefined, 'bold');
-                doc.text('Werkstattausgang:', werkstattausgangX, werkstattausgangY);
-                doc.setFont(undefined, 'normal');
-                
-                if (werkstattausgang) {
-                  // Format date as DD.MM.YYYY
-                  const [yyyy, mm, dd] = werkstattausgang.split('-');
-                  doc.setFontSize(10);
-                  doc.setFont(undefined, 'bold');
-                  doc.text(`${dd}.${mm}.${yyyy}`, werkstattausgangX + 30, werkstattausgangY);
-                } else {
-                  doc.text('-', werkstattausgangX + 30, werkstattausgangY);
-                }
-        
+      // Rep. werkstatt Notiz auf derselben Höhe
+      doc.setFont(FONT, 'bold');
+      doc.text('Rep. werkstatt Notiz: KV am:', repWerkstattNotiz, notesY);
+      doc.setFont(FONT, 'normal');
+      if (kvDate) {
+        const [yyyy, mm, dd] = kvDate.split('-');
+        doc.text(` ${dd}.${mm}.${yyyy}`, repWerkstattNotiz+37, notesY);
+      }
+      doc.setFont(FONT, 'bold');
+      doc.text('per:', perFaxMail, notesY);
+      doc.setFont(FONT, 'normal');
+      doc.text(perMethod || '', perFaxMail+6, notesY);
+
+      // Auftrag von / Sendedatum (rechts oben)
+      if (werkstattDate) {
+        const [yyyy, mm, dd] = werkstattDate.split('-');
+        const dateStr = `${dd}.${mm}.${yyyy}`;
+        const sendLabel = (pdfVersion >= 2) ? 'Auftrag von: ' : 'Sendedatum: ';
         doc.setFontSize(8);
-        doc.setFont(undefined, 'bold');
-        doc.text('per:', perFaxMail, notesY);
-        doc.setFont(undefined, 'normal');
-        doc.text(perMethod || '', perFaxMail+6, notesY);
-        
-        //if (werkstattNotiz) {
-        //  doc.text(werkstattNotiz, startX + 100, notesY);
-        //}
+        doc.setFont(FONT, 'bold');
+        const labelW = doc.getTextWidth(sendLabel);
+        doc.setFont(FONT, 'normal');
+        const dateW = doc.getTextWidth(dateStr);
+        const blockLeft = rightXstop - labelW - dateW;
+        doc.setFont(FONT, 'bold');
+        doc.text(sendLabel, blockLeft, customerInfo);
+        doc.setFont(FONT, 'normal');
+        doc.text(dateStr, rightXstop, customerInfo, { align: 'right' });
       }
       
       y = tableY + 10; // Reduced margin below heading only
     }
     
     // More padding below title
-    y = Math.max(y, 82); // Keep normal spacing for content sections
+    y = Math.max(y, 86);
 
-    // Column positions
-    
-    const separatorX = 100; // move separator further right to prevent overlap
-    const rightX = separatorX + 10; // right column starts with more space after separator
-    const priceColX = 190; // fixed X for right-aligned prices
-    const sectionPad = 4; // Reduced from 8
-    const linePad = 6; // Increased from 4 to add 2px gap between checkboxes
+    // Typography + spacing (einheitlich links/rechts)
+    const SIZE_SECTION = 10;   // Überschriften (Freigabe, Fehlerangaben, Arbeiten, Kulanz, …)
+    const SIZE_ITEM = 9;       // Checkbox-Beschriftungen
+    const SIZE_PRICE_NET = 13;
+    const SIZE_PRICE_PORTO = 8;
+    const separatorX = 100;
+    const rightX = separatorX + 10;
+    const priceColX = 190;
+    const sectionPad = 3.5;
+    // Einheitlicher Zeilenabstand für beide Spalten (etwas enger als früher links)
+    const linePad = 5.1;
     const labelPad = 8;
-    var startcheckbox = 103;
+    const checkboxYOffset = 2.8;
 
-    var CheckBoxbereich = repauftrag + 32;
+    var CheckBoxbereich = repauftrag + 34;
 
-    // Left column: Freigabe, Fehlerangaben, Verfahren
-    let yLeft = CheckBoxbereich; // Add 4px padding above "Bei Freigabe bitte ankreuzen"
-    doc.setFont(undefined, 'bold');
-    // doc.text('Bei Freigabe bitte ankreuzen:', leftX, yLeft);
+    const setSectionHead = () => {
+      doc.setFont(FONT, 'bold');
+      doc.setFontSize(SIZE_SECTION);
+    };
+    const setItemText = () => {
+      doc.setFont(FONT, 'normal');
+      doc.setFontSize(SIZE_ITEM);
+    };
+
+    // Left column: Freigabe, Fehlerangaben, Kulanz
+    let yLeft = CheckBoxbereich;
+    setSectionHead();
     doc.text('Bei Freigabe bitte ankreuzen:', leftX, CheckBoxbereich);
-    doc.setFont(undefined, 'normal');
-    yLeft += linePad + 1;
+    setItemText();
+    yLeft += linePad + 0.8;
     
     // Only show the actual repair options in PDF, not "Keine angabe"
     const pdfOptions = FREIGABE_OPTIONS.filter(opt => opt !== 'Keine angabe');
     pdfOptions.forEach(opt => {
-      // If "Keine angabe" is selected, show "Reparatur laut KV durchführen" as unchecked
-      // If "Reparatur laut KV durchführen" is selected, show it as checked
       const checked = freigabe === opt;
-      drawCheckbox(doc, leftX + 1, yLeft - 2.5, checked);
+      drawCheckbox(doc, leftX + 1, yLeft - checkboxYOffset, checked);
+      setItemText();
       
-      // For "Reparatur laut KV durchführen", show method and date if selected and not "keine Angabe"
-      if (opt === 'Reparatur laut KV durchführen' && checked && kvMethod && kvMethod !== 'keine Angabe' && kvFreigabeDate) {
+      if ((opt === 'Reparatur laut KV durchführen' || opt === 'Unrepariert zurückschicken' || opt === 'Verschrotten') && checked && kvMethod && kvMethod !== 'keine Angabe' && kvFreigabeDate) {
         const formattedDate = new Date(kvFreigabeDate).toLocaleDateString('de-DE');
-        doc.text(`${opt} -  ${kvMethod} am ${formattedDate}`, leftX + 8, yLeft);
+        let freigabeText = `${opt} -  ${kvMethod} am ${formattedDate}`;
+        if (opt === 'Unrepariert zurückschicken' && unrepariertKostenlos) {
+          freigabeText += ' (kostenlos)';
+        }
+        doc.text(freigabeText, leftX + 8, yLeft);
+      } else if (opt === 'Unrepariert zurückschicken' && checked && unrepariertKostenlos) {
+        doc.text(`${opt} (kostenlos)`, leftX + 8, yLeft);
       } else if (opt === 'Garantie' && checked && garantieDate) {
         const formattedDate = new Date(garantieDate).toLocaleDateString('de-DE');
         doc.text(`${opt} auf Reparatur von ${formattedDate}`, leftX + 8, yLeft);
@@ -8939,123 +9077,103 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
         const formattedDate = new Date(reklamationDate).toLocaleDateString('de-DE');
         doc.text(`${opt} auf Reparatur von ${formattedDate}`, leftX + 8, yLeft);
       } else {
-      doc.text(opt, leftX + 8, yLeft);
+        doc.text(opt, leftX + 8, yLeft);
       }
       yLeft += linePad;
     });
     yLeft += sectionPad;
-    doc.setFont(undefined, 'bold');
+    setSectionHead();
     doc.text('Fehlerangaben:', leftX, yLeft);
-    doc.setFont(undefined, 'normal');
-    yLeft += linePad + 1;
-    FEHLERANGABEN.forEach((f, idx) => {
+    setItemText();
+    yLeft += linePad + 0.8;
+    FEHLERANGABEN.forEach((f) => {
       const checked = !!fehler[f];
-      drawCheckbox(doc, leftX + 1, yLeft - 2.5, checked);
+      drawCheckbox(doc, leftX + 1, yLeft - checkboxYOffset, checked);
+      setItemText();
       doc.text(f, leftX + 8, yLeft);
-      yLeft += linePad; // Fixed: removed the -1 to match other sections
-      if (idx === FEHLERANGABEN.length - 1) {
-        yLeft += sectionPad;
-      }
+      yLeft += linePad;
     });
     
     // Manual Fehlerangaben in PDF - Only show checked items
     if (manualFehlerChecked1 || manualFehlerChecked2 || manualFehlerChecked3) {
-      yLeft += 2; // Add some space before manual entries
-      doc.setFont(undefined, 'normal');
+      yLeft += 1;
+      setItemText();
       
       if (manualFehlerChecked1 && manualFehler1) {
-        drawCheckbox(doc, leftX+1, yLeft - 8, manualFehlerChecked1);
-        doc.text(manualFehler1, leftX + 8, yLeft - 5);
+        drawCheckbox(doc, leftX + 1, yLeft - checkboxYOffset, manualFehlerChecked1);
+        doc.text(manualFehler1, leftX + 8, yLeft);
         yLeft += linePad;
       }
       
       if (manualFehlerChecked2 && manualFehler2) {
-        drawCheckbox(doc, leftX + 1, yLeft - 8, manualFehlerChecked2);
-        doc.text(manualFehler2, leftX + 8, yLeft - 5);
+        drawCheckbox(doc, leftX + 1, yLeft - checkboxYOffset, manualFehlerChecked2);
+        doc.text(manualFehler2, leftX + 8, yLeft);
         yLeft += linePad;
       }
       
       if (manualFehlerChecked3 && manualFehler3) {
-        drawCheckbox(doc, leftX + 1, yLeft - 8, manualFehlerChecked3);
-        doc.text(manualFehler3, leftX + 8, yLeft - 5);
+        drawCheckbox(doc, leftX + 1, yLeft - checkboxYOffset, manualFehlerChecked3);
+        doc.text(manualFehler3, leftX + 8, yLeft);
         yLeft += linePad;
       }
-      
-      yLeft += 2;
     }
 
-    var verfahrenY = 250;
-    doc.setFont(undefined, 'bold');
-    doc.text('Kulanz:', leftX, verfahrenY);
-    doc.setFont(undefined, 'normal');
-    verfahrenY += linePad + 1;
-    // Kulanz checkbox
-    drawCheckbox(doc, leftX + 1, verfahrenY - 3.5, kulanz);
-    doc.text('Kulanz', leftX + 8, verfahrenY);
-    verfahrenY += linePad;
+    // Kulanz direkt im Anschluss an Fehlerangaben (gleiche Überschrift-Optik)
+    yLeft += sectionPad;
+    setSectionHead();
+    doc.text('Kulanz:', leftX, yLeft);
+    setItemText();
+    yLeft += linePad + 0.8;
+    drawCheckbox(doc, leftX + 1, yLeft - checkboxYOffset, kulanz);
+    doc.text('Kulanz', leftX + 8, yLeft);
+    yLeft += linePad;
     
     if (kulanz) {
-      verfahrenY += 1;
-      drawCheckbox(doc, leftX + 10, verfahrenY - 3.5, kulanzPorto === 'ja');
-      doc.text('Porto ja', leftX + 16, verfahrenY);
-      drawCheckbox(doc, leftX + 38, verfahrenY - 3.5, kulanzPorto === 'nein');
-      doc.text('Porto nein', leftX + 44, verfahrenY);
-      
-      // Only show Austria option if country is AT
+      drawCheckbox(doc, leftX + 10, yLeft - checkboxYOffset, kulanzPorto === 'ja');
+      doc.text('Porto ja', leftX + 16, yLeft);
+      drawCheckbox(doc, leftX + 38, yLeft - checkboxYOffset, kulanzPorto === 'nein');
+      doc.text('Porto nein', leftX + 44, yLeft);
       if (country === 'AT') {
-        drawCheckbox(doc, leftX + 70, verfahrenY - 3.5, kulanzPorto === 'austria');
-        doc.text('Porto 14,90€', leftX + 76, verfahrenY);
+        drawCheckbox(doc, leftX + 70, yLeft - checkboxYOffset, kulanzPorto === 'austria');
+        doc.text('Porto 14,90€', leftX + 76, yLeft);
       }
-      
-      // Manual porto option
       const manualPortoX = country === 'AT' ? leftX + 105 : leftX + 70;
       const manualPortoTextX = country === 'AT' ? leftX + 111 : leftX + 76;
-      drawCheckbox(doc, manualPortoX, verfahrenY - 3.5, kulanzPorto === 'manual');
+      drawCheckbox(doc, manualPortoX, yLeft - checkboxYOffset, kulanzPorto === 'manual');
       const manualPortoText = kulanzPorto === 'manual' && manualPorto ? 
         `Porto ${parseFloat(manualPorto).toFixed(2).replace('.', ',')}€` : 
         'Porto manuell';
-      doc.text(manualPortoText, manualPortoTextX, verfahrenY);
-      
-      verfahrenY += linePad;
-    }
-    
-    // Adjust Y position for subsequent sections based on whether Kulanz Porto options are shown
-    const kulanzYAdjustment = kulanz ? linePad * 2 : 0; // Add extra space if Kulanz Porto options are shown
-    const kvYabNetto = 73
-    const kvXabNetto = leftX + 25
-    // Kostenvoranschlag Section
-    yLeft += sectionPad;
-    doc.setFont(undefined, 'bold');
-    doc.text('Kostenvoranschlag:', leftX, kvYabNetto);
-        doc.setFont(undefined, 'normal');
-    yLeft += linePad + 1;
-    
-    // Kostenvoranschlag checkbox and amount
-    drawCheckbox(doc, kvXabNetto, kvYabNetto - 2.5, kostenvoranschlagChecked);
-    doc.text('ab', kvXabNetto + 6, kvYabNetto);
-    
-    // Add amount text field (if checked and has amount)
-    if (kostenvoranschlagChecked && kostenvoranschlagAmount) {
-      doc.text(`${kostenvoranschlagAmount} € - netto`, kvXabNetto + 10, kvYabNetto);
-      } else {
-      doc.text('_____ € - netto', kvXabNetto + 10, kvYabNetto);
-      }
+      doc.text(manualPortoText, manualPortoTextX, yLeft);
       yLeft += linePad;
+    }
 
-    // Right column: Ausgeführte Arbeiten (true 3-column grid)
+    // Kostenvoranschlag wird oben auf Höhe von „Rep. werkstatt Notiz“ gezeichnet
+
+    // Right column: Ausgeführte Arbeiten — gleicher linePad wie links
     let yRight = CheckBoxbereich;
-    doc.setFont(undefined, 'bold');
+    setSectionHead();
     doc.text('Ausgeführte Arbeiten:', rightX, yRight);
-    doc.setFont(undefined, 'normal');
-    yRight += linePad + 1;
+    setItemText();
+    yRight += linePad + 0.8;
 
-    // Find max label width for price alignment (calculate before the loop)
+    const pdfCustomRows = customArbeiten.filter((r) => r.checked && ((r.label && r.label.trim()) || (r.price && String(r.price).trim())));
+
     let maxLabelWidth = 0;
     ARBEITEN.forEach(a => {
-      const labelWidth = doc.getTextWidth(a.label);
+      const labelForWidth = (a.key === 'nearcom' && pdfVersion < 2) ? 'nEARcom-Reparaturpauschale' : a.label;
+      const labelWidth = doc.getTextWidth(labelForWidth);
       if (labelWidth > maxLabelWidth) maxLabelWidth = labelWidth;
     });
-    ARBEITEN.forEach(a => {
+    pdfCustomRows.forEach((r) => {
+      const w = doc.getTextWidth(r.label || 'Position');
+      if (w > maxLabelWidth) maxLabelWidth = w;
+    });
+
+    const nearcomIdx = ARBEITEN.findIndex((a) => a.key === 'nearcom');
+    const arbeitenBefore = ARBEITEN.slice(0, nearcomIdx + 1);
+    const arbeitenAfter = ARBEITEN.slice(nearcomIdx + 1);
+
+    const drawArbeitPdfRow = (a) => {
       const checked = !!arbeiten[a.key];
       let value = '';
       if (checked) {
@@ -9067,11 +9185,10 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
           value = '0,00 €';
         }
       }
-      // Checkbox
-      drawCheckbox(doc, rightX + 2, yRight - 3.5, checked);
-      // Label: fill space between checkbox and price, truncate if needed
-      let labelMaxWidth = priceColX - (rightX + 2 + labelPad) - 8; // 8mm gap before price
-      let labelText = a.label;
+      drawCheckbox(doc, rightX + 2, yRight - checkboxYOffset, checked);
+      setItemText();
+      let labelMaxWidth = priceColX - (rightX + 2 + labelPad) - 8;
+      let labelText = (a.key === 'nearcom' && pdfVersion < 2) ? 'nEARcom-Reparaturpauschale' : a.label;
       let labelWidth = doc.getTextWidth(labelText);
       if (labelWidth > labelMaxWidth) {
         while (labelText.length > 2 && doc.getTextWidth(labelText + '…') > labelMaxWidth) {
@@ -9080,46 +9197,80 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
         labelText += '…';
       }
       doc.text(labelText, rightX + 2 + labelPad, yRight);
-      // Price (only if checked)
       if (value) doc.text(value, priceColX, yRight, { align: 'right' });
       yRight += linePad;
+    };
+
+    arbeitenBefore.forEach(drawArbeitPdfRow);
+
+    pdfCustomRows.forEach((row) => {
+      drawCheckbox(doc, rightX + 2, yRight - checkboxYOffset, true);
+      setItemText();
+      let labelMaxWidth = priceColX - (rightX + 2 + labelPad) - 8;
+      let labelText = row.label || 'Position';
+      if (doc.getTextWidth(labelText) > labelMaxWidth) {
+        while (labelText.length > 2 && doc.getTextWidth(labelText + '…') > labelMaxWidth) {
+          labelText = labelText.slice(0, -1);
+        }
+        labelText += '…';
+      }
+      doc.text(labelText, rightX + 2 + labelPad, yRight);
+      if (!kulanz && row.price) {
+        const p = parseFloat(String(row.price).replace(',', '.'));
+        if (!Number.isNaN(p)) {
+          doc.text(`${p.toFixed(2).replace('.', ',')} €`, priceColX, yRight, { align: 'right' });
+        } else {
+          doc.text(`${row.price} €`, priceColX, yRight, { align: 'right' });
+        }
+      } else if (kulanz) {
+        doc.text('0,00 €', priceColX, yRight, { align: 'right' });
+      }
+      yRight += linePad;
     });
-    yRight += 2; // Reduced from sectionPad (4)
 
-    // Draw vertical line between columns (only after left grid finishes)
-   // y = yRight + 5;
-   // doc.setDrawColor(180);
-   // doc.setLineWidth(0.2);
-   // doc.line(separatorX, y, separatorX, yRight + 3); // Only go to right column end, not overlapping Verfahren
+    arbeitenAfter.forEach(drawArbeitPdfRow);
 
+    // Footer: Notizen etwas höher + größere Box; Werkstattausgang rechts daneben
+    const PAGE_BOTTOM = 282;
+    const NOTES_H = 20;
+    const notesBoxY = PAGE_BOTTOM - NOTES_H;
+    const notizenLabelY = notesBoxY - 4;
 
-    
-    // Nettopreis & Porto directly below "Ausgeführte Arbeiten", right-aligned
-    const pricingY = yRight + 8; // Position directly below right column
-    doc.setFont(undefined, 'bold');
-    doc.setFontSize(14);
-    doc.text(`Nettopreis: ${net.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 35, pricingY, { align: 'right' });
-    doc.setFont(undefined, 'normal');
-    doc.setFontSize(8);
-    doc.text(`zzgl. Porto & Verpackung: ${porto.toFixed(2).replace('.', ',')} €`, rightX + 8 + maxLabelWidth + 35, pricingY + 6, { align: 'right' });
+    // Nettopreis-Block: immer knapp über Notizen (nicht an Endkontrolle kleben)
+    // fester Abstand nach unten zu „Notizen:“ und genug Luft nach oben zur letzten Arbeitszeile
+    const pricingY = notizenLabelY - 16;
+    doc.setFont(FONT, 'bold');
+    doc.setFontSize(SIZE_PRICE_NET);
+    doc.text(`Nettopreis: ${net.toFixed(2).replace('.', ',')} €`, priceColX, pricingY, { align: 'right' });
+    doc.setFont(FONT, 'normal');
+    doc.setFontSize(SIZE_PRICE_PORTO);
+    doc.text(`zzgl. Porto & Verpackung: ${porto.toFixed(2).replace('.', ',')} €`, priceColX, pricingY + 5.5, { align: 'right' });
 
-    // Notizen section at the bottom (only if there are notes)
-    //if (werkstattNotiz && werkstattNotiz.trim() !== '') {
-      const notizenY = pricingY + 15; // Position below pricing
-      doc.setFont(undefined, 'bold');
-      doc.setFontSize(12);
-      doc.text('Notizen:', leftX, notizenY+2);
-    doc.setFont(undefined, 'normal');
-    doc.setFontSize(10);
-      
-      // Draw a text input field border
-      doc.setDrawColor(100);
-      doc.setLineWidth(0.2);
-      doc.rect(leftX, notizenY + 5, rightXstop-leftX, 20); // Smaller rectangle for notes
-      
-      // Add the actual note text
-      doc.text(werkstattNotiz, leftX+5, notizenY+10);
-    //}
+    // Werkstattausgang rechts neben Notizen-Überschrift
+    const werkstattausgangX = 144;
+    setSectionHead();
+    doc.text('Werkstattausgang:', werkstattausgangX, notizenLabelY);
+    doc.setFont(FONT, 'normal');
+    doc.setFontSize(SIZE_SECTION);
+    if (werkstattausgang) {
+      const [yyyy, mm, dd] = werkstattausgang.split('-');
+      doc.setFont(FONT, 'bold');
+      doc.text(`${dd}.${mm}.${yyyy}`, rightXstop, notizenLabelY, { align: 'right' });
+    } else {
+      doc.text('-', rightXstop, notizenLabelY, { align: 'right' });
+    }
+
+    // Notizen-Box ganz unten
+    setSectionHead();
+    doc.text('Notizen:', leftX, notizenLabelY);
+    doc.setFont(FONT, 'normal');
+    doc.setFontSize(SIZE_ITEM);
+    doc.setDrawColor(100);
+    doc.setLineWidth(0.2);
+    doc.rect(leftX, notesBoxY, rightXstop - leftX, NOTES_H);
+    if (werkstattNotiz) {
+      doc.text(werkstattNotiz, leftX + 3, notesBoxY + 5);
+    }
 
     doc.save('reparaturauftrag.pdf');
   };
@@ -9154,6 +9305,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
         <Route path="/rechnung-erstellen" element={<RechnungErstellenPage />} />
         <Route path="/rechnung-bearbeiten/:id" element={<RechnungBearbeitenPage />} />
         <Route path="/erstellte-rechnungen" element={<ErstellteRechnungenPage />} />
+        <Route path="/einstellungen" element={<EinstellungenPage navigate={navigate} />} />
         <Route path="/reperaturauftrag" element={
             <>
       <header style={{ display: 'flex', alignItems: 'center', padding: '2rem 1rem 1rem 1rem', borderBottom: '1px solid #eee' }}>
@@ -9857,6 +10009,68 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                       )}
                     </div>
                   )}
+                  {(opt === 'Unrepariert zurückschicken' || opt === 'Verschrotten') && freigabe === opt && (
+                    <div style={{ 
+                      marginLeft: '24px', 
+                      marginTop: '8px',
+                      display: 'flex', 
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      {opt === 'Unrepariert zurückschicken' && (
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px' }}>
+                          <input
+                            type="checkbox"
+                            checked={unrepariertKostenlos}
+                            onChange={(e) => setUnrepariertKostenlos(e.target.checked)}
+                          />
+                          Kostenlos
+                        </label>
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '14px', minWidth: '30px' }}>per:</span>
+                        <select 
+                          value={kvMethod} 
+                          onChange={(e) => {
+                            setKvMethod(e.target.value);
+                            if (e.target.value === 'keine Angabe') {
+                              setKvFreigabeDate('');
+                            }
+                          }}
+                          style={{ 
+                            padding: '4px 8px', 
+                            borderRadius: '4px', 
+                            border: '1px solid #ccc',
+                            fontSize: '14px',
+                            minWidth: '100px'
+                          }}
+                        >
+                          <option value="keine Angabe">keine Angabe</option>
+                          <option value="Mail">Mail</option>
+                          <option value="Tel">Tel</option>
+                          <option value="Fax">Fax</option>
+                          <option value="Brief">Brief</option>
+                        </select>
+                      </div>
+                      {kvMethod !== 'keine Angabe' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '14px', minWidth: '30px' }}>am:</span>
+                          <input 
+                            type="date" 
+                            value={kvFreigabeDate}
+                            onChange={(e) => setKvFreigabeDate(e.target.value)}
+                            style={{ 
+                              padding: '4px 8px', 
+                              borderRadius: '4px', 
+                              border: '1px solid #ccc',
+                              fontSize: '14px',
+                              minWidth: '140px'
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {opt === 'Garantie' && freigabe === opt && (
                     <div style={{ 
                       marginLeft: '24px', 
@@ -10082,7 +10296,7 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
                 <label style={{ fontWeight: 600, minWidth: 180, textAlign: 'left' }}>Land:</label>
                 <select value={country} onChange={handleCountry} style={{ fontSize: 16, padding: 4 }}>
-                  {COUNTRY_OPTIONS.map((c) => (
+                  {countryOptions.map((c) => (
                     <option key={c.key} value={c.key}>{c.label}</option>
                   ))}
                 </select>
@@ -10194,24 +10408,27 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
             <div style={boxStyle}>
               <div style={{ fontWeight: 600, marginBottom: 8, textAlign: 'left' }}>Ausgeführte Arbeiten:</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                {ARBEITEN.map((a) => {
+                {(() => {
+                  const nearcomIdx = ARBEITEN.findIndex((a) => a.key === 'nearcom');
+                  const before = ARBEITEN.slice(0, nearcomIdx + 1);
+                  const after = ARBEITEN.slice(nearcomIdx + 1);
+                  const renderArbeitRow = (a) => {
                   const checked = !!arbeiten[a.key];
-                  // Determine if this row needs a price or input field
                   const showPrice = !hideFields && a.price && a.price !== 'country';
                   const showCountryPrice = !hideFields && a.price === 'country';
                   const showInput = !hideFields && !a.price;
                   return (
-                    <div key={a.key} style={{ display: 'flex', alignItems: 'center', gap: 20, fontSize: 16, textAlign: 'left', minHeight: 36 }}>
-                      <input type="checkbox" checked={checked} onChange={() => handleArbeiten(a.key)} disabled={isDisabled} style={{ alignSelf: 'center' }} />
-                      <span style={{ flex: 1, paddingRight: 10, alignSelf: 'center', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.label}</span>
+                    <div key={a.key} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 16, textAlign: 'left', minHeight: 36, width: '100%' }}>
+                      <input type="checkbox" checked={checked} onChange={() => handleArbeiten(a.key)} disabled={isDisabled} style={{ alignSelf: 'center', flexShrink: 0 }} />
+                      <span style={{ flex: 1, minWidth: 0, paddingRight: 10, alignSelf: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.label}</span>
                       {(showPrice || showCountryPrice) && (
-                        <div style={{ display: 'flex', alignItems: 'center', fontSize: 15, color: checked ? '#222' : '#888' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', fontSize: 15, color: checked ? '#222' : '#888', marginLeft: 'auto', flexShrink: 0 }}>
                           <span>{showPrice ? a.price.toFixed(2).replace('.', ',') : arbeitszeit.toFixed(2).replace('.', ',')}</span>
                           <span style={{ marginLeft: 4 }}>€</span>
                         </div>
                       )}
                       {showInput && (
-                        <div style={{ display: 'flex', alignItems: 'center', fontSize: 15 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', fontSize: 15, marginLeft: 'auto', flexShrink: 0 }}>
                           <input
                             type="text"
                             value={arbeitenManual[a.key] || ''}
@@ -10226,7 +10443,123 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
                       )}
                     </div>
                   );
-                })}
+                  };
+                  return (
+                    <>
+                      {before.map(renderArbeitRow)}
+                      {!hideFields && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '6px 0', width: '100%' }}>
+                          <div style={{ flex: 1, height: 2, background: '#28a745', borderRadius: 1 }} />
+                          <button
+                            type="button"
+                            title="Position hinzufügen"
+                            disabled={isDisabled || customArbeiten.length >= MAX_CUSTOM_ARBEITEN}
+                            onClick={() => {
+                              if (customArbeiten.length >= MAX_CUSTOM_ARBEITEN) return;
+                              setCustomArbeiten((prev) => [
+                                ...prev,
+                                { id: `c_${Date.now()}_${prev.length}`, checked: true, label: '', price: '' }
+                              ]);
+                            }}
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: '50%',
+                              border: '2px solid #28a745',
+                              background: customArbeiten.length >= MAX_CUSTOM_ARBEITEN ? '#e8f5e9' : '#28a745',
+                              color: customArbeiten.length >= MAX_CUSTOM_ARBEITEN ? '#88bb88' : '#fff',
+                              fontSize: 18,
+                              fontWeight: 700,
+                              lineHeight: 1,
+                              cursor: (isDisabled || customArbeiten.length >= MAX_CUSTOM_ARBEITEN) ? 'not-allowed' : 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: 0,
+                              flexShrink: 0
+                            }}
+                          >
+                            +
+                          </button>
+                          <div style={{ flex: 1, height: 2, background: '#28a745', borderRadius: 1 }} />
+                        </div>
+                      )}
+                      {customArbeiten.map((row, idx) => (
+                        <div key={row.id} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 16, textAlign: 'left', minHeight: 36, width: '100%', position: 'relative' }}>
+                          <button
+                            type="button"
+                            title="Entfernen"
+                            disabled={isDisabled}
+                            onClick={() => setCustomArbeiten((prev) => prev.filter((_, i) => i !== idx))}
+                            style={{
+                              position: 'absolute',
+                              left: -22,
+                              width: 18,
+                              border: 'none',
+                              background: 'transparent',
+                              color: '#dc3545',
+                              cursor: isDisabled ? 'not-allowed' : 'pointer',
+                              fontSize: 16,
+                              lineHeight: 1,
+                              padding: 0,
+                              opacity: isDisabled ? 0.4 : 1
+                            }}
+                          >
+                            ×
+                          </button>
+                          <input
+                            type="checkbox"
+                            checked={!!row.checked}
+                            disabled={isDisabled}
+                            onChange={() => setCustomArbeiten((prev) => prev.map((r, i) => i === idx ? { ...r, checked: !r.checked } : r))}
+                            style={{ alignSelf: 'center', flexShrink: 0 }}
+                          />
+                          <input
+                            type="text"
+                            value={row.label || ''}
+                            placeholder="Bezeichnung"
+                            disabled={isDisabled}
+                            onChange={(e) => setCustomArbeiten((prev) => prev.map((r, i) => i === idx ? { ...r, label: e.target.value } : r))}
+                            style={{
+                              flex: 1,
+                              minWidth: 0,
+                              fontSize: 15,
+                              padding: '2px 6px',
+                              border: '1px solid #ccc',
+                              borderRadius: 3,
+                              background: row.checked ? '#fff' : '#f5f5f5',
+                              color: row.checked ? '#222' : '#888'
+                            }}
+                          />
+                          <div style={{ display: 'flex', alignItems: 'center', fontSize: 15, marginLeft: 'auto', flexShrink: 0 }}>
+                            <input
+                              type="text"
+                              value={row.price || ''}
+                              placeholder="0,00"
+                              disabled={isDisabled || !row.checked || kulanz}
+                              onChange={(e) => {
+                                let value = e.target.value.replace(/[^0-9,]/g, '');
+                                value = value.replace(/(,.*),/g, '$1');
+                                setCustomArbeiten((prev) => prev.map((r, i) => i === idx ? { ...r, price: value } : r));
+                              }}
+                              style={{
+                                fontSize: 15,
+                                width: 70,
+                                textAlign: 'center',
+                                color: row.checked ? '#222' : '#888',
+                                background: row.checked ? '#fff' : '#f5f5f5',
+                                borderColor: row.checked ? '#ccc' : '#eee'
+                              }}
+                              inputMode="decimal"
+                            />
+                            <span style={{ marginLeft: 4, color: row.checked ? '#222' : '#888' }}>€</span>
+                          </div>
+                        </div>
+                      ))}
+                      {after.map(renderArbeitRow)}
+                    </>
+                  );
+                })()}
               </div>
             </div>
             <div style={{ ...boxStyle, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginTop: 20 }}>

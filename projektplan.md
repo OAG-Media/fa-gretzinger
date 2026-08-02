@@ -17,8 +17,12 @@ App läuft produktiv auf Vercel (`fa-gretzinger.vercel.app`), Daten in Supabase 
 ## Erledigt (2026-08-02)
 - Filiale-Filter bei Reparaturaufträgen
 - Doppelverrechnung blockiert (draft/invoiced) inkl. Hinweis „bereits in Rechnung XY“
-- Auto-Split: bei mehreren Filialen in der Auswahl → separate Rechnungsentwürfe
+- Auto-Split nach Filiale wieder entfernt (Filiale-Filter reicht; eine Rechnung für die Auswahl)
 - Entfernte Aufträge aus Rechnungsentwurf werden wieder freigegeben (invoice_status = null)
+- Reparaturauftrag: Unrepariert kostenlos+ohne Porto; Unrepariert/Verschrotten mit per/Datum wie KV
+- PDF neu (pdf_version≥2): „Auftrag von:“ statt „Sendedatum“; alte Aufträge unverändert
+- Arbeiten: Noahlink/nEARcom-Label, Preisfelder rechtsbündig, max. 3 manuelle Positionen (+ Linie)
+- Einstellungen-Kachel: Länder/Steuer/Porto (Tabelle `country_settings`)
 
 ## Offen / Hinweise
 - RLS auf `invoices` / `invoice_items` ist deaktiviert (Security-Hinweis, bewusst nicht auto-gefixt)
@@ -28,3 +32,4 @@ App läuft produktiv auf Vercel (`fa-gretzinger.vercel.app`), Daten in Supabase 
 ## Tech
 - React (CRA), Supabase, jsPDF
 - Localhost: siehe `regeln.md` (Port 3001, Dev-Pfad)
+- DB: `country_settings`, `repair_orders.pdf_version`, `repair_orders.unrepariert_kostenlos`
