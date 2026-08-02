@@ -1825,13 +1825,29 @@ const ErstellteReperaturauftragePage = () => {
   const [selectedCompany, setSelectedCompany] = useState('');
   const [companySearchTerm, setCompanySearchTerm] = useState('');
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+  const [selectedBranch, setSelectedBranch] = useState('');
   
   // Invoice Status Filtering State
   const [showOnlyUnused, setShowOnlyUnused] = useState(false);
+  const [isCreatingSplitInvoices, setIsCreatingSplitInvoices] = useState(false);
   
   // Selection State
   const [selectedOrders, setSelectedOrders] = useState(new Set());
   const [selectAll, setSelectAll] = useState(false);
+
+  const getOrderInvoiceNumber = (order) =>
+    order.invoice_items?.[0]?.invoice?.invoice_number || null;
+
+  // Only block when an actual invoice link exists (orphan draft flags without invoice_items are ignored)
+  const isOrderAlreadyBilled = (order) => !!getOrderInvoiceNumber(order);
+
+  const explainBillingBlock = (order) => {
+    const nr = getOrderInvoiceNumber(order);
+    if (nr) {
+      return `Verrechnung blockiert: Dieser Auftrag ist bereits in Rechnung ${nr} enthalten.\n\nTipp: Unter „Erstellte Rechnungen“ nach ${nr} suchen — Entwurf bearbeiten oder Auftrag dort entfernen.`;
+    }
+    return 'Verrechnung blockiert: Dieser Auftrag ist bereits einer Rechnung zugeordnet.';
+  };
 
   // Load repair orders from Supabase
   const loadRepairOrders = async () => {
@@ -1877,10 +1893,10 @@ const ErstellteReperaturauftragePage = () => {
     loadRepairOrders();
   }, []);
 
-  // Reset pagination when search term, date filters, company filter, or invoice status filter change
+  // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, dateFrom, dateTo, dateFilterField, selectedCompany, showOnlyUnused]);
+  }, [searchTerm, dateFrom, dateTo, dateFilterField, selectedCompany, selectedBranch, showOnlyUnused]);
   
 
   // Toggle row expansion
@@ -1979,15 +1995,19 @@ const ErstellteReperaturauftragePage = () => {
       const matchesCompanyFilter = !selectedCompany || 
         order.customers?.company === selectedCompany;
 
+      // Branch / Filiale filter
+      const matchesBranchFilter = !selectedBranch ||
+        order.customers?.branch === selectedBranch;
+
       // Invoice status filter (show only unused)
       const matchesInvoiceStatusFilter = !showOnlyUnused || !order.invoice_status;
 
       // Werkstattausgang filter - only require Werkstattausgang for date/firma filters, not for search
-      const hasDateOrCompanyFilters = dateFrom || dateTo || selectedCompany || showOnlyUnused;
+      const hasDateOrCompanyFilters = dateFrom || dateTo || selectedCompany || selectedBranch || showOnlyUnused;
       const hasWerkstattausgang = order.werkstattausgang && order.werkstattausgang.trim() !== '';
       const matchesWerkstattausgangFilter = !hasDateOrCompanyFilters || hasWerkstattausgang;
 
-      return matchesSearch && matchesDateFilter && matchesCompanyFilter && matchesInvoiceStatusFilter && matchesWerkstattausgangFilter;
+      return matchesSearch && matchesDateFilter && matchesCompanyFilter && matchesBranchFilter && matchesInvoiceStatusFilter && matchesWerkstattausgangFilter;
     })
     .sort((a, b) => {
       let aValue, bValue;
@@ -2031,30 +2051,37 @@ const ErstellteReperaturauftragePage = () => {
 
   
   // Selection handlers (defined after filteredAndSortedOrders)
-  const handleSelectOrder = (orderId) => {
+  const selectableOrders = filteredAndSortedOrders.filter((order) => !isOrderAlreadyBilled(order));
+
+  const handleSelectOrder = (order) => {
+    if (isOrderAlreadyBilled(order)) {
+      alert(explainBillingBlock(order));
+      return;
+    }
+
     const newSelected = new Set(selectedOrders);
-    if (newSelected.has(orderId)) {
-      newSelected.delete(orderId);
+    if (newSelected.has(order.id)) {
+      newSelected.delete(order.id);
     } else {
-      newSelected.add(orderId);
+      newSelected.add(order.id);
     }
     setSelectedOrders(newSelected);
     
-    // Update selectAll state based on current selection
-    const totalOrders = filteredAndSortedOrders.length;
-    setSelectAll(newSelected.size === totalOrders && totalOrders > 0);
+    // Update selectAll state based on current selection of selectable rows
+    setSelectAll(
+      selectableOrders.length > 0
+      && selectableOrders.every((o) => newSelected.has(o.id))
+    );
   };
   
   const handleSelectAll = () => {
     if (selectAll) {
-      // Deselect all
       setSelectedOrders(new Set());
       setSelectAll(false);
     } else {
-      // Select all filtered orders (not just current page)
-      const allOrderIds = new Set(filteredAndSortedOrders.map(order => order.id));
+      const allOrderIds = new Set(selectableOrders.map(order => order.id));
       setSelectedOrders(allOrderIds);
-      setSelectAll(true);
+      setSelectAll(allOrderIds.size > 0);
     }
   };
   
@@ -2065,18 +2092,23 @@ const ErstellteReperaturauftragePage = () => {
   const endIndex = startIndex + itemsPerPage;
   const filteredRepairOrders = filteredAndSortedOrders.slice(startIndex, endIndex);
   
-  // Update selection when filters change - keep only valid selections
+  // Update selection when filters change - keep only valid selectable selections
   useEffect(() => {
-    const validOrderIds = new Set(filteredAndSortedOrders.map(order => order.id));
+    const validOrderIds = new Set(
+      filteredAndSortedOrders
+        .filter((order) => !isOrderAlreadyBilled(order))
+        .map(order => order.id)
+    );
     const validSelections = new Set([...selectedOrders].filter(id => validOrderIds.has(id)));
     
     if (validSelections.size !== selectedOrders.size) {
       setSelectedOrders(validSelections);
-      // Update selectAll state
-      const totalOrders = filteredAndSortedOrders.length;
-      setSelectAll(validSelections.size === totalOrders && totalOrders > 0);
     }
-  }, [filteredAndSortedOrders, selectedOrders]);
+    setSelectAll(
+      validOrderIds.size > 0
+      && [...validOrderIds].every((id) => validSelections.has(id))
+    );
+  }, [filteredAndSortedOrders]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSort = (field) => {
     if (sortBy === field) {
@@ -2205,6 +2237,7 @@ const ErstellteReperaturauftragePage = () => {
     setSelectedCompany(company);
     setCompanySearchTerm(company);
     setShowCompanyDropdown(false);
+    setSelectedBranch('');
   };
 
   // Handle company search input
@@ -2212,6 +2245,7 @@ const ErstellteReperaturauftragePage = () => {
     setCompanySearchTerm(value);
     if (value === '') {
       setSelectedCompany('');
+      setSelectedBranch('');
     }
   };
 
@@ -2220,6 +2254,187 @@ const ErstellteReperaturauftragePage = () => {
     setSelectedCompany('');
     setCompanySearchTerm('');
     setShowCompanyDropdown(false);
+    setSelectedBranch('');
+  };
+
+  const getUniqueBranches = () => {
+    const source = selectedCompany
+      ? repairOrders.filter((order) => order.customers?.company === selectedCompany)
+      : repairOrders;
+    return [...new Set(
+      source
+        .map((order) => order.customers?.branch)
+        .filter((branch) => branch && branch.trim() !== '')
+    )].sort((a, b) => a.localeCompare(b, 'de'));
+  };
+
+  const getNextInvoiceNumber = async () => {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('invoice_number')
+      .order('id', { ascending: false })
+      .limit(1);
+    if (error) throw error;
+    if (data && data.length > 0) {
+      const lastNumber = parseInt(data[0].invoice_number, 10);
+      return (Number.isNaN(lastNumber) ? 8125 : lastNumber + 1).toString();
+    }
+    return '8125';
+  };
+
+  const buildSimpleRepairDescription = (order) => {
+    if (order.freigabe === 'Reparatur laut KV durchführen' || order.freigabe === 'Kostenpflichtige Reparatur') {
+      return 'einzelne Positionen';
+    }
+    if (order.freigabe === 'Garantie') return 'Garantie';
+    if (order.freigabe === 'Reklamation') return 'Reklamation';
+    if (order.freigabe === 'Unrepariert zurückschicken') return 'Unrepariert zurück';
+    if (order.freigabe === 'Verschrotten') return 'Verschrotten';
+    if (order.kulanz) return 'Kulanz';
+    return 'einzelne Positionen';
+  };
+
+  const createDraftInvoiceForOrders = async (orders, invoiceNumber) => {
+    const taxRate = orders[0]?.customers?.country === 'Österreich' ? 0 : 0.19;
+    let subtotal = 0;
+    orders.forEach((order) => {
+      subtotal += parseFloat(order.nettopreis || 0) + parseFloat(order.porto || 0);
+    });
+    const taxAmount = subtotal * taxRate;
+    const totalAmount = subtotal + taxAmount;
+
+    const { data: invoice, error: invoiceError } = await supabase
+      .from('invoices')
+      .insert([{
+        invoice_number: invoiceNumber,
+        invoice_date: new Date().toISOString().split('T')[0],
+        customer_id: orders[0].customer_id,
+        period_start: dateFrom || null,
+        period_end: dateTo || null,
+        status: 'draft',
+        subtotal,
+        tax_amount: taxAmount,
+        tax_rate: taxRate,
+        total_amount: totalAmount,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }])
+      .select()
+      .single();
+
+    if (invoiceError) throw invoiceError;
+
+    const items = orders.map((order, index) => {
+      const repairAmount = parseFloat(order.nettopreis || 0);
+      const porto = parseFloat(order.porto || 0);
+      return {
+        invoice_id: invoice.id,
+        repair_order_id: order.id,
+        position: index + 1,
+        date_performed: order.werkstattausgang || order.created_at,
+        kommission: order.kommission || '',
+        description: buildSimpleRepairDescription(order),
+        filiale: order.customers?.branch || '',
+        repair_amount: repairAmount,
+        porto,
+        line_total: repairAmount + porto,
+        created_at: new Date().toISOString()
+      };
+    });
+
+    const { error: itemsError } = await supabase.from('invoice_items').insert(items);
+    if (itemsError) throw itemsError;
+
+    const { error: statusError } = await supabase
+      .from('repair_orders')
+      .update({ invoice_status: 'draft' })
+      .in('id', orders.map((o) => o.id));
+    if (statusError) throw statusError;
+
+    return invoice;
+  };
+
+  const handleCreateInvoiceFromSelection = async () => {
+    const selected = repairOrders.filter((order) => selectedOrders.has(order.id));
+    const available = selected.filter((order) => !isOrderAlreadyBilled(order));
+    const blocked = selected.filter((order) => isOrderAlreadyBilled(order));
+
+    if (blocked.length > 0) {
+      const examples = blocked.slice(0, 3).map((order) => {
+        const nr = getOrderInvoiceNumber(order);
+        return nr ? `${order.kommission || 'ohne Komm.'} → Re ${nr}` : (order.kommission || order.id);
+      }).join('\n');
+      alert(
+        `Verrechnung blockiert: ${blocked.length} ausgewählte Auftrag/Aufträge sind bereits verrechnet oder im Entwurf.\n\nBeispiele:\n${examples}`
+      );
+      return;
+    }
+
+    if (available.length === 0) {
+      alert('Keine verrechenbaren Aufträge ausgewählt.');
+      return;
+    }
+
+    // Group by Filiale (branch), fallback company if branch empty
+    const groups = new Map();
+    available.forEach((order) => {
+      const branch = (order.customers?.branch || '').trim() || 'Ohne Filiale';
+      const company = order.customers?.company || '';
+      const key = `${company}|||${branch}`;
+      if (!groups.has(key)) {
+        groups.set(key, { company, branch, orders: [] });
+      }
+      groups.get(key).orders.push(order);
+    });
+
+    if (groups.size === 1) {
+      const params = new URLSearchParams();
+      params.set('orders', available.map((o) => o.id).join(','));
+      if (dateFrom) params.set('periodStart', dateFrom);
+      if (dateTo) params.set('periodEnd', dateTo);
+      window.location.href = `/rechnung-erstellen?${params.toString()}`;
+      return;
+    }
+
+    const summary = [...groups.values()]
+      .map((g) => `• ${g.branch}${g.company ? ` (${g.company})` : ''}: ${g.orders.length} Auftrag/Aufträge`)
+      .join('\n');
+
+    const confirmSplit = window.confirm(
+      `Mehrere Filialen ausgewählt (${groups.size}).\n\n` +
+      `Es werden automatisch ${groups.size} separate Rechnungsentwürfe erstellt:\n\n` +
+      `${summary}\n\n` +
+      `Fortfahren und aufteilen?`
+    );
+
+    if (!confirmSplit) return;
+
+    try {
+      setIsCreatingSplitInvoices(true);
+      const createdNumbers = [];
+      let nextNumber = parseInt(await getNextInvoiceNumber(), 10);
+
+      for (const group of groups.values()) {
+        const invoice = await createDraftInvoiceForOrders(group.orders, String(nextNumber));
+        createdNumbers.push(`${invoice.invoice_number} – ${group.branch}`);
+        nextNumber += 1;
+      }
+
+      setSelectedOrders(new Set());
+      setSelectAll(false);
+      await loadRepairOrders();
+      alert(
+        `${createdNumbers.length} Rechnungsentwürfe erstellt:\n\n` +
+        createdNumbers.map((line) => `• ${line}`).join('\n') +
+        `\n\nSie finden die Entwürfe unter „Erstellte Rechnungen“.`
+      );
+      window.location.href = '/erstellte-rechnungen';
+    } catch (error) {
+      console.error('Error creating split invoices:', error);
+      alert('Fehler beim Aufteilen der Rechnungen: ' + error.message);
+    } finally {
+      setIsCreatingSplitInvoices(false);
+    }
   };
 
   if (loading) {
@@ -2605,6 +2820,7 @@ const ErstellteReperaturauftragePage = () => {
                     onClick={() => {
                       setSelectedCompany('');
                       setCompanySearchTerm('');
+                      setSelectedBranch('');
                       setShowCompanyDropdown(false);
                     }}
                     style={{
@@ -2651,6 +2867,28 @@ const ErstellteReperaturauftragePage = () => {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Filiale Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '14px', color: '#666', minWidth: '55px' }}>Filiale:</span>
+            <select
+              value={selectedBranch}
+              onChange={(e) => setSelectedBranch(e.target.value)}
+              style={{
+                padding: '6px 12px',
+                border: '1px solid #e1e5e9',
+                borderRadius: '4px',
+                fontSize: '14px',
+                minWidth: '180px',
+                background: 'white'
+              }}
+            >
+              <option value="">Alle Filialen</option>
+              {getUniqueBranches().map((branch) => (
+                <option key={branch} value={branch}>{branch}</option>
+              ))}
+            </select>
           </div>
 
           {/* Clear All Filters Button */}
@@ -2818,21 +3056,29 @@ const ErstellteReperaturauftragePage = () => {
                   {/* Main Row */}
                   <tr style={{ 
                     borderBottom: '1px solid #f0f0f0',
-                    backgroundColor: (order.invoice_status && order.invoice_items?.[0]?.invoice?.invoice_number) ? '#f0f8f0' : 'transparent',
-                    opacity: (order.invoice_status === 'invoiced' && order.invoice_items?.[0]?.invoice?.invoice_number) ? 0.6 : 1
+                    backgroundColor: getOrderInvoiceNumber(order) ? '#f0f8f0' : 'transparent',
+                    opacity: order.invoice_status === 'invoiced' && getOrderInvoiceNumber(order) ? 0.6 : 1
                   }}>
-                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                    <td
+                      style={{ padding: '12px', textAlign: 'center' }}
+                      onClick={() => {
+                        if (isOrderAlreadyBilled(order)) {
+                          alert(explainBillingBlock(order));
+                        }
+                      }}
+                      title={isOrderAlreadyBilled(order) ? explainBillingBlock(order) : undefined}
+                    >
                       <input
                         type="checkbox"
                         checked={selectedOrders.has(order.id)}
-                        onChange={() => handleSelectOrder(order.id)}
-                        disabled={order.invoice_status && order.invoice_items?.[0]?.invoice?.invoice_number}
+                        onChange={() => handleSelectOrder(order)}
+                        disabled={isOrderAlreadyBilled(order)}
                         style={{
                           width: '16px',
                           height: '16px',
-                          cursor: (order.invoice_status && order.invoice_items?.[0]?.invoice?.invoice_number) ? 'not-allowed' : 'pointer',
+                          cursor: isOrderAlreadyBilled(order) ? 'not-allowed' : 'pointer',
                           accentColor: '#1d426a',
-                          opacity: (order.invoice_status && order.invoice_items?.[0]?.invoice?.invoice_number) ? 0.5 : 1
+                          opacity: isOrderAlreadyBilled(order) ? 0.5 : 1
                         }}
                       />
                     </td>
@@ -2858,7 +3104,7 @@ const ErstellteReperaturauftragePage = () => {
                       </button>
                     </td>
                     <td style={{ padding: '8px', textAlign: 'center' }}>
-                      {order.invoice_status && order.invoice_items?.[0]?.invoice?.invoice_number && (
+                      {getOrderInvoiceNumber(order) && (
                         <div style={{ 
                           display: 'flex', 
                           alignItems: 'center', 
@@ -2881,7 +3127,7 @@ const ErstellteReperaturauftragePage = () => {
                             color: order.invoice_status === 'invoiced' ? '#28a745' : '#ffc107',
                             whiteSpace: 'nowrap'
                           }}>
-                            Re: {order.invoice_items[0].invoice.invoice_number}
+                            Re: {getOrderInvoiceNumber(order)}
                           </div>
                         </div>
                       )}
@@ -3140,49 +3386,39 @@ const ErstellteReperaturauftragePage = () => {
           </div>
           
           <button
-            onClick={() => {
-              // Navigate to invoice creation with selected orders and date filter
-              const selectedOrderIds = Array.from(selectedOrders);
-              const params = new URLSearchParams();
-              params.set('orders', selectedOrderIds.join(','));
-              
-              // Add date filter if available
-              if (dateFrom) {
-                params.set('periodStart', dateFrom);
-              }
-              if (dateTo) {
-                params.set('periodEnd', dateTo);
-              }
-              
-              window.location.href = `/rechnung-erstellen?${params.toString()}`;
-            }}
+            onClick={handleCreateInvoiceFromSelection}
+            disabled={isCreatingSplitInvoices}
             style={{
               padding: '0.75rem 1.5rem',
-              background: '#28a745',
+              background: isCreatingSplitInvoices ? '#6c757d' : '#28a745',
               color: 'white',
               border: 'none',
               borderRadius: '6px',
               fontSize: '14px',
               fontWeight: '500',
-              cursor: 'pointer',
+              cursor: isCreatingSplitInvoices ? 'wait' : 'pointer',
               transition: 'all 0.2s ease',
               display: 'flex',
               alignItems: 'center',
               gap: '8px'
             }}
             onMouseEnter={(e) => {
-              e.target.style.background = '#218838';
-              e.target.style.transform = 'scale(1.02)';
+              if (!isCreatingSplitInvoices) {
+                e.currentTarget.style.background = '#218838';
+                e.currentTarget.style.transform = 'scale(1.02)';
+              }
             }}
             onMouseLeave={(e) => {
-              e.target.style.background = '#28a745';
-              e.target.style.transform = 'scale(1)';
+              if (!isCreatingSplitInvoices) {
+                e.currentTarget.style.background = '#28a745';
+                e.currentTarget.style.transform = 'scale(1)';
+              }
             }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
             </svg>
-            Rechnung aus Auswahl erstellen
+            {isCreatingSplitInvoices ? 'Rechnungen werden erstellt…' : 'Rechnung aus Auswahl erstellen'}
           </button>
         </div>
       )}
@@ -3199,12 +3435,13 @@ const ErstellteReperaturauftragePage = () => {
           textAlign: 'center'
         }}>
           {totalItems} Reparaturaufträge gefunden
-          {(searchTerm || selectedCompany || dateFrom || dateTo) && (
+          {(searchTerm || selectedCompany || selectedBranch || dateFrom || dateTo) && (
             <span>
               {' (gefiltert nach: '}
               {[
                 searchTerm && `Suche: "${searchTerm}"`,
                 selectedCompany && `Firma: "${selectedCompany}"`,
+                selectedBranch && `Filiale: "${selectedBranch}"`,
                 (dateFrom || dateTo) && `Datum: ${dateFrom || '...'} bis ${dateTo || '...'}`
               ].filter(Boolean).join(', ')}
               {')'}
@@ -6014,6 +6251,7 @@ const RechnungBearbeitenPage = () => {
   const [invoiceItems, setInvoiceItems] = useState([]);
   const [selectedOrders, setSelectedOrders] = useState([]);
   const [availableOrders, setAvailableOrders] = useState([]);
+  const [originalRepairOrderIds, setOriginalRepairOrderIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
@@ -6112,6 +6350,9 @@ const RechnungBearbeitenPage = () => {
 
       setInvoice(invoiceData);
       setInvoiceItems(repairOrderItems);
+      setOriginalRepairOrderIds(
+        repairOrderItems.map((item) => item.repair_order_id).filter(Boolean)
+      );
       setManualItems(manualItemsData.map(item => ({
         id: item.id,
         type: item.line_total >= 0 ? 'positive' : 'negative',
@@ -6214,16 +6455,29 @@ const RechnungBearbeitenPage = () => {
         if (itemsError) throw itemsError;
       }
 
-      // Update repair orders status for newly added orders
-      if (selectedOrders.length > 0) {
+      // Sync repair-order statuses: kept = draft, removed from invoice = free again
+      const keptIds = allOrders
+        .map((order) => order.repair_order_id || order.id)
+        .filter(Boolean);
+      const removedIds = originalRepairOrderIds.filter((rid) => !keptIds.includes(rid));
+
+      if (removedIds.length > 0) {
+        const { error: freeError } = await supabase
+          .from('repair_orders')
+          .update({ invoice_status: null })
+          .in('id', removedIds);
+        if (freeError) throw freeError;
+      }
+
+      if (keptIds.length > 0) {
         const { error: statusError } = await supabase
           .from('repair_orders')
           .update({ invoice_status: 'draft' })
-          .in('id', selectedOrders.map(order => order.id));
-
+          .in('id', keptIds);
         if (statusError) throw statusError;
       }
-      
+
+      setOriginalRepairOrderIds(keptIds);
       setHasUnsavedChanges(false);
       console.log('Auto-save completed successfully');
       
@@ -6340,15 +6594,29 @@ const RechnungBearbeitenPage = () => {
         if (itemsError) throw itemsError;
       }
 
-      // Update repair orders status for newly added orders
-      if (selectedOrders.length > 0) {
+      // Sync repair-order statuses: kept = draft, removed from invoice = free again
+      const keptIds = allOrders
+        .map((order) => order.repair_order_id || order.id)
+        .filter(Boolean);
+      const removedIds = originalRepairOrderIds.filter((rid) => !keptIds.includes(rid));
+
+      if (removedIds.length > 0) {
+        const { error: freeError } = await supabase
+          .from('repair_orders')
+          .update({ invoice_status: null })
+          .in('id', removedIds);
+        if (freeError) throw freeError;
+      }
+
+      if (keptIds.length > 0) {
         const { error: statusError } = await supabase
           .from('repair_orders')
           .update({ invoice_status: 'draft' })
-          .in('id', selectedOrders.map(order => order.id));
-
+          .in('id', keptIds);
         if (statusError) throw statusError;
       }
+
+      setOriginalRepairOrderIds(keptIds);
       
       alert('Rechnung erfolgreich gespeichert!');
       
