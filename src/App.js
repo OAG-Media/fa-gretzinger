@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, useParams } from 'react-router-dom';
 import './App.css';
+import './ModernDashboard.css';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { supabase, fetchAllPages } from './supabaseClient';
@@ -11,6 +12,15 @@ import {
   buildInvoiceExcelRows,
   downloadInvoicePositionsExcel
 } from './invoiceExportUtils.js';
+import ModernHome, { ModernShell, DashboardViewSwitcher, ModernStaffHome } from './ModernDashboard';
+import { useDashboardView } from './dashboardView';
+import {
+  resolveLogin,
+  getStoredRole,
+  setStoredRole,
+  clearStoredRole,
+  canAccessInvoices
+} from './authRoles';
 
 // Custom hook for handling unsaved changes warnings
 const useUnsavedChangesWarning = (hasUnsavedChanges, message = 'Sind Sie sich sicher, dass die Seite verlassen wollen? Ungespeicherte Änderungen gehen eventuell verloren') => {
@@ -317,148 +327,90 @@ const EinstellungenPage = ({ navigate }) => {
   );
 };
 
-// Dashboard Component - You'll actually see this!
-const Dashboard = ({ setIsLoggedIn, navigate }) => {
+// Dashboard Component - Classic tiles (default). Modern shell is handled in AppContent.
+const Dashboard = ({ setIsLoggedIn, navigate, role = 'mitarbeiter' }) => {
   const [hoveredButton, setHoveredButton] = useState(null);
+  const showInvoices = canAccessInvoices(role);
+
+  const tiles = [
+    {
+      id: 'akustiker',
+      title: 'Akustiker',
+      text: 'Kunden verwalten und bearbeiten',
+      path: '/akustiker',
+      button: 'Akustiker öffnen'
+    },
+    {
+      id: 'erstellen',
+      title: 'Reparaturauftrag erstellen',
+      text: 'Neuen Reparaturauftrag anlegen',
+      path: '/reperaturauftrag',
+      button: 'Reparaturauftrag erstellen'
+    },
+    {
+      id: 'anzeigen',
+      title: 'Erstellte Reparaturaufträge',
+      text: 'Alle Reparaturaufträge anzeigen',
+      path: '/erstellte-reperaturauftrage',
+      button: 'Reparaturaufträge anzeigen'
+    },
+    ...(showInvoices
+      ? [{
+          id: 'rechnungen',
+          title: 'Erstellte Rechnungen',
+          text: 'Alle Rechnungen verwalten und einsehen',
+          path: '/erstellte-rechnungen',
+          button: 'Rechnungen anzeigen'
+        }]
+      : []),
+    {
+      id: 'einstellungen',
+      title: 'Einstellungen',
+      text: 'Länder, Steuern und Portokosten verwalten',
+      path: '/einstellungen',
+      button: 'Einstellungen öffnen'
+    }
+  ];
   
   return (
-    <div style={{ padding: '2rem', textAlign: 'center', height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
-      {/* <h1 style={{ color: '#1d426a', marginBottom: '2rem' }}>Gretzinger Hörgeräte Dashboard</h1> */}
+    <div style={{ padding: '2rem', textAlign: 'center', height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
       <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 80, marginBottom: '2rem' }} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '2rem', maxWidth: '800px', margin: '0 auto', width: '100%' }}>
-        <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '1.2rem 1.5rem', boxShadow: '0 1px 4px #0001' }}>
-          <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Akustiker</h3>
-          <p style={{ color: '#666', marginBottom: '1rem' }}>Kunden verwalten und bearbeiten</p>
-          <button 
-            onClick={() => navigate('/akustiker')}
-            onMouseEnter={(e) => {
-              e.target.style.transform = 'scale(1.05)';
-              setHoveredButton('akustiker');
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.transform = 'scale(1)';
-              setHoveredButton(null);
-            }}
-            style={{ 
-              padding: '10px 20px', 
-              background: hoveredButton === 'akustiker' ? '#2a5a8a' : '#1d426a', 
-              color: 'white', 
-              border: 'none', 
-              borderRadius: '6px', 
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            Akustiker öffnen
-          </button>
-        </div>
-        <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '1.2rem 1.5rem', boxShadow: '0 1px 4px #0001' }}>
-          <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Reparaturauftrag erstellen</h3>
-          <p style={{ color: '#666', marginBottom: '1rem' }}>Neuen Reparaturauftrag anlegen</p>
-          <button 
-            onClick={() => navigate('/reperaturauftrag')}
-            onMouseEnter={(e) => {
-              e.target.style.transform = 'scale(1.05)';
-              setHoveredButton('erstellen');
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.transform = 'scale(1)';
-              setHoveredButton(null);
-            }}
-            style={{ 
-              padding: '10px 20px', 
-              background: hoveredButton === 'erstellen' ? '#2a5a8a' : '#1d426a', 
-              color: 'white', 
-              border: 'none', 
-              borderRadius: '6px', 
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            Reparaturauftrag erstellen
-          </button>
-        </div>
-        <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '1.2rem 1.5rem', boxShadow: '0 1px 4px #0001' }}>
-          <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Erstellte Reparaturaufträge</h3>
-          <p style={{ color: '#666', marginBottom: '1rem' }}>Alle Reparaturaufträge anzeigen</p>
-          <button 
-            onClick={() => navigate('/erstellte-reperaturauftrage')}
-            onMouseEnter={(e) => {
-              e.target.style.transform = 'scale(1.05)';
-              setHoveredButton('anzeigen');
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.transform = 'scale(1)';
-              setHoveredButton(null);
-            }}
-            style={{ 
-              padding: '10px 20px', 
-              background: hoveredButton === 'anzeigen' ? '#2a5a8a' : '#1d426a', 
-              color: 'white', 
-              border: 'none', 
-              borderRadius: '6px', 
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            Reparaturaufträge anzeigen
-          </button>
-        </div>
-        <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '1.2rem 1.5rem', boxShadow: '0 1px 4px #0001' }}>
-          <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Erstellte Rechnungen</h3>
-          <p style={{ color: '#666', marginBottom: '1rem' }}>Alle Rechnungen verwalten und einsehen</p>
-          <button 
-            onClick={() => navigate('/erstellte-rechnungen')}
-            onMouseEnter={(e) => {
-              e.target.style.transform = 'scale(1.05)';
-              setHoveredButton('rechnungen');
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.transform = 'scale(1)';
-              setHoveredButton(null);
-            }}
-            style={{ 
-              padding: '10px 20px', 
-              background: hoveredButton === 'rechnungen' ? '#2a5a8a' : '#1d426a', 
-              color: 'white', 
-              border: 'none', 
-              borderRadius: '6px', 
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            Rechnungen anzeigen
-          </button>
-        </div>
-        <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '1.2rem 1.5rem', boxShadow: '0 1px 4px #0001' }}>
-          <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>Einstellungen</h3>
-          <p style={{ color: '#666', marginBottom: '1rem' }}>Länder, Steuern und Portokosten verwalten</p>
-          <button 
-            onClick={() => navigate('/einstellungen')}
-            onMouseEnter={(e) => {
-              e.target.style.transform = 'scale(1.05)';
-              setHoveredButton('einstellungen');
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.transform = 'scale(1)';
-              setHoveredButton(null);
-            }}
-            style={{ 
-              padding: '10px 20px', 
-              background: hoveredButton === 'einstellungen' ? '#2a5a8a' : '#1d426a', 
-              color: 'white', 
-              border: 'none', 
-              borderRadius: '6px', 
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            Einstellungen öffnen
-          </button>
-        </div>
+        {tiles.map((tile) => (
+          <div key={tile.id} style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '1.2rem 1.5rem', boxShadow: '0 1px 4px #0001' }}>
+            <h3 style={{ color: '#1d426a', marginBottom: '1rem' }}>{tile.title}</h3>
+            <p style={{ color: '#666', marginBottom: '1rem' }}>{tile.text}</p>
+            <button 
+              onClick={() => navigate(tile.path)}
+              onMouseEnter={(e) => {
+                e.target.style.transform = 'scale(1.05)';
+                setHoveredButton(tile.id);
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.transform = 'scale(1)';
+                setHoveredButton(null);
+              }}
+              style={{ 
+                padding: '10px 20px', 
+                background: hoveredButton === tile.id ? '#2a5a8a' : '#1d426a', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '6px', 
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              {tile.button}
+            </button>
+          </div>
+        ))}
       </div>
       <button 
-        onClick={() => setIsLoggedIn(false)} 
+        onClick={() => {
+          setIsLoggedIn(false);
+          try { localStorage.removeItem('isLoggedIn'); } catch (_) {}
+          try { clearStoredRole(); } catch (_) {}
+        }}
         onMouseEnter={(e) => {
           e.target.style.transform = 'scale(1.05)';
           setHoveredButton('abmelden');
@@ -2000,7 +1952,7 @@ const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkus
 };
 
 // Erstellte Reperaturaufträge Page Component
-const ErstellteReperaturauftragePage = () => {
+const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
   const [repairOrders, setRepairOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -3455,6 +3407,7 @@ const ErstellteReperaturauftragePage = () => {
             {selectedOrders.size} ausgewählt
           </div>
           
+          {canAccessInvoices(userRole) && (
           <button
             onClick={handleCreateInvoiceFromSelection}
             style={{
@@ -3485,6 +3438,7 @@ const ErstellteReperaturauftragePage = () => {
             </svg>
             Rechnung aus Auswahl erstellen
           </button>
+          )}
         </div>
       )}
 
@@ -7709,11 +7663,27 @@ const RechnungBearbeitenPage = () => {
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [dashboardView, setDashboardView] = useDashboardView();
+  const isModernView = dashboardView === 'modern';
+  const [userRole, setUserRole] = useState(() => getStoredRole() || 'mitarbeiter');
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     // Check localStorage on component mount
     const savedLoginState = localStorage.getItem('isLoggedIn');
     return savedLoginState === 'true';
   });
+
+  // Bestehende Session (z.B. Fa.Gretzinger) nicht verlieren: Rolle nachziehen, Session behalten
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const stored = getStoredRole();
+    if (!stored) {
+      // Alte Session ohne Rolle → als Mitarbeiter weiterführen (kein Logout)
+      setStoredRole('mitarbeiter');
+      setUserRole('mitarbeiter');
+    } else if (stored !== userRole) {
+      setUserRole(stored);
+    }
+  }, [isLoggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -8569,8 +8539,11 @@ function AppContent() {
   // Login handler
   const handleLogin = (e) => {
     e.preventDefault();
-    if (loginEmail === 'Fa.Gretzinger@t-online.de' && loginPassword === 'GretBrunn2025!') {
+    const role = resolveLogin(loginEmail, loginPassword);
+    if (role) {
       setIsLoggedIn(true);
+      setUserRole(role);
+      setStoredRole(role);
       localStorage.setItem('isLoggedIn', 'true');
       setLoginError('');
     } else {
@@ -8578,13 +8551,25 @@ function AppContent() {
     }
   };
 
-  // Logout handler
+  // Logout handler — nur bei explizitem Abmelden
   const handleLogout = () => {
     setIsLoggedIn(false);
+    setUserRole('mitarbeiter');
     localStorage.removeItem('isLoggedIn');
+    clearStoredRole();
     setLoginEmail('');
     setLoginPassword('');
   };
+
+  // Mitarbeiter: Rechnungsseiten umleiten — Session bleibt eingeloggt
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    if (canAccessInvoices(userRole)) return;
+    const p = location.pathname;
+    if (p.startsWith('/erstellte-rechnungen') || p.startsWith('/rechnung-erstellen') || p.startsWith('/rechnung-bearbeiten')) {
+      navigate('/', { replace: true });
+    }
+  }, [isLoggedIn, userRole, location.pathname, navigate]);
 
   // If not logged in, show login form
   if (!isLoggedIn) {
@@ -8642,10 +8627,11 @@ function AppContent() {
                 color: '#333',
                 fontWeight: '500'
               }}>
-                E-Mail
+                Benutzer / E-Mail
               </label>
               <input
-                type="email"
+                type="text"
+                autoComplete="username"
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
                 style={{
@@ -9296,12 +9282,23 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
   return (
     <div
       className="App"
-      style={{ fontFamily: 'Arial, sans-serif', background: '#fff', minHeight: '100vh' }}
+      style={{
+        fontFamily: isModernView ? "'Segoe UI', system-ui, sans-serif" : 'Arial, sans-serif',
+        background: isModernView ? 'transparent' : '#fff',
+        minHeight: '100vh'
+      }}
     >
+      <DashboardViewSwitcher view={dashboardView} onChange={setDashboardView} />
+      {(() => {
+        const appRoutes = (
       <Routes>
-        <Route path="/" element={<Dashboard setIsLoggedIn={setIsLoggedIn} navigate={navigate} />} />
+        <Route path="/" element={
+          isModernView
+            ? (canAccessInvoices(userRole) ? <ModernHome /> : <ModernStaffHome navigate={navigate} />)
+            : <Dashboard setIsLoggedIn={setIsLoggedIn} navigate={navigate} role={userRole} />
+        } />
         <Route path="/akustiker" element={<AkustikerPage customers={customers} setShowAddAkustikerModal={setShowAddAkustikerModal} showAddAkustikerModal={showAddAkustikerModal} newAkustiker={newAkustiker} setNewAkustiker={setNewAkustiker} handleAddAkustiker={handleAddAkustiker} navigate={navigate} loadCustomers={loadCustomers} />} />
-        <Route path="/erstellte-reperaturauftrage" element={<ErstellteReperaturauftragePage />} />
+        <Route path="/erstellte-reperaturauftrage" element={<ErstellteReperaturauftragePage userRole={userRole} />} />
         <Route path="/rechnung-erstellen" element={<RechnungErstellenPage />} />
         <Route path="/rechnung-bearbeiten/:id" element={<RechnungBearbeitenPage />} />
         <Route path="/erstellte-rechnungen" element={<ErstellteRechnungenPage />} />
@@ -10708,6 +10705,15 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
             </>
           } />
                   </Routes>
+        );
+        return isModernView ? (
+          <ModernShell onLogout={handleLogout} navigate={navigate} role={userRole}>
+            {appRoutes}
+          </ModernShell>
+        ) : (
+          appRoutes
+        );
+      })()}
                 </div>
 
         // /* Success Message Modal */

@@ -23,6 +23,11 @@ App läuft produktiv auf Vercel (`fa-gretzinger.vercel.app`), Daten in Supabase 
 - PDF neu (pdf_version≥2): „Auftrag von:“ statt „Sendedatum“; alte Aufträge unverändert
 - Arbeiten: Noahlink/nEARcom-Label, Preisfelder rechtsbündig, max. 3 manuelle Positionen (+ Linie)
 - Einstellungen-Kachel: Länder/Steuer/Porto (Tabelle `country_settings`)
+- Startseite: klassisches Dashboard bleibt Default; animierter Switcher → neues Modern-Dashboard (Sidebar, KPIs, Charts)
+- Modern-Modus: Sidebar auf allen Seiten; Switcher unten rechts; Abmelden-Abstand korrigiert (nur localhost bisher)
+- Rollen: Mitarbeiter (bisheriger Login, ohne Rechnungen/Umsatz-Dashboard) + Admin (`A-Gretz` / `Loefish2026!`); Default-Ansicht „Neu“
+- Hinweis: Logins aktuell in `src/authRoles.js` (nicht Supabase/Vercel-Env)
+
 
 ## Offen / Hinweise
 - RLS auf `invoices` / `invoice_items` ist deaktiviert (Security-Hinweis, bewusst nicht auto-gefixt)
