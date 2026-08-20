@@ -16,6 +16,7 @@ Verbindlich für dieses Projekt.
 - Dev läuft aus: `C:\Users\info\AppData\Local\fa-gretzinger-dev`
 - Vor Start: `src` vom Drive-Repo dorthin syncen.
 - Port: **3001** (3000 oft belegt). Kill/Restart nur nach App-Code-Änderungen.
+- E-Mail-Dev-Server (Resend): `npm run email:dev` → Port **3002**, liest `.env.local` im Repo-Root.
 
 ## Regel 5: Medien nur per Link/CDN
 - Assets über BunnyCDN: `https://oag-media.b-cdn.net/fa-gretzinger/...`

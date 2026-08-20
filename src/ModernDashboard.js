@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase, fetchAllPages } from './supabaseClient';
 import { useAdminDashboardPrefs } from './dashboardPrefs';
+import { mailboxesForRole, detectMailboxKey } from './emailConfig';
 import './ModernDashboard.css';
 
 const MONTHS_DE = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
@@ -61,6 +62,29 @@ export const Icon = ({ name }) => {
         <svg className="md-nav-icon" viewBox="0 0 24 24" {...common}>
           <circle cx="12" cy="12" r="3" />
           <path d="M12 3.5v2.2M12 18.3V20.5M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M18 6l-1.6 1.6M7.6 16.4 6 18" />
+        </svg>
+      );
+    case 'mail':
+      return (
+        <svg className="md-nav-icon" viewBox="0 0 24 24" {...common}>
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="m3 7 9 7 9-7" />
+        </svg>
+      );
+    case 'inbox':
+      return (
+        <svg className="md-nav-icon" viewBox="0 0 24 24" {...common}>
+          <path d="M4 4h16v12H4z" />
+          <path d="M4 4l8 6 8-6" />
+          <path d="M4 16h16" />
+        </svg>
+      );
+    case 'contacts':
+      return (
+        <svg className="md-nav-icon" viewBox="0 0 24 24" {...common}>
+          <rect x="5" y="3" width="14" height="18" rx="2" />
+          <circle cx="12" cy="9" r="2.5" />
+          <path d="M8 16.5c.8-1.8 2.2-2.7 4-2.7s3.2.9 4 2.7" />
         </svg>
       );
     case 'logout':
@@ -1070,6 +1094,7 @@ export function DashboardViewSwitcher({ view, onChange }) {
 export function ModernStaffHome({ navigate }) {
   const tiles = [
     { id: 'akustiker', title: 'Akustiker', text: 'Kunden verwalten und bearbeiten', path: '/akustiker', icon: 'users' },
+    { id: 'kontaktliste', title: 'Kontaktliste', text: 'E-Mails aus Export mit Akustikern abgleichen', path: '/kontaktliste', icon: 'contacts' },
     { id: 'erstellen', title: 'Reparaturauftrag erstellen', text: 'Neuen Reparaturauftrag anlegen', path: '/reperaturauftrag', icon: 'plus' },
     { id: 'auftraege', title: 'Erstellte Reparaturaufträge', text: 'Alle Reparaturaufträge anzeigen', path: '/erstellte-reperaturauftrage', icon: 'list' },
     { id: 'einstellungen', title: 'Einstellungen', text: 'Länder, Steuern und Portokosten', path: '/einstellungen', icon: 'settings' }
@@ -1109,6 +1134,50 @@ export function ModernShell({ onLogout, navigate, role = 'mitarbeiter', children
   const location = useLocation();
   const path = location.pathname;
   const showInvoices = role === 'admin';
+  const [unreadByMailbox, setUnreadByMailbox] = useState({ kv: 0, info: 0 });
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadUnread = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('email_logs')
+          .select('id, mailbox_key, from_address, to_address, email_type, direction, read_at, deleted_at, archived_at')
+          .eq('direction', 'inbound')
+          .is('read_at', null)
+          .is('deleted_at', null)
+          .is('archived_at', null)
+          .limit(500);
+        if (error) throw error;
+        const counts = { kv: 0, info: 0 };
+        for (const row of data || []) {
+          const key = detectMailboxKey(row);
+          if (key === 'kv') counts.kv += 1;
+          else counts.info += 1;
+        }
+        if (!cancelled) setUnreadByMailbox(counts);
+      } catch (_) {
+        /* ignore */
+      }
+    };
+    loadUnread();
+    const t = setInterval(loadUnread, 45000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [path, role]);
+
+  const mailboxNav = mailboxesForRole(role).map((m) => ({
+    id: `postfach-${m.key}`,
+    label: m.label,
+    sublabel: m.sublabel,
+    icon: 'inbox',
+    path: m.navPath,
+    match: (p) => p === m.navPath || p.startsWith(`${m.navPath}/`),
+    badge: unreadByMailbox[m.key] || 0,
+    mailboxKey: m.key
+  }));
 
   const navItems = [
     { id: 'home', label: 'Home', icon: 'home', path: '/', match: (p) => p === '/' },
@@ -1116,11 +1185,15 @@ export function ModernShell({ onLogout, navigate, role = 'mitarbeiter', children
       ? [{ id: 'finanzen', label: 'Finanzen', icon: 'finance', path: '/finanzen', match: (p) => p.startsWith('/finanzen') }]
       : []),
     { id: 'akustiker', label: 'Akustiker', icon: 'users', path: '/akustiker', match: (p) => p.startsWith('/akustiker') },
+    { id: 'kontaktliste', label: 'Kontaktliste', icon: 'contacts', path: '/kontaktliste', match: (p) => p.startsWith('/kontaktliste') },
     { id: 'erstellen', label: 'Auftrag erstellen', icon: 'plus', path: '/reperaturauftrag', match: (p) => p.startsWith('/reperaturauftrag') },
     { id: 'auftraege', label: 'Reparaturaufträge', icon: 'list', path: '/erstellte-reperaturauftrage', match: (p) => p.startsWith('/erstellte-reperaturauftrage') },
     ...(showInvoices
-      ? [{ id: 'rechnungen', label: 'Rechnungen', icon: 'invoice', path: '/erstellte-rechnungen', match: (p) => p.startsWith('/erstellte-rechnungen') || p.startsWith('/rechnung-') }]
+      ? [
+          { id: 'rechnungen', label: 'Rechnungen', icon: 'invoice', path: '/erstellte-rechnungen', match: (p) => p.startsWith('/erstellte-rechnungen') || p.startsWith('/rechnung-') }
+        ]
       : []),
+    ...mailboxNav,
     { id: 'einstellungen', label: 'Einstellungen', icon: 'settings', path: '/einstellungen', match: (p) => p.startsWith('/einstellungen') }
   ];
 
@@ -1139,11 +1212,15 @@ export function ModernShell({ onLogout, navigate, role = 'mitarbeiter', children
             <button
               key={item.id}
               type="button"
-              className={`md-nav-item${item.match(path) ? ' active' : ''}`}
+              className={`md-nav-item${item.match(path) ? ' active' : ''}${item.sublabel ? ' md-nav-item-mail' : ''}`}
               onClick={() => navigate(item.path)}
             >
               <Icon name={item.icon} />
-              <span>{item.label}</span>
+              <span className="md-nav-label-wrap">
+                <span className="md-nav-label-main">{item.label}</span>
+                {item.sublabel && <span className="md-nav-label-sub">{item.sublabel}</span>}
+              </span>
+              {item.badge > 0 && <span className="md-nav-badge">{item.badge > 99 ? '99+' : item.badge}</span>}
             </button>
           ))}
         </nav>

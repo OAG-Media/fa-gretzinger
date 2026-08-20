@@ -3,6 +3,53 @@
 ## Status
 App läuft produktiv auf Vercel (`fa-gretzinger.vercel.app`), Daten in Supabase (`gzurjjuhfjbcafmfdaog`).
 
+## Erledigt (2026-08-11) — E-Mail Stufe 1 + Kontaktliste
+- Classic/Modern-Switcher entfernt → nur noch moderne Ansicht
+- **Testumgebung-Switch** (Localhost-Banner): Rechnungen werden nicht gespeichert / zählen nicht zum Umsatz; E-Mail-Versand bleibt aktiv
+- Admin-Reiter **E-Mails**: Templates (KV / Rechnung / beides), Rich-Text, Platzhalter, Gesendet-Log; Eingang als Stufe-2-Platzhalter
+- Mail-Icon + Spalte „KV versendet“ / „Rechnung versendet“ (grün/orange)
+- Send-Modal: Empfänger + Template editierbar vor Versand; Mitarbeiter dürfen KV senden, Rechnungen nur Admin (wie bisher)
+- Resend: From `info@oag-media.top` (verifiziert), Reply-To `info@oag-media.top`; später Domain-Tausch auf `fa-gretzinger.de` nur in Env / `emailConfig.js`
+- Local: `npm run email:dev` (Port 3002) liest `.env.local`; Production: Vercel `/api/send-email` + Env `RESEND_API_KEY`
+- **Kontaktliste**: Sync aus `exportierte-kontakte` (165 VCF) → Supabase `imported_contacts`; Tabs Akustiker / Kontaktliste / Übereinstimmung; Merge nur manuell (grüner Haken) → `customers.email`
+- DB: `customers.email`, `repair_orders.kv_email_*`, `invoices.email_*`, `email_templates`, `email_logs`, `imported_contacts`
+
+## Erledigt (2026-08-12) — E-Mail Stufe 2 (Postfach)
+- **Postfach** (nur Admin): Eingang + Gesendet, Outlook-Layout, ungelesen-Badge, Antworten / Allen antworten, freie E-Mails
+- Compose: Cc/Bcc, Empfänger-Pills, Drag & Drop zwischen An/Cc/Bcc, Signatur standardmäßig an
+- Vorlagen-Typ **Standard / frei** für Mails ohne KV/Rechnung
+- DB `email_logs`: zusätzlich `cc_address`, `bcc_address`
+- Reply-To auf `info@oag-media.top` (Antworten landen im Resend-Inbound-Postfach)
+- Resend Inbound: Webhook `/api/resend-inbound`, manueller Sync `/api/sync-inbound`
+- DB `email_logs`: `read_at`, `in_reply_to_id`, `message_id`, `body_text`, `resend_received_id`
+- Zentrale Konfiguration: `src/emailConfig.js` — später nur Domain/Env tauschen
+- Vercel-Env: `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_REPLY_TO=info@oag-media.top`, Webhook auf `email.received`
+
+## Erledigt (2026-08-20) — Zwei Postfächer fa-gretzinger.de
+- Domain: `kv@fa-gretzinger.de` (KV) + `info@fa-gretzinger.de` (allgemein/Rechnungen)
+- Admin: zwei Menüpunkte mit Ungelesen-Badge; Mitarbeiter: nur KV-Postfach
+- Absender/Reply-To je Postfach; Antworten ohne Auto-Cc ans andere Postfach
+- Akustiker: Filial-E-Mail + Rechnungs-E-Mail (+ Button „= Filiale“)
+- Testmodus entfernt
+- Hybrid-Anleitung: `knowledge/email-hybrid-setup.md` (Hostinger IMAP + Resend Versand + Forward)
+- AppNotice statt Browser-alert (E-Mail-Flows); KV speichert Filial-E-Mail wie Rechnung
+- Postfach: Anhänge-Vorschau (Download/Öffnen), Löschen/Archivieren + Ordner, verschiebbare Spalten
+- DB: `email_logs.attachments`, `deleted_at`, `archived_at`; Storage-Bucket `email-attachments`
+
+## Offen / als Nächstes
+- Hostinger+Resend Hybrid-Empfang fertig einrichten (Checkliste in `knowledge/email-hybrid-setup.md`)
+- Commit/Push auf Vercel (nur auf Nutzerwunsch)
+- Restliche Browser-`alert()` in App.js / Kunden / Rechnungen auf AppNotice umstellen
+- Später: Outlook-Threading, Ordner, IMAP-Gesendet-Sync
+
+## Später (nicht jetzt)
+- IMAP-Sync „Gesendet“ vom Handy → App
+- Langer: prüfen ob Hauptakustiker statt Filiale angelegt / doppelte Rechnungen über Accounts
+
+## Zukunft — iOS-App (Idee)
+- Native App für Papa: Postfach + freie E-Mails von zu Hause (gleiche Supabase/Resend-API)
+- Erst nach stabilem Postfach in Production; kein aktiver Sprint
+
 ## Erledigt (2026-07-29)
 - Gutschrift in Kommission-Spalte (UI/PDF/Excel)
 - Excel-Export für Rechnungspositionen
@@ -48,6 +95,7 @@ App läuft produktiv auf Vercel (`fa-gretzinger.vercel.app`), Daten in Supabase 
 - Eventuell bestehende Entwürfe mit doppelter Nummer-Historie manuell prüfen
 - Production Branch in Vercel sollte `master` sein (sonst nur Preview)
 - **Security-Deploy:** Auth+RLS ist in Supabase schon live; App-Code zuerst auf Localhost testen, dann auf `master` pushen
+- **Backup / NAS:** Tägliche lokale Sicherheitskopie der Supabase-Daten (importierbares ZIP) auf NAS – Angst vor Totalverlust berechtigt; Dashboard-Backups allein reichen nicht (nicht downloadbar / Free oft ohne). Geplant: `pg_dump` → ZIP → NAS via Windows-Aufgabenplanung. Datenmenge klein (~250 Kunden, ~3.5k Aufträge, ~330 Rechnungen). Setup noch offen (NAS-Pfad, DB-Passwort sicher hinterlegen).
 
 ## E-Rechnung / Pflicht ab 01.01.2028 — Gap-Analyse
 **Kurzantwort: Noch nicht erfüllt.** Aktuell nur klassisches **PDF** (`jsPDF`) — das gilt **nicht** als E-Rechnung.

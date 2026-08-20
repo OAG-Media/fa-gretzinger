@@ -2,8 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, useParams } from 'react-router-dom';
 import './App.css';
 import './ModernDashboard.css';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import { supabase, fetchAllPages } from './supabaseClient';
 import { getManualItemLineTotal, getManualItemKommission } from './invoicePdfExport.js';
 import {
@@ -12,9 +10,20 @@ import {
   buildInvoiceExcelRows,
   downloadInvoicePositionsExcel
 } from './invoiceExportUtils.js';
-import ModernHome, { ModernShell, DashboardViewSwitcher, ModernStaffHome } from './ModernDashboard';
+import ModernHome, { ModernShell, ModernStaffHome } from './ModernDashboard';
 import FinanzenPage from './FinanzenPage';
-import { useDashboardView } from './dashboardView';
+import KontaktlistePage from './KontaktlistePage';
+import EmailsPage from './EmailsPage';
+import PostfachPage from './PostfachPage';
+import SendEmailModal from './SendEmailModal';
+import { NoticeProvider } from './AppNotice';
+import { buildInvoiceEmailVars, buildKvEmailVars } from './emailTemplateVars';
+import {
+  generateRepairOrderPDF,
+  FREIGABE_OPTIONS,
+  FEHLERANGABEN,
+  ARBEITEN
+} from './repairOrderPdfExport';
 import {
   toAuthEmail,
   roleFromSessionUser,
@@ -23,6 +32,21 @@ import {
   clearStoredRole,
   canAccessInvoices
 } from './authRoles';
+
+const MailIcon = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <path d="m3 7 9 7 9-7" />
+  </svg>
+);
+
+const SentStatusBadge = ({ sentAt }) => (
+  sentAt ? (
+    <span style={{ color: '#15803d', fontWeight: 600, fontSize: 12 }}>versendet</span>
+  ) : (
+    <span style={{ color: '#ea580c', fontWeight: 600, fontSize: 12 }}>noch nicht versendet</span>
+  )
+);
 
 // Custom hook for handling unsaved changes warnings
 const useUnsavedChangesWarning = (hasUnsavedChanges, message = 'Sind Sie sich sicher, dass die Seite verlassen wollen? Ungespeicherte Änderungen gehen eventuell verloren') => {
@@ -76,76 +100,8 @@ const COUNTRY_OPTIONS = [
   { key: 'AT', label: 'Österreich', arbeitszeit: 26.0, porto: 9.0, tax_rate: 0.0 },
 ];
 
-const FREIGABE_OPTIONS = [
-  'Keine angabe',
-  'Reparatur laut KV durchführen',
-  'Kostenpflichtige Reparatur',
-  'Unrepariert zurückschicken',
-  'Verschrotten',
-  'Garantie',
-  'Reklamation',
-];
-
-const FEHLERANGABEN = [
-  'Gerät funktioniert nicht',
-  'Gerät setzt aus',
-  'Setzt aus bei Druck und Verwindung',
-  'Gerät ist zu leise',
-  'Lässt sich nicht ein- ausschalten',
-  'Hörspule ohne Funktion',
-  'Lautstärkeregelung ist mangelhaft',
-  'Gerät rauscht',
-  'Gerät macht Geräusche',
-  'Gerät verzerrt',
-  'Batterieverbrauch zu hoch',
-  'Akustische Rückkopplung vorhanden',
-  'Gerät schwingt',
-  'Lässt sich nicht auslesen / programmieren',
-  'Akku zu schwach',
-];
-
-const ARBEITEN = [
-  { key: 'fehlerdiagnose', label: 'Fehlerdiagnose', price: 3.5 },
-  { key: 'hoerer', label: 'Hörer' },
-  { key: 'mikrofon', label: 'Mikrofon' },
-  { key: 'schalter', label: 'Schalter / Taster' },
-  { key: 'poti', label: 'Poti / LS-Wippe' },
-  { key: 'batterie', label: 'Batterie / Akku' },
-  { key: 'gehaeuse', label: 'Gehäuse / IDO Schale' },
-  { key: 'schale_repariert', label: 'Schale repariert' },
-  { key: 'gehaeuseteil', label: 'Gehäuseteil / Faceplate' },
-  { key: 'winkel', label: 'Winkel' },
-  { key: 'zugfaden', label: 'Zugfaden' },
-  { key: 'batteriekontakte', label: 'Batteriekontakte' },
-  { key: 'bluetooth', label: 'Bluetooth-Board' },
-  { key: 'cerumenschutz', label: 'Cerumenschutz' },
-  { key: 'noahlink', label: 'NOAHlink Buchse' },
-  { key: 'verstaerker', label: 'Verstärker' },
-  { key: 'hoerspule', label: 'Hörspule/ Funkspule' },
-  { key: 'akrohr_hoerer', label: 'Ak.Rohr od. Lagerung für Hörer' },
-  { key: 'akrohr_mikro', label: 'Ak.Rohr od. Lagerung für Mikrof.' },
-  { key: 'reinigung', label: 'Reinigung', price: 5.0 },
-  { key: 'verglasen', label: 'Verglasen, bzw. Antirutschb.' },
-  { key: 'kleinmaterial', label: 'Kleinmaterial', price: 2.0 },
-  { key: 'nearcom', label: 'Noahlink / nEARcom Rep. Pauschale' },
-  { key: 'arbeitszeit', label: 'Arbeitszeit', price: 'country' },
-  { key: 'endkontrolle', label: 'Endkontrolle', price: 3.0 },
-];
-
 const MAX_CUSTOM_ARBEITEN = 3;
 const PDF_VERSION_CURRENT = 2;
-
-// Global helper function to draw checkboxes in PDF
-const drawCheckbox = (doc, x, y, checked) => {
-  doc.setDrawColor(50);
-  doc.rect(x, y, 4, 4);
-  if (checked) {
-    doc.setLineWidth(0.6);
-    doc.line(x + 0.7, y + 0.7, x + 3.3, y + 3.3);
-    doc.line(x + 3.3, y + 0.7, x + 0.7, y + 3.3);
-    doc.setLineWidth(0.2);
-  }
-};
 
 // Settings: manage country tax / porto / arbeitszeit defaults
 const EinstellungenPage = ({ navigate }) => {
@@ -459,6 +415,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
     location: '',
     country: 'DE',
     contact_person: '',
+    email: '',
+    invoice_email: '',
     billing_street: '',
     billing_location: '',
     billing_country: 'DE',
@@ -477,7 +435,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
         customer.street?.toLowerCase().includes(search) ||
         customer.location?.toLowerCase().includes(search) ||
         customer.country?.toLowerCase().includes(search) ||
-        customer.contact_person?.toLowerCase().includes(search)
+        customer.contact_person?.toLowerCase().includes(search) ||
+        customer.email?.toLowerCase().includes(search)
       );
     })
     .sort((a, b) => {
@@ -634,6 +593,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
       location: customer.location || '',
       country: customer.country === 'Österreich' ? 'AT' : 'DE',
       contact_person: customer.contact_person || '',
+      email: customer.email || '',
+      invoice_email: customer.invoice_email || '',
       billing_street: customer.billing_street || '',
       billing_location: customer.billing_location || '',
       billing_country: customer.billing_country === 'Österreich' ? 'AT' : 'DE',
@@ -668,6 +629,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
         location: editForm.location,
         country: editForm.country === 'DE' ? 'Deutschland' : 'Österreich',
         contact_person: editForm.contact_person,
+        email: editForm.email || null,
+        invoice_email: editForm.invoice_email || null,
         billing_street: editForm.billing_street,
         billing_location: editForm.billing_location,
         billing_country: editForm.billing_country === 'DE' ? 'Deutschland' : 'Österreich',
@@ -1142,6 +1105,9 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                   Ansprechpartner
                 </th>
                 <th style={{ padding: '16px', textAlign: 'center', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
+                  E-Mail
+                </th>
+                <th style={{ padding: '16px', textAlign: 'center', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
                   Straße
                 </th>
                 <th style={{ padding: '16px', textAlign: 'center', fontWeight: '600', color: '#1d426a', borderBottom: '2px solid #dee2e6' }}>
@@ -1172,6 +1138,10 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                   </td>
                   <td style={{ padding: '16px', fontSize: '14px', color: '#666' }}>
                     {customer.contact_person || '-'}
+                  </td>
+                  <td style={{ padding: '16px', fontSize: '14px', color: customer.email || customer.invoice_email ? '#15803d' : '#ea580c' }}>
+                    <div>Filiale: {customer.email || 'fehlt'}</div>
+                    <div style={{ marginTop: 2 }}>Rechnung: {customer.invoice_email || 'fehlt'}</div>
                   </td>
                   <td style={{ padding: '16px', fontSize: '14px', color: '#333' }}>
                     {customer.street || '-'}
@@ -1425,6 +1395,66 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                     boxSizing: 'border-box'
                   }}
                 />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+                  Filial-E-Mail (für KV)
+                </label>
+                <input
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="filiale@firma.de"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+                  Rechnungs-E-Mail
+                </label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    type="email"
+                    value={editForm.invoice_email || ''}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, invoice_email: e.target.value }))}
+                    placeholder="rechnung@firma.de"
+                    style={{
+                      flex: 1,
+                      padding: '10px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setEditForm((prev) => ({ ...prev, invoice_email: prev.email || '' }))}
+                    disabled={!editForm.email}
+                    title="Filial-E-Mail in Rechnungs-E-Mail übernehmen"
+                    style={{
+                      padding: '10px 12px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: 4,
+                      background: '#fff',
+                      color: '#1d426a',
+                      cursor: editForm.email ? 'pointer' : 'not-allowed',
+                      whiteSpace: 'nowrap',
+                      fontSize: 13
+                    }}
+                  >
+                    = Filiale
+                  </button>
+                </div>
               </div>
               
               <div style={{ marginBottom: '1.5rem' }}>
@@ -1766,6 +1796,65 @@ const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkus
               }}
             />
           </div>
+
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+              Filial-E-Mail (für KV)
+            </label>
+            <input
+              type="email"
+              value={newAkustiker.email || ''}
+              onChange={(e) => setNewAkustiker(prev => ({ ...prev, email: e.target.value }))}
+              placeholder="filiale@firma.de"
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
+              Rechnungs-E-Mail
+            </label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="email"
+                value={newAkustiker.invoice_email || ''}
+                onChange={(e) => setNewAkustiker(prev => ({ ...prev, invoice_email: e.target.value }))}
+                placeholder="rechnung@firma.de"
+                style={{
+                  flex: 1,
+                  padding: '10px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setNewAkustiker((prev) => ({ ...prev, invoice_email: prev.email || '' }))}
+                disabled={!newAkustiker.email}
+                style={{
+                  padding: '10px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: 4,
+                  background: '#fff',
+                  color: '#1d426a',
+                  cursor: newAkustiker.email ? 'pointer' : 'not-allowed',
+                  whiteSpace: 'nowrap',
+                  fontSize: 13
+                }}
+              >
+                = Filiale
+              </button>
+            </div>
+          </div>
           
           <div style={{ marginBottom: '1.5rem' }}>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
@@ -1971,6 +2060,7 @@ const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingOrder, setDeletingOrder] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [mailTarget, setMailTarget] = useState(null);
   
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -2256,10 +2346,15 @@ const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
   
   // Pagination calculations
   const totalItems = filteredAndSortedOrders.length;
-  const totalPages = Math.ceil(totalItems / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
+  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage) || 1);
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const filteredRepairOrders = filteredAndSortedOrders.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    if (currentPage !== safePage) setCurrentPage(safePage);
+  }, [currentPage, safePage]);
   
   // Update selection when filters change - keep only valid selectable selections
   useEffect(() => {
@@ -3069,13 +3164,14 @@ const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
                   onClick={() => handleSort('porto')}>
                 Porto {sortBy === 'porto' && (sortOrder === 'asc' ? '↑' : '↓')}
               </th>
-              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '120px', fontSize: '14px' }}>Aktionen</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '130px', fontSize: '14px' }}>KV versendet</th>
+              <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '140px', fontSize: '14px' }}>Aktionen</th>
             </tr>
           </thead>
           <tbody>
             {filteredRepairOrders.length === 0 ? (
               <tr>
-                <td colSpan="10" style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
+                <td colSpan="11" style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
                   {searchTerm ? 'Keine Reparaturaufträge gefunden.' : 'Noch keine Reparaturaufträge erstellt.'}
                 </td>
               </tr>
@@ -3180,8 +3276,32 @@ const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
                       {formatPrice(order.porto)}
                     </td>
 
+                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                      <SentStatusBadge sentAt={order.kv_email_sent_at} />
+                    </td>
+
                     <td style={{ padding: '12px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        {/* Mail Button */}
+                        <button
+                          onClick={() => setMailTarget(order)}
+                          style={{
+                            background: 'none',
+                            color: '#1d426a',
+                            border: '1px solid #1d426a',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            padding: '6px 8px',
+                            fontSize: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.2s ease'
+                          }}
+                          title="KV / Auftrag per E-Mail senden"
+                        >
+                          <MailIcon size={14} />
+                        </button>
                         {/* View Button */}
                         <button
                           onClick={() => handleViewOrder(order)}
@@ -3873,6 +3993,26 @@ const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
           </div>
         </div>
       )}
+
+      <SendEmailModal
+        open={!!mailTarget}
+        onClose={() => setMailTarget(null)}
+        emailType="kv"
+        customer={mailTarget?.customers}
+        repairOrder={mailTarget}
+        defaultTo={mailTarget?.customers?.email || ''}
+        repairOrderId={mailTarget?.id}
+        vars={mailTarget ? buildKvEmailVars(mailTarget, mailTarget.customers) : {}}
+        onCustomerUpdated={() => {
+          setCurrentPage(1);
+          loadRepairOrders();
+        }}
+        onSent={() => {
+          setMailTarget(null);
+          setCurrentPage(1);
+          loadRepairOrders();
+        }}
+      />
     </div>
   );
 };
@@ -3921,6 +4061,7 @@ const ErstellteRechnungenPage = () => {
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedAkustiker, setSelectedAkustiker] = useState('');
+  const [mailTarget, setMailTarget] = useState(null);
 
   // Load invoices from database
   const loadInvoices = async () => {
@@ -3936,7 +4077,8 @@ const ErstellteRechnungenPage = () => {
             branch,
             street,
             location,
-            country
+            country,
+            email
           )
         `)
         .order('created_at', { ascending: false });
@@ -4512,7 +4654,8 @@ const ErstellteRechnungenPage = () => {
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600', color: '#333', width: '100px' }}>Netto</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600', color: '#333', width: '80px' }}>MwSt.</th>
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600', color: '#333', width: '100px' }}>Gesamt</th>
-                <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '150px' }}>Aktionen</th>
+                <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '120px' }}>Rechnung versendet</th>
+                <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '180px' }}>Aktionen</th>
               </tr>
             </thead>
             <tbody>
@@ -4560,8 +4703,29 @@ const ErstellteRechnungenPage = () => {
                   <td style={{ padding: '12px', textAlign: 'right', fontSize: '14px', fontWeight: '600', color: '#1d426a' }}>
                     {invoice.total_amount.toFixed(2)}€
                   </td>
+                  <td style={{ padding: '12px', textAlign: 'center' }}>
+                    <SentStatusBadge sentAt={invoice.email_sent_at} />
+                  </td>
                   <td style={{ padding: '12px' }}>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+                      <button
+                        onClick={() => setMailTarget(invoice)}
+                        style={{
+                          background: 'none',
+                          color: '#1d426a',
+                          border: '1px solid #1d426a',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          padding: '6px 8px',
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Rechnung per E-Mail senden"
+                      >
+                        <MailIcon size={14} />
+                      </button>
                       {/* Excel Button */}
                       <button
                         onClick={() => handleDownloadInvoiceExcel(invoice)}
@@ -4683,6 +4847,22 @@ const ErstellteRechnungenPage = () => {
           </table>
         </div>
       )}
+
+      <SendEmailModal
+        open={!!mailTarget}
+        onClose={() => setMailTarget(null)}
+        emailType="invoice"
+        customer={mailTarget?.customers}
+        invoice={mailTarget}
+        defaultTo={mailTarget?.customers?.invoice_email || ''}
+        invoiceId={mailTarget?.id}
+        vars={mailTarget ? buildInvoiceEmailVars(mailTarget, mailTarget.customers) : {}}
+        onCustomerUpdated={() => loadInvoices()}
+        onSent={() => {
+          setMailTarget(null);
+          loadInvoices();
+        }}
+      />
     </div>
   );
 };
@@ -7670,8 +7850,6 @@ const RechnungBearbeitenPage = () => {
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [dashboardView, setDashboardView] = useDashboardView();
-  const isModernView = dashboardView === 'modern';
   const [userRole, setUserRole] = useState(() => getStoredRole() || 'mitarbeiter');
   const [authReady, setAuthReady] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -7789,6 +7967,8 @@ function AppContent() {
     location: '',
     country: 'DE',
     contact_person: '',
+    email: '',
+    invoice_email: '',
     billing_street: '',
     billing_location: '',
     billing_country: 'DE',
@@ -8105,7 +8285,9 @@ function AppContent() {
         street: newAkustiker.street,
         location: newAkustiker.location,
         country: newAkustiker.country === 'DE' ? 'Deutschland' : 'Österreich',
-        contact_person: '',
+        contact_person: newAkustiker.contact_person || '',
+        email: newAkustiker.email || null,
+        invoice_email: newAkustiker.invoice_email || null,
         billing_street: newAkustiker.billing_street,
         billing_location: newAkustiker.billing_location,
         billing_country: newAkustiker.billing_country === 'DE' ? 'Deutschland' : 'Österreich',
@@ -8130,6 +8312,8 @@ function AppContent() {
         location: '',
         country: 'DE',
         contact_person: '',
+        email: '',
+        invoice_email: '',
         billing_street: '',
         billing_location: '',
         billing_country: 'DE',
@@ -8612,7 +8796,7 @@ function AppContent() {
     if (!isLoggedIn) return;
     if (canAccessInvoices(userRole)) return;
     const p = location.pathname;
-    if (p.startsWith('/erstellte-rechnungen') || p.startsWith('/rechnung-erstellen') || p.startsWith('/rechnung-bearbeiten') || p.startsWith('/finanzen')) {
+    if (p.startsWith('/erstellte-rechnungen') || p.startsWith('/rechnung-erstellen') || p.startsWith('/rechnung-bearbeiten') || p.startsWith('/finanzen') || p.startsWith('/emails') || p === '/postfach/info') {
       navigate('/', { replace: true });
     }
   }, [isLoggedIn, userRole, location.pathname, navigate]);
@@ -8851,478 +9035,46 @@ function AppContent() {
 
   // PDF Export function
   const handlePdfExport = () => {
-    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-    const FONT = 'times'; // Times-Roman ≈ Times New Roman (jsPDF Standard)
-    const zeile = 12;
-    const leftX = 20;
-    const leftxRow = 65;
-    const rightXstop = 192;
-    // Header
-    doc.setFont(FONT, 'normal');
-    doc.setFontSize(8);
-    doc.text('HG Gretzinger UG, Hörgeräteservice', leftX, zeile);
-    doc.text('Gibitzenhofstr. 86', leftX, zeile+4);
-    doc.text('90443 Nürnberg', leftX, zeile+8);
-    doc.text('Homepage: www.Fa-Gretzinger.de', leftxRow, zeile);
-    doc.text('E-Mail: Fa.Gretzinger@t-online.de', leftxRow, zeile+4);
-    doc.text('Tel. +49 (0)911 / 540 49 44, Fax.: 540 49 46', leftxRow, zeile +8);
-    doc.addImage('https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png', 'PNG', rightXstop-35, 8, 33, 14);
-    doc.setLineWidth(0.2);
-    doc.line(leftX, zeile+14, rightXstop, zeile+14);
-
-
-
-    // Customer Information Section
-    const customerInfo = zeile+18;
-    if (selectedCustomer) {
-      doc.setFontSize(8);
-      doc.setFont(FONT, 'bold');
-      doc.text('Akustikername / Absender bzw. Firmenstempel:',leftX, customerInfo);
-      doc.setFont(FONT, 'normal');
-      doc.setFontSize(11);
-      doc.text(selectedCustomer.company, leftX, customerInfo+5);
-      doc.text(selectedCustomer.street, leftX, customerInfo+9);
-      doc.text(`${selectedCustomer.location}, ${selectedCustomer.country}`, leftX, customerInfo+13);
-    }
-
-    // Title — etwas Abstand zur Akustiker-Adresse
-    const repauftrag = customerInfo + 26;
-
-    doc.setFont(FONT, 'bold');
-    doc.setFontSize(22);
-    doc.text('Reparaturauftrag', leftX+85, repauftrag+3, { align: 'center' });
-    doc.setFont(FONT, 'normal');
-    doc.setFontSize(10);
-
-
-    
-    
-    // Repair Order Details Table - Always show with fixed length
-    let y = repauftrag + 8;
-    // Always show the table, even if empty (will show dashes)
-    {
-      doc.setFontSize(10);
-      doc.setFont(FONT, 'bold');
-      
-      // Table headers with 1px padding
-      const tableY = y + 1; // Reduced to 1px top padding
-      const colWidth = 30;
-      const startX = leftX+1; // Reduced to 1px left padding (10 + 1)
-      
-      // Draw table borders with minimal padding
-      doc.setDrawColor(0); // Black color
-      doc.setLineWidth(0.3); // Thicker lines for table borders
-      
-
-      
-      // Draw vertical lines with minimal padding
-      const tableY1 = tableY - 3;
-      const tableheight = 12.5;
-      const tableY2 = tableY1 + tableheight;
-      const tablestartX = startX-1;
-      const tablenEndX = rightXstop
-      const tableHeadingY = tableY1 + 3;
-      const tableContentY = tableY2 -2;
-      const txtdistancetable = 1.5;
-      
-      const komissionx1 = tablestartX;
-      const komissionwidth = 30;
-      const komissionx2 = startX + komissionwidth;
-      const komissionTextX = komissionx1 + txtdistancetable;
-     
-
-      const herstellerx1 = komissionx2;
-      const herstellerTextX = herstellerx1 + txtdistancetable;
-      const herstellerwidth = 25;
-      const herstellerx2 = herstellerx1 + herstellerwidth;
-
-      const geraetetypx1 = herstellerx2;
-      const geraetetypTextX = geraetetypx1 + txtdistancetable;
-      const geraetetypwidth = 42;
-      const geraetetypx2 = geraetetypx1 + geraetetypwidth;
-
-      const seriennummerx1 = geraetetypx2;
-      const seriennummerTextX = seriennummerx1 + txtdistancetable;
-      const seriennummerwidth = 27;
-      const seriennummerx2 = seriennummerx1 + seriennummerwidth;
-
-      const werkstatteingangx1 = seriennummerx2;
-      const werkstatteingangTextX = werkstatteingangx1 + txtdistancetable;
-      const werkstatteingangwidth = 26;
-      const werkstatteingangx2 = werkstatteingangx1 + werkstatteingangwidth;
-
-      const zubehoerx1 = werkstatteingangx2;
-      const zubehoerTextX = zubehoerx1 + txtdistancetable;
-      const zubehoerwidth = 25;
-      const zubehoerx2 = zubehoerx1 + zubehoerwidth;
-      
-
-
-      
-
-      // vertical lines
-
-      // Linienstärke anpassen
-doc.setLineWidth(0.25); // Die Linie wird etwas dicker
-
-// Linienfarbe auf hellgrau setzen
-// doc.setDrawColor('#353839');
-      doc.line(tablestartX, tableY1, tablestartX, tableY2); // first vertical line - left border
-
-      doc.line(komissionx2, tableY1, komissionx2, tableY2); // second vertical line - komission endline
-      doc.line(herstellerx2, tableY1, herstellerx2, tableY2); // third vertical line - hersteller endline
-      doc.line(geraetetypx2, tableY1, geraetetypx2, tableY2); // fourth vertical line - geraetetyp endline
-      doc.line(seriennummerx2, tableY1, seriennummerx2, tableY2); // fifth vertical line - seriennummer endline
-      doc.line(werkstatteingangx2, tableY1, werkstatteingangx2, tableY2); // sixth vertical line - werkstatteingang endline
-
-      doc.line(tablenEndX, tableY1, tablenEndX, tableY2); // last vertical line - right border
-
-      // horizontal lines
-      doc.line(tablestartX, tableY1, tablenEndX, tableY1); // top horizontal line
-      doc.line(tablestartX, tableY2, tablenEndX, tableY2); // bottom horizontal line
-
-
-
-            // Headers with padding
-      
-            doc.text('Kommission', komissionTextX, tableHeadingY);
-            doc.text('Hersteller', herstellerTextX, tableHeadingY);
-            doc.text('Gerätetyp', geraetetypTextX, tableHeadingY);
-            doc.text('Seriennummer', seriennummerTextX, tableHeadingY);
-            doc.text('Wkst. Eingang', werkstatteingangTextX, tableHeadingY);
-            doc.text('Zubehör', zubehoerTextX, tableHeadingY);
-            
-            // Data row with padding - always show with fixed length and dashes for empty fields
-            doc.setFont(FONT, 'normal');
-            doc.setFontSize(10.5);
-            doc.text(kommission || '-', komissionTextX, tableContentY);
-            doc.text(hersteller || '-', herstellerTextX, tableContentY);
-            doc.text(geraetetyp || '-', geraetetypTextX, tableContentY);
-            doc.text(seriennummer || '-', seriennummerTextX, tableContentY);
-
-
-
-      
-
-      
-      const repWerkstattNotiz = leftX+108
-      const perFaxMail = repWerkstattNotiz +52
-
-      // Format date for Werkstatteingang
-      let werkstatteingangFormatted = '-';
-      if (werkstatteingang) {
-        const [yyyy, mm, dd] = werkstatteingang.split('-');
-        werkstatteingangFormatted = `${dd}.${mm}.${yyyy}`;
-      }
-      doc.text(werkstatteingangFormatted, werkstatteingangTextX, tableContentY);
-      doc.text(zubehoer || '-', zubehoerTextX, tableContentY);
-      
-      // Eine Zeile unter der Tabelle: Kostenvoranschlag (links) + Rep. werkstatt Notiz (rechts)
-      const notesY = tableY + 15;
-      const checkboxYOffsetKv = 2.8;
-
-      doc.setFontSize(8);
-      doc.setFont(FONT, 'bold');
-      const kvLabel = 'Kostenvoranschlag:';
-      doc.text(kvLabel, leftX, notesY);
-      const kvLabelW = doc.getTextWidth(kvLabel);
-      const kvCheckX = leftX + kvLabelW + 2;
-      drawCheckbox(doc, kvCheckX, notesY - checkboxYOffsetKv, kostenvoranschlagChecked);
-      doc.setFont(FONT, 'normal');
-      doc.text('ab', kvCheckX + 6, notesY);
-      if (kostenvoranschlagChecked && kostenvoranschlagAmount) {
-        doc.text(`${kostenvoranschlagAmount} € - netto`, kvCheckX + 12, notesY);
-      } else {
-        doc.text('_____ € - netto', kvCheckX + 12, notesY);
-      }
-
-      // Rep. werkstatt Notiz auf derselben Höhe
-      doc.setFont(FONT, 'bold');
-      doc.text('Rep. werkstatt Notiz: KV am:', repWerkstattNotiz, notesY);
-      doc.setFont(FONT, 'normal');
-      if (kvDate) {
-        const [yyyy, mm, dd] = kvDate.split('-');
-        doc.text(` ${dd}.${mm}.${yyyy}`, repWerkstattNotiz+37, notesY);
-      }
-      doc.setFont(FONT, 'bold');
-      doc.text('per:', perFaxMail, notesY);
-      doc.setFont(FONT, 'normal');
-      doc.text(perMethod || '', perFaxMail+6, notesY);
-
-      // Auftrag von / Sendedatum (rechts oben)
-      if (werkstattDate) {
-        const [yyyy, mm, dd] = werkstattDate.split('-');
-        const dateStr = `${dd}.${mm}.${yyyy}`;
-        const sendLabel = (pdfVersion >= 2) ? 'Auftrag von: ' : 'Sendedatum: ';
-        doc.setFontSize(8);
-        doc.setFont(FONT, 'bold');
-        const labelW = doc.getTextWidth(sendLabel);
-        doc.setFont(FONT, 'normal');
-        const dateW = doc.getTextWidth(dateStr);
-        const blockLeft = rightXstop - labelW - dateW;
-        doc.setFont(FONT, 'bold');
-        doc.text(sendLabel, blockLeft, customerInfo);
-        doc.setFont(FONT, 'normal');
-        doc.text(dateStr, rightXstop, customerInfo, { align: 'right' });
-      }
-      
-      y = tableY + 10; // Reduced margin below heading only
-    }
-    
-    // More padding below title
-    y = Math.max(y, 86);
-
-    // Typography + spacing (einheitlich links/rechts)
-    const SIZE_SECTION = 10;   // Überschriften (Freigabe, Fehlerangaben, Arbeiten, Kulanz, …)
-    const SIZE_ITEM = 9;       // Checkbox-Beschriftungen
-    const SIZE_PRICE_NET = 13;
-    const SIZE_PRICE_PORTO = 8;
-    const separatorX = 100;
-    const rightX = separatorX + 10;
-    const priceColX = 190;
-    const sectionPad = 3.5;
-    // Einheitlicher Zeilenabstand für beide Spalten (etwas enger als früher links)
-    const linePad = 5.1;
-    const labelPad = 8;
-    const checkboxYOffset = 2.8;
-
-    var CheckBoxbereich = repauftrag + 34;
-
-    const setSectionHead = () => {
-      doc.setFont(FONT, 'bold');
-      doc.setFontSize(SIZE_SECTION);
-    };
-    const setItemText = () => {
-      doc.setFont(FONT, 'normal');
-      doc.setFontSize(SIZE_ITEM);
-    };
-
-    // Left column: Freigabe, Fehlerangaben, Kulanz
-    let yLeft = CheckBoxbereich;
-    setSectionHead();
-    doc.text('Bei Freigabe bitte ankreuzen:', leftX, CheckBoxbereich);
-    setItemText();
-    yLeft += linePad + 0.8;
-    
-    // Only show the actual repair options in PDF, not "Keine angabe"
-    const pdfOptions = FREIGABE_OPTIONS.filter(opt => opt !== 'Keine angabe');
-    pdfOptions.forEach(opt => {
-      const checked = freigabe === opt;
-      drawCheckbox(doc, leftX + 1, yLeft - checkboxYOffset, checked);
-      setItemText();
-      
-      if ((opt === 'Reparatur laut KV durchführen' || opt === 'Unrepariert zurückschicken' || opt === 'Verschrotten') && checked && kvMethod && kvMethod !== 'keine Angabe' && kvFreigabeDate) {
-        const formattedDate = new Date(kvFreigabeDate).toLocaleDateString('de-DE');
-        let freigabeText = `${opt} -  ${kvMethod} am ${formattedDate}`;
-        if (opt === 'Unrepariert zurückschicken' && unrepariertKostenlos) {
-          freigabeText += ' (kostenlos)';
-        }
-        doc.text(freigabeText, leftX + 8, yLeft);
-      } else if (opt === 'Unrepariert zurückschicken' && checked && unrepariertKostenlos) {
-        doc.text(`${opt} (kostenlos)`, leftX + 8, yLeft);
-      } else if (opt === 'Garantie' && checked && garantieDate) {
-        const formattedDate = new Date(garantieDate).toLocaleDateString('de-DE');
-        doc.text(`${opt} auf Reparatur von ${formattedDate}`, leftX + 8, yLeft);
-      } else if (opt === 'Reklamation' && checked && reklamationDate) {
-        const formattedDate = new Date(reklamationDate).toLocaleDateString('de-DE');
-        doc.text(`${opt} auf Reparatur von ${formattedDate}`, leftX + 8, yLeft);
-      } else {
-        doc.text(opt, leftX + 8, yLeft);
-      }
-      yLeft += linePad;
-    });
-    yLeft += sectionPad;
-    setSectionHead();
-    doc.text('Fehlerangaben:', leftX, yLeft);
-    setItemText();
-    yLeft += linePad + 0.8;
-    FEHLERANGABEN.forEach((f) => {
-      const checked = !!fehler[f];
-      drawCheckbox(doc, leftX + 1, yLeft - checkboxYOffset, checked);
-      setItemText();
-      doc.text(f, leftX + 8, yLeft);
-      yLeft += linePad;
-    });
-    
-    // Manual Fehlerangaben in PDF - Only show checked items
-    if (manualFehlerChecked1 || manualFehlerChecked2 || manualFehlerChecked3) {
-      yLeft += 1;
-      setItemText();
-      
-      if (manualFehlerChecked1 && manualFehler1) {
-        drawCheckbox(doc, leftX + 1, yLeft - checkboxYOffset, manualFehlerChecked1);
-        doc.text(manualFehler1, leftX + 8, yLeft);
-        yLeft += linePad;
-      }
-      
-      if (manualFehlerChecked2 && manualFehler2) {
-        drawCheckbox(doc, leftX + 1, yLeft - checkboxYOffset, manualFehlerChecked2);
-        doc.text(manualFehler2, leftX + 8, yLeft);
-        yLeft += linePad;
-      }
-      
-      if (manualFehlerChecked3 && manualFehler3) {
-        drawCheckbox(doc, leftX + 1, yLeft - checkboxYOffset, manualFehlerChecked3);
-        doc.text(manualFehler3, leftX + 8, yLeft);
-        yLeft += linePad;
-      }
-    }
-
-    // Kulanz direkt im Anschluss an Fehlerangaben (gleiche Überschrift-Optik)
-    yLeft += sectionPad;
-    setSectionHead();
-    doc.text('Kulanz:', leftX, yLeft);
-    setItemText();
-    yLeft += linePad + 0.8;
-    drawCheckbox(doc, leftX + 1, yLeft - checkboxYOffset, kulanz);
-    doc.text('Kulanz', leftX + 8, yLeft);
-    yLeft += linePad;
-    
-    if (kulanz) {
-      drawCheckbox(doc, leftX + 10, yLeft - checkboxYOffset, kulanzPorto === 'ja');
-      doc.text('Porto ja', leftX + 16, yLeft);
-      drawCheckbox(doc, leftX + 38, yLeft - checkboxYOffset, kulanzPorto === 'nein');
-      doc.text('Porto nein', leftX + 44, yLeft);
-      if (country === 'AT') {
-        drawCheckbox(doc, leftX + 70, yLeft - checkboxYOffset, kulanzPorto === 'austria');
-        doc.text('Porto 14,90€', leftX + 76, yLeft);
-      }
-      const manualPortoX = country === 'AT' ? leftX + 105 : leftX + 70;
-      const manualPortoTextX = country === 'AT' ? leftX + 111 : leftX + 76;
-      drawCheckbox(doc, manualPortoX, yLeft - checkboxYOffset, kulanzPorto === 'manual');
-      const manualPortoText = kulanzPorto === 'manual' && manualPorto ? 
-        `Porto ${parseFloat(manualPorto).toFixed(2).replace('.', ',')}€` : 
-        'Porto manuell';
-      doc.text(manualPortoText, manualPortoTextX, yLeft);
-      yLeft += linePad;
-    }
-
-    // Kostenvoranschlag wird oben auf Höhe von „Rep. werkstatt Notiz“ gezeichnet
-
-    // Right column: Ausgeführte Arbeiten — gleicher linePad wie links
-    let yRight = CheckBoxbereich;
-    setSectionHead();
-    doc.text('Ausgeführte Arbeiten:', rightX, yRight);
-    setItemText();
-    yRight += linePad + 0.8;
-
-    const pdfCustomRows = customArbeiten.filter((r) => r.checked && ((r.label && r.label.trim()) || (r.price && String(r.price).trim())));
-
-    let maxLabelWidth = 0;
-    ARBEITEN.forEach(a => {
-      const labelForWidth = (a.key === 'nearcom' && pdfVersion < 2) ? 'nEARcom-Reparaturpauschale' : a.label;
-      const labelWidth = doc.getTextWidth(labelForWidth);
-      if (labelWidth > maxLabelWidth) maxLabelWidth = labelWidth;
-    });
-    pdfCustomRows.forEach((r) => {
-      const w = doc.getTextWidth(r.label || 'Position');
-      if (w > maxLabelWidth) maxLabelWidth = w;
-    });
-
-    const nearcomIdx = ARBEITEN.findIndex((a) => a.key === 'nearcom');
-    const arbeitenBefore = ARBEITEN.slice(0, nearcomIdx + 1);
-    const arbeitenAfter = ARBEITEN.slice(nearcomIdx + 1);
-
-    const drawArbeitPdfRow = (a) => {
-      const checked = !!arbeiten[a.key];
-      let value = '';
-      if (checked) {
-        if (!kulanz) {
-          if (a.price && a.price !== 'country') value = `${a.price.toFixed(2).replace('.', ',')} €`;
-          else if (a.price === 'country') value = `${arbeitszeit.toFixed(2).replace('.', ',')} €`;
-          else if (arbeitenManual[a.key]) value = `${arbeitenManual[a.key]} €`;
-        } else {
-          value = '0,00 €';
-        }
-      }
-      drawCheckbox(doc, rightX + 2, yRight - checkboxYOffset, checked);
-      setItemText();
-      let labelMaxWidth = priceColX - (rightX + 2 + labelPad) - 8;
-      let labelText = (a.key === 'nearcom' && pdfVersion < 2) ? 'nEARcom-Reparaturpauschale' : a.label;
-      let labelWidth = doc.getTextWidth(labelText);
-      if (labelWidth > labelMaxWidth) {
-        while (labelText.length > 2 && doc.getTextWidth(labelText + '…') > labelMaxWidth) {
-          labelText = labelText.slice(0, -1);
-        }
-        labelText += '…';
-      }
-      doc.text(labelText, rightX + 2 + labelPad, yRight);
-      if (value) doc.text(value, priceColX, yRight, { align: 'right' });
-      yRight += linePad;
-    };
-
-    arbeitenBefore.forEach(drawArbeitPdfRow);
-
-    pdfCustomRows.forEach((row) => {
-      drawCheckbox(doc, rightX + 2, yRight - checkboxYOffset, true);
-      setItemText();
-      let labelMaxWidth = priceColX - (rightX + 2 + labelPad) - 8;
-      let labelText = row.label || 'Position';
-      if (doc.getTextWidth(labelText) > labelMaxWidth) {
-        while (labelText.length > 2 && doc.getTextWidth(labelText + '…') > labelMaxWidth) {
-          labelText = labelText.slice(0, -1);
-        }
-        labelText += '…';
-      }
-      doc.text(labelText, rightX + 2 + labelPad, yRight);
-      if (!kulanz && row.price) {
-        const p = parseFloat(String(row.price).replace(',', '.'));
-        if (!Number.isNaN(p)) {
-          doc.text(`${p.toFixed(2).replace('.', ',')} €`, priceColX, yRight, { align: 'right' });
-        } else {
-          doc.text(`${row.price} €`, priceColX, yRight, { align: 'right' });
-        }
-      } else if (kulanz) {
-        doc.text('0,00 €', priceColX, yRight, { align: 'right' });
-      }
-      yRight += linePad;
-    });
-
-    arbeitenAfter.forEach(drawArbeitPdfRow);
-
-    // Footer: Notizen etwas höher + größere Box; Werkstattausgang rechts daneben
-    const PAGE_BOTTOM = 282;
-    const NOTES_H = 20;
-    const notesBoxY = PAGE_BOTTOM - NOTES_H;
-    const notizenLabelY = notesBoxY - 4;
-
-    // Nettopreis-Block: immer knapp über Notizen (nicht an Endkontrolle kleben)
-    // fester Abstand nach unten zu „Notizen:“ und genug Luft nach oben zur letzten Arbeitszeile
-    const pricingY = notizenLabelY - 16;
-    doc.setFont(FONT, 'bold');
-    doc.setFontSize(SIZE_PRICE_NET);
-    doc.text(`Nettopreis: ${net.toFixed(2).replace('.', ',')} €`, priceColX, pricingY, { align: 'right' });
-    doc.setFont(FONT, 'normal');
-    doc.setFontSize(SIZE_PRICE_PORTO);
-    doc.text(`zzgl. Porto & Verpackung: ${porto.toFixed(2).replace('.', ',')} €`, priceColX, pricingY + 5.5, { align: 'right' });
-
-    // Werkstattausgang rechts neben Notizen-Überschrift
-    const werkstattausgangX = 144;
-    setSectionHead();
-    doc.text('Werkstattausgang:', werkstattausgangX, notizenLabelY);
-    doc.setFont(FONT, 'normal');
-    doc.setFontSize(SIZE_SECTION);
-    if (werkstattausgang) {
-      const [yyyy, mm, dd] = werkstattausgang.split('-');
-      doc.setFont(FONT, 'bold');
-      doc.text(`${dd}.${mm}.${yyyy}`, rightXstop, notizenLabelY, { align: 'right' });
-    } else {
-      doc.text('-', rightXstop, notizenLabelY, { align: 'right' });
-    }
-
-    // Notizen-Box ganz unten
-    setSectionHead();
-    doc.text('Notizen:', leftX, notizenLabelY);
-    doc.setFont(FONT, 'normal');
-    doc.setFontSize(SIZE_ITEM);
-    doc.setDrawColor(100);
-    doc.setLineWidth(0.2);
-    doc.rect(leftX, notesBoxY, rightXstop - leftX, NOTES_H);
-    if (werkstattNotiz) {
-      doc.text(werkstattNotiz, leftX + 3, notesBoxY + 5);
-    }
-
-    doc.save('reparaturauftrag.pdf');
+    generateRepairOrderPDF({
+      selectedCustomer,
+      kommission,
+      hersteller,
+      geraetetyp,
+      seriennummer,
+      werkstatteingang,
+      zubehoer,
+      kvDate,
+      perMethod,
+      werkstattNotiz,
+      werkstattDate,
+      werkstattausgang,
+      kostenvoranschlagChecked,
+      kostenvoranschlagAmount,
+      freigabe,
+      kvMethod,
+      kvFreigabeDate,
+      unrepariertKostenlos,
+      garantieDate,
+      reklamationDate,
+      fehler,
+      manualFehlerChecked1,
+      manualFehler1,
+      manualFehlerChecked2,
+      manualFehler2,
+      manualFehlerChecked3,
+      manualFehler3,
+      kulanz,
+      kulanzPorto,
+      manualPorto,
+      country,
+      arbeiten,
+      arbeitenManual,
+      customArbeiten,
+      arbeitszeit,
+      net,
+      porto,
+      pdfVersion
+    }, { filename: 'reparaturauftrag.pdf' });
   };
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -9347,21 +9099,26 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
     <div
       className="App"
       style={{
-        fontFamily: isModernView ? "'Segoe UI', system-ui, sans-serif" : 'Arial, sans-serif',
-        background: isModernView ? 'transparent' : '#fff',
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
+        background: 'transparent',
         minHeight: '100vh'
       }}
     >
-      <DashboardViewSwitcher view={dashboardView} onChange={setDashboardView} />
       {(() => {
         const appRoutes = (
       <Routes>
         <Route path="/" element={
-          isModernView
-            ? (canAccessInvoices(userRole) ? <ModernHome /> : <ModernStaffHome navigate={navigate} />)
-            : <Dashboard onLogout={handleLogout} navigate={navigate} role={userRole} />
+          canAccessInvoices(userRole) ? <ModernHome /> : <ModernStaffHome navigate={navigate} />
         } />
         <Route path="/akustiker" element={<AkustikerPage customers={customers} setShowAddAkustikerModal={setShowAddAkustikerModal} showAddAkustikerModal={showAddAkustikerModal} newAkustiker={newAkustiker} setNewAkustiker={setNewAkustiker} handleAddAkustiker={handleAddAkustiker} navigate={navigate} loadCustomers={loadCustomers} />} />
+        <Route path="/kontaktliste" element={<KontaktlistePage customers={customers} loadCustomers={loadCustomers} navigate={navigate} />} />
+        <Route
+          path="/postfach/:mailboxKey/einstellungen"
+          element={<EmailsPage navigate={navigate} role={userRole} />}
+        />
+        <Route path="/emails" element={<EmailsPage navigate={navigate} role={userRole} />} />
+        <Route path="/postfach" element={<PostfachPage navigate={navigate} role={userRole} />} />
+        <Route path="/postfach/:mailboxKey" element={<PostfachPage navigate={navigate} role={userRole} />} />
         <Route path="/erstellte-reperaturauftrage" element={<ErstellteReperaturauftragePage userRole={userRole} />} />
         <Route path="/rechnung-erstellen" element={<RechnungErstellenPage />} />
         <Route path="/rechnung-bearbeiten/:id" element={<RechnungBearbeitenPage />} />
@@ -10771,12 +10528,10 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
           } />
                   </Routes>
         );
-        return isModernView ? (
+        return (
           <ModernShell onLogout={handleLogout} navigate={navigate} role={userRole}>
             {appRoutes}
           </ModernShell>
-        ) : (
-          appRoutes
         );
       })()}
                 </div>
@@ -10861,7 +10616,9 @@ doc.setLineWidth(0.25); // Die Linie wird etwas dicker
 function App() {
   return (
     <Router>
-      <AppContent />
+      <NoticeProvider>
+        <AppContent />
+      </NoticeProvider>
     </Router>
   );
 }

@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import { buildInvoicePdfFilename } from './emailTemplateVars';
 
 // ========================================
 // PDF LAYOUT VARIABLES - MODIFY HERE TO ADJUST ENTIRE LAYOUT
@@ -402,7 +403,7 @@ const renderFooter = (doc, currentPage, totalPages, invoiceNumber, customer = nu
 };
 
 // Main PDF generation function
-export const generateInvoicePDF = (invoiceData, selectedOrders) => {
+export const generateInvoicePDF = (invoiceData, selectedOrders, options = {}) => {
   const doc = new jsPDF('portrait', 'mm', 'a4');
   
   // Calculate totals
@@ -569,6 +570,14 @@ export const generateInvoicePDF = (invoiceData, selectedOrders) => {
     );
   });
   
-  // Save PDF
-  doc.save(`Rechnung_${invoiceData.invoiceNumber}.pdf`);
+  const periodDate = invoiceData.periodEnd || invoiceData.periodStart || invoiceData.invoiceDate;
+  const filename = buildInvoicePdfFilename(invoiceData.invoiceNumber, periodDate);
+
+  if (options?.returnBase64) {
+    const dataUri = doc.output('datauristring');
+    const base64 = dataUri.includes(',') ? dataUri.split(',')[1] : dataUri;
+    return { base64, filename };
+  }
+
+  doc.save(filename);
 };
