@@ -139,12 +139,18 @@ Hostinger → Postfach → E-Mail-Clients:
 - Server/IMAP/SMTP laut Hostinger-Hilfe
 - Zwei Konten: `kv@…` und `info@…`
 
-## 7. IMAP „Gesendet“-Kopie (App → Hostinger)
+## 7. IMAP „Gesendet“-Kopie + Inbox-Sync (App ↔ Hostinger)
 
-Nach jedem Versand über Resend legt die API eine Kopie per IMAP APPEND in den
-Hostinger-Ordner **Gesendet / Sent** (info@ oder kv@ je Absender).
+### Gesendet (App → Hostinger)
+Nach jedem Versand über Resend legt die API eine Kopie per IMAP APPEND in
+`INBOX.Sent` (info@ oder kv@).
 
-### Env (`.env.local` + Vercel Production/Preview)
+### Eingang (Hostinger → App)
+**Synchronisieren** holt zusätzlich per IMAP die Hostinger-Inbox nach
+(wichtig, weil Hostinger-Weiterleitung an Resend bei manchen Absendern wie
+t-online ausbleiben kann). Resend-Webhook bleibt parallel aktiv.
+
+### Env (`.env.local` + Vercel)
 
 ```
 IMAP_HOST=imap.hostinger.com
@@ -155,12 +161,8 @@ IMAP_KV_USER=kv@fa-gretzinger.de
 IMAP_KV_PASSWORD=********
 ```
 
-Alias akzeptiert: `INFO_EMAIL_PASSWORD` / `KV_EMAIL_PASSWORD`.
-
-Versand schlägt **nicht** fehl, wenn IMAP scheitert — Response enthält `imapSent`.
-
 ## Später
 
-- IMAP-Sync „Gesendet“ vom Handy → App (andere Richtung)
+- Periodischer Auto-Sync / Realtime-Badge
 - Outlook-Threading, Ordner
 - Langer-Filialen / Doppel-Akustiker-Check

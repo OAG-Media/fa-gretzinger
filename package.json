@@ -8,6 +8,7 @@
     "imapflow": "^1.7.1",
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^3.8.4",
+    "mailparser": "^3.9.15",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.8.2",

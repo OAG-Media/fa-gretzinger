@@ -19,6 +19,7 @@ Object.assign(process.env, env);
 
 const { importInboundEmail, SUPABASE_URL } = require('../api/emailServerUtils');
 const { appendSentCopy } = require('../api/imapAppendSent');
+const { syncImapInboxes } = require('../api/imapSyncInbox');
 
 const PORT = Number(env.EMAIL_DEV_PORT || 3002);
 
@@ -148,47 +149,49 @@ const server = http.createServer(async (req, res) => {
       try {
         const key = env.RESEND_API_KEY;
         const sbKey = env.SUPABASE_SERVICE_ROLE_KEY;
-        if (!key || !sbKey) {
-          return sendJson(res, 500, { error: 'RESEND_API_KEY oder SUPABASE_SERVICE_ROLE_KEY fehlt in .env.local' });
+        if (!sbKey) {
+          return sendJson(res, 500, { error: 'SUPABASE_SERVICE_ROLE_KEY fehlt in .env.local' });
         }
 
-        const resp = await fetch('https://api.resend.com/emails/receiving?limit=50', {
-          headers: { Authorization: `Bearer ${key}` }
-        });
-        const payload = await resp.json().catch(() => ({}));
-        if (!resp.ok) {
-          return sendJson(res, resp.status, { error: payload?.message || 'Resend list failed' });
-        }
-
-        const items = payload.data || [];
         let imported = 0;
         let skipped = 0;
-
-        for (const item of items) {
-          const id = item.id;
-          if (!id) continue;
-
-          const existsResp = await fetch(
-            `${SUPABASE_URL}/rest/v1/email_logs?resend_received_id=eq.${encodeURIComponent(id)}&select=id`,
-            {
-              headers: {
-                apikey: sbKey,
-                Authorization: `Bearer ${sbKey}`
+        if (key) {
+          const resp = await fetch('https://api.resend.com/emails/receiving?limit=50', {
+            headers: { Authorization: `Bearer ${key}` }
+          });
+          const payload = await resp.json().catch(() => ({}));
+          if (resp.ok) {
+            for (const item of payload.data || []) {
+              const id = item.id;
+              if (!id) continue;
+              const existsResp = await fetch(
+                `${SUPABASE_URL}/rest/v1/email_logs?resend_received_id=eq.${encodeURIComponent(id)}&select=id`,
+                {
+                  headers: {
+                    apikey: sbKey,
+                    Authorization: `Bearer ${sbKey}`
+                  }
+                }
+              );
+              const exists = await existsResp.json().catch(() => []);
+              if (Array.isArray(exists) && exists.length > 0) {
+                skipped += 1;
+                continue;
               }
+              const result = await importInboundEmail(id, item);
+              if (result?.duplicate) skipped += 1;
+              else imported += 1;
             }
-          );
-          const exists = await existsResp.json().catch(() => []);
-          if (Array.isArray(exists) && exists.length > 0) {
-            skipped += 1;
-            continue;
           }
-
-          const result = await importInboundEmail(id, item);
-          if (result?.duplicate) skipped += 1;
-          else imported += 1;
         }
 
-        return sendJson(res, 200, { ok: true, imported, skipped, total: items.length });
+        const imap = await syncImapInboxes({ limit: 50, days: 21 });
+        return sendJson(res, 200, {
+          ok: true,
+          imported: imported + (imap.imported || 0),
+          skipped: skipped + (imap.skipped || 0),
+          imap
+        });
       } catch (e) {
         return sendJson(res, 500, { error: e.message || 'Sync fehlgeschlagen' });
       }

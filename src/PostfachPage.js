@@ -305,7 +305,13 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     try {
       const r = await syncInboundApi();
       await load();
-      await notice.alert(`Sync fertig: ${r.imported} neu, ${r.skipped} bereits vorhanden.`, 'Eingang synchronisiert');
+      const imapPart = r.imap
+        ? `\nIMAP: ${r.imap.imported || 0} neu (kv/info)`
+        : '';
+      await notice.alert(
+        `Sync fertig: ${r.imported} neu, ${r.skipped} bereits vorhanden.${imapPart}`,
+        'Eingang synchronisiert'
+      );
     } catch (e) {
       await notice.alert(
         'Eingang sync fehlgeschlagen:\n\n' +
