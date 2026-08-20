@@ -22,6 +22,22 @@ async function syncInboundApi() {
   return data;
 }
 
+/** Hintergrund-Sync max. alle `minMs` (vermeidet Doppel-IMAP von Home + Postfach). */
+async function quietSyncIfDue(minMs = 90_000) {
+  try {
+    const key = 'fa_email_last_sync_at';
+    const last = Number(sessionStorage.getItem(key) || 0);
+    if (Date.now() - last < minMs) return null;
+    sessionStorage.setItem(key, String(Date.now()));
+    return await syncInboundApi();
+  } catch (e) {
+    console.warn('[email auto-sync]', e.message || e);
+    return null;
+  }
+}
+
+export { quietSyncIfDue };
+
 function SettingsIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -174,6 +190,29 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     setSelectedId(null);
     setFolder('inbound');
   }, [load, mailboxKey]);
+
+  // Auto: einmal beim Öffnen + alle ~90s im Hintergrund (IMAP + Resend)
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      const r = await quietSyncIfDue(90_000);
+      if (cancelled) return;
+      if (r && (r.imported > 0 || r.ok)) {
+        const { data } = await supabase
+          .from('email_logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(500);
+        if (!cancelled && data) setLogs(data);
+      }
+    };
+    run();
+    const t = setInterval(run, 90_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [mailboxKey]);
 
   const mailboxLogs = useMemo(
     () => (logs || []).filter((m) => detectMailboxKey(m) === mailboxKey),

@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { supabase, fetchAllPages } from './supabaseClient';
 import { useAdminDashboardPrefs } from './dashboardPrefs';
 import { mailboxesForRole, detectMailboxKey } from './emailConfig';
+import { quietSyncIfDue } from './PostfachPage';
 import './ModernDashboard.css';
 
 const MONTHS_DE = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
@@ -1140,6 +1141,8 @@ export function ModernShell({ onLogout, navigate, role = 'mitarbeiter', children
     let cancelled = false;
     const loadUnread = async () => {
       try {
+        await quietSyncIfDue(120_000);
+        if (cancelled) return;
         const { data, error } = await supabase
           .from('email_logs')
           .select('id, mailbox_key, from_address, to_address, email_type, direction, read_at, deleted_at, archived_at')
