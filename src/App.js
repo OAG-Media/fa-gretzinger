@@ -2118,11 +2118,14 @@ const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
           .select(`
             *,
             customers (
+              id,
               company,
               branch,
               street,
               location,
-              country
+              country,
+              email,
+              invoice_email
             ),
             invoice_items!repair_order_id (
               invoice:invoices (
@@ -6993,11 +6996,14 @@ const RechnungBearbeitenPage = () => {
         .select(`
           *,
           customers (
+            id,
             company,
             branch,
             street,
             location,
-            country
+            country,
+            email,
+            invoice_email
           )
         `)
         .is('invoice_status', null) // Only unused repair orders
@@ -8080,11 +8086,14 @@ function AppContent() {
         .select(`
           *,
           customers (
+            id,
             company,
             branch,
             street,
             location,
-            country
+            country,
+            email,
+            invoice_email
           )
         `)
         .eq('id', orderId)

@@ -82,8 +82,9 @@ export default function SendEmailModal({
     setPdfFilename(pdfFilenameProp || '');
 
     (async () => {
-      if (initialCustomer?.id) {
-        const { data: fresh } = await supabase.from('customers').select('*').eq('id', initialCustomer.id).single();
+      const customerId = initialCustomer?.id || repairOrder?.customer_id || null;
+      if (customerId) {
+        const { data: fresh } = await supabase.from('customers').select('*').eq('id', customerId).single();
         if (fresh) {
           setCustomerData(fresh);
           const stored = recipientForType(fresh, emailType, '');
@@ -254,13 +255,44 @@ export default function SendEmailModal({
 
   const maybePromptSaveEmail = async (sentTo) => {
     const cust = normalizeCustomer(customerData);
-    if (!cust?.id) return;
-    const original = (originalEmailRef.current || '').trim();
     const sent = (sentTo || '').trim();
     if (!sent) return;
+
+    // Join liefert oft kein id — Fallback: repair_order.customer_id
+    let customerId = cust?.id || repairOrder?.customer_id || null;
+    if (!customerId && cust?.company) {
+      let q = supabase.from('customers').select('id, email, invoice_email, company, branch').eq('company', cust.company).limit(1);
+      if (cust.branch) q = q.eq('branch', cust.branch);
+      const { data: found } = await q.maybeSingle();
+      if (found?.id) {
+        customerId = found.id;
+        setCustomerData((prev) => ({ ...(prev || {}), ...found }));
+        if (!(originalEmailRef.current || '').trim()) {
+          originalEmailRef.current = recipientForType(found, emailType, '');
+        }
+      }
+    }
+    if (!customerId) {
+      await notice.alert(
+        'E-Mail wurde gesendet. Die Adresse konnte nicht gespeichert werden (Akustiker-ID fehlt).',
+        'Hinweis'
+      );
+      return;
+    }
+
+    let original = (originalEmailRef.current || '').trim();
+    if (!original) {
+      const { data: fresh } = await supabase
+        .from('customers')
+        .select('email, invoice_email')
+        .eq('id', customerId)
+        .maybeSingle();
+      original = recipientForType(fresh || cust, emailType, '').trim();
+      originalEmailRef.current = original;
+    }
     if (original && original.toLowerCase() === sent.toLowerCase()) return;
 
-    const label = cust.company || 'Akustiker';
+    const label = cust?.company || 'Akustiker';
     const msg = original
       ? `${emailFieldLabel} beim Akustiker „${label}“ ist derzeit „${original}“.\n\nAuf „${sent}“ aktualisieren?`
       : `${emailFieldLabel} war beim Akustiker „${label}“ noch nicht hinterlegt.\n\n„${sent}“ jetzt speichern?`;
@@ -273,12 +305,13 @@ export default function SendEmailModal({
     const { error: err } = await supabase
       .from('customers')
       .update(patch)
-      .eq('id', cust.id);
+      .eq('id', customerId);
     if (err) {
       await notice.alert('E-Mail konnte nicht gespeichert werden: ' + err.message, 'Fehler');
       return;
     }
     originalEmailRef.current = sent;
+    setCustomerData((prev) => ({ ...(prev || {}), ...patch, id: customerId }));
     onCustomerUpdated?.();
   };
 
@@ -361,9 +394,9 @@ export default function SendEmailModal({
       }
 
       // KV + Rechnung: speichern fragen, bevor Modal schließt
-      await maybePromptSaveEmail(sentTo);
-
+      // Zuerst Erfolg melden, DANN speichern fragen (sichtbare Reihenfolge wie gewünscht)
       await notice.alert(`E-Mail gesendet an ${sentTo}\n(von ${mailbox.address})`, 'Gesendet');
+      await maybePromptSaveEmail(sentTo);
 
       onSent?.({ to: sentTo, resendId: result.id });
       onClose?.();
@@ -383,12 +416,19 @@ export default function SendEmailModal({
   return (
     <div className="send-email-overlay" onClick={onClose}>
       <div className="send-email-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="send-email-header">
-          <h2>E-Mail senden — {emailType === 'invoice' ? 'Rechnung' : 'KV / Auftrag'}</h2>
-          <button type="button" onClick={onClose} className="send-email-close" aria-label="Schließen">×</button>
+        <div className="send-email-header sticky">
+          <div>
+            <h2>E-Mail senden — {emailType === 'invoice' ? 'Rechnung' : 'KV / Auftrag'}</h2>
+            <p className="send-email-from-hint">Von: {mailbox.from}</p>
+          </div>
+          <div className="send-email-header-actions">
+            <button type="button" onClick={onClose} className="send-email-btn-ghost">Abbrechen</button>
+            <button type="button" disabled={!canSend || sending} onClick={handleSend} className="send-email-btn-primary">
+              {sending ? 'Sendet…' : 'Senden'}
+            </button>
+            <button type="button" onClick={onClose} className="send-email-close" aria-label="Schließen">×</button>
+          </div>
         </div>
-
-        <p className="send-email-from-hint">Von: {mailbox.from}</p>
 
         {customerData && (
           <div className="send-email-akustiker-box">
@@ -501,12 +541,14 @@ export default function SendEmailModal({
       <style>{`
         .send-email-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 16px; text-align: left; }
         .send-email-overlay-nested { z-index: 10001; }
-        .send-email-modal { background: #fff; border-radius: 12px; width: min(720px, 100%); max-height: 92vh; overflow: auto; padding: 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.2); text-align: left; }
-        .send-email-modal-sm { width: min(420px, 100%); }
-        .send-email-header { display: flex; justify-content: space-between; align-items: center; }
+        .send-email-modal { background: #fff; border-radius: 12px; width: min(720px, 100%); max-height: 92vh; overflow: auto; padding: 0 20px 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.2); text-align: left; }
+        .send-email-modal-sm { width: min(420px, 100%); padding: 20px; }
+        .send-email-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-top: 16px; }
+        .send-email-header.sticky { position: sticky; top: 0; z-index: 5; background: #fff; padding: 14px 0 12px; margin: 0 0 4px; border-bottom: 1px solid #e5e7eb; }
         .send-email-header h2 { margin: 0; color: #1d426a; font-weight: 500; font-size: 1.25rem; }
-        .send-email-close { border: none; background: transparent; font-size: 22px; cursor: pointer; }
-        .send-email-from-hint { margin: 8px 0 0; font-size: 13px; color: #666; }
+        .send-email-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        .send-email-close { border: none; background: transparent; font-size: 22px; cursor: pointer; line-height: 1; padding: 4px 6px; }
+        .send-email-from-hint { margin: 6px 0 0; font-size: 13px; color: #666; }
         .send-email-akustiker-box { margin-top: 12px; padding: 12px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px; line-height: 1.5; }
         .send-email-ak-ok { color: #15803d; margin-top: 4px; }
         .send-email-ak-warn { color: #ea580c; margin-top: 4px; font-weight: 500; }
