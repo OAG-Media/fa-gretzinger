@@ -18,6 +18,7 @@ const env = { ...loadEnvLocal(), ...process.env };
 Object.assign(process.env, env);
 
 const { importInboundEmail, SUPABASE_URL } = require('../api/emailServerUtils');
+const { appendSentCopy } = require('../api/imapAppendSent');
 
 const PORT = Number(env.EMAIL_DEV_PORT || 3002);
 
@@ -99,7 +100,32 @@ const server = http.createServer(async (req, res) => {
           return sendJson(res, 400, { error: 'to, subject und html sind Pflicht' });
         }
         const data = await sendViaResend(payload);
-        return sendJson(res, 200, { ok: true, id: data.id, from: payload.from || DEFAULT_FROM });
+        const from = payload.from || DEFAULT_FROM;
+        let imapSent = null;
+        try {
+          const attachments = (payload.attachments || []).map((a) => ({
+            filename: a.filename,
+            content: a.content,
+            content_type: a.contentType || a.content_type || 'application/pdf'
+          }));
+          imapSent = await appendSentCopy({
+            from,
+            to: Array.isArray(payload.to) ? payload.to : [payload.to],
+            cc: payload.cc,
+            bcc: payload.bcc,
+            replyTo: payload.reply_to || DEFAULT_REPLY_TO,
+            subject: payload.subject,
+            html: payload.html,
+            attachments
+          });
+          if (!imapSent.ok && !imapSent.skipped) {
+            console.warn('[email:dev] IMAP Sent-Kopie:', imapSent.error);
+          }
+        } catch (imapErr) {
+          console.warn('[email:dev] IMAP Sent-Kopie Exception:', imapErr.message);
+          imapSent = { ok: false, error: imapErr.message };
+        }
+        return sendJson(res, 200, { ok: true, id: data.id, from, imapSent });
       } catch (e) {
         return sendJson(res, e.status || 500, { error: e.message, details: e.data || null });
       }

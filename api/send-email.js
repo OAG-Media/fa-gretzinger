@@ -1,5 +1,7 @@
-// Vercel Serverless Function — Resend Versand
-// Env: RESEND_API_KEY, RESEND_FROM, RESEND_REPLY_TO
+// Vercel Serverless Function — Resend Versand + Hostinger IMAP „Gesendet“-Kopie
+// Env: RESEND_*, IMAP_HOST, IMAP_PORT, IMAP_INFO_*, IMAP_KV_*
+
+const { appendSentCopy } = require('./imapAppendSent');
 
 const DEFAULT_FROM = process.env.RESEND_FROM || 'Fa. Gretzinger <info@fa-gretzinger.de>';
 const DEFAULT_REPLY_TO = process.env.RESEND_REPLY_TO || 'info@fa-gretzinger.de';
@@ -60,7 +62,32 @@ module.exports = async function handler(req, res) {
       return res.status(resp.status).json({ error: data?.message || data?.error || 'Resend Fehler', details: data });
     }
 
-    return res.status(200).json({ ok: true, id: data.id, from: body.from });
+    let imapSent = null;
+    try {
+      imapSent = await appendSentCopy({
+        from: body.from,
+        to: body.to,
+        cc: body.cc,
+        bcc: body.bcc,
+        replyTo: body.reply_to,
+        subject: body.subject,
+        html: body.html,
+        attachments: body.attachments || []
+      });
+      if (!imapSent.ok && !imapSent.skipped) {
+        console.warn('[send-email] IMAP Sent-Kopie:', imapSent.error);
+      }
+    } catch (imapErr) {
+      console.warn('[send-email] IMAP Sent-Kopie Exception:', imapErr.message);
+      imapSent = { ok: false, error: imapErr.message };
+    }
+
+    return res.status(200).json({
+      ok: true,
+      id: data.id,
+      from: body.from,
+      imapSent
+    });
   } catch (e) {
     return res.status(500).json({ error: e.message || 'Serverfehler' });
   }

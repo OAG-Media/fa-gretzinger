@@ -5,6 +5,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.56.0",
     "cra-template-pwa": "2.0.0",
+    "imapflow": "^1.7.1",
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^3.8.4",
     "react": "^19.1.0",
