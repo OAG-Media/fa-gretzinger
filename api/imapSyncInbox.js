@@ -7,7 +7,7 @@
 
 const { ImapFlow } = require('imapflow');
 const { simpleParser } = require('mailparser');
-const { supabaseInsertEmailLog, SUPABASE_URL } = require('./emailServerUtils');
+const { supabaseInsertEmailLog, SUPABASE_URL, findExistingByMessageId } = require('./emailServerUtils');
 
 const DEFAULT_HOST = 'imap.hostinger.com';
 const DEFAULT_PORT = 993;
@@ -50,24 +50,13 @@ function escapeHtml(s) {
 }
 
 async function existsByMessageId(messageId, mailboxKey) {
-  if (!messageId) return false;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) return false;
-  const url =
-    `${SUPABASE_URL}/rest/v1/email_logs?message_id=eq.${encodeURIComponent(messageId)}` +
-    `&mailbox_key=eq.${encodeURIComponent(mailboxKey)}&select=id&limit=1`;
-  const resp = await fetch(url, {
-    headers: { apikey: key, Authorization: `Bearer ${key}` }
-  });
-  const data = await resp.json().catch(() => []);
-  return Array.isArray(data) && data.length > 0;
+  // Auch soft-gelöschte zählen → kein Re-Import derselben Message-ID
+  const hit = await findExistingByMessageId(messageId, mailboxKey);
+  return !!hit?.id;
 }
 
 async function existsByImapUid(imapUid, mailboxKey) {
   if (!imapUid) return false;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) return false;
-  // message_id speichert auch imap:<mailbox>:<uid> als Fallback
   const synthetic = `imap:${mailboxKey}:${imapUid}`;
   return existsByMessageId(synthetic, mailboxKey);
 }

@@ -66,6 +66,29 @@ async function fetchResendReceivedEmail(emailId) {
   return data;
 }
 
+async function findExistingByMessageId(messageId, mailboxKey) {
+  if (!messageId || !mailboxKey) return null;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) return null;
+  const mid = String(messageId).trim();
+  if (!mid) return null;
+
+  // PostgREST: Sonderzeichen (=, <, >) → Wert in Anführungszeichen
+  const quoted = `"${mid.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  const url =
+    `${SUPABASE_URL}/rest/v1/email_logs?select=id,read_at,resend_received_id,deleted_at,created_at` +
+    `&mailbox_key=eq.${encodeURIComponent(mailboxKey)}` +
+    `&message_id=eq.${encodeURIComponent(quoted)}` +
+    `&order=created_at.asc&limit=10`;
+
+  const resp = await fetch(url, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` }
+  });
+  const data = await resp.json().catch(() => []);
+  if (!Array.isArray(data) || data.length === 0) return null;
+  return data.find((r) => !r.deleted_at) || data[0];
+}
+
 async function importInboundEmail(emailId, eventMeta = {}) {
   const email = await fetchResendReceivedEmail(emailId);
   const toList = Array.isArray(email.to) ? email.to : email.to ? [email.to] : [];
@@ -75,6 +98,29 @@ async function importInboundEmail(emailId, eventMeta = {}) {
   const toJoined = toList.join(', ') || (eventMeta.to || []).join(', ');
   const fromJoined = email.from || eventMeta.from || '';
   const mailboxKey = detectMailboxKey(fromJoined, toJoined);
+  const messageId = (email.message_id || eventMeta.message_id || '').trim() || null;
+
+  if (messageId) {
+    const existing = await findExistingByMessageId(messageId, mailboxKey);
+    if (existing?.id) {
+      // Schon per IMAP da → Resend-ID nachtragen, kein Duplikat
+      if (!existing.resend_received_id) {
+        const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        await fetch(`${SUPABASE_URL}/rest/v1/email_logs?id=eq.${existing.id}`, {
+          method: 'PATCH',
+          headers: {
+            apikey: key,
+            Authorization: `Bearer ${key}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            resend_received_id: emailId
+          })
+        });
+      }
+      return { duplicate: true, id: existing.id };
+    }
+  }
 
   const row = {
     direction: 'inbound',
@@ -90,7 +136,7 @@ async function importInboundEmail(emailId, eventMeta = {}) {
     body_text: email.text || null,
     resend_id: null,
     resend_received_id: emailId,
-    message_id: email.message_id || eventMeta.message_id || null,
+    message_id: messageId,
     status: 'received',
     is_test: false
   };
@@ -117,5 +163,6 @@ module.exports = {
   readRawBody,
   supabaseInsertEmailLog,
   fetchResendReceivedEmail,
-  importInboundEmail
+  importInboundEmail,
+  findExistingByMessageId
 };

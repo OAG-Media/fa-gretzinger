@@ -38,6 +38,19 @@ async function quietSyncIfDue(minMs = 90_000) {
 
 export { quietSyncIfDue };
 
+/** Eine sichtbare Zeile pro Message-ID (Resend + IMAP sonst doppelt). */
+function dedupeByMessageId(mails) {
+  const seen = new Set();
+  const out = [];
+  for (const m of mails || []) {
+    const key = (m.message_id && String(m.message_id).trim()) || m.id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(m);
+  }
+  return out;
+}
+
 function SettingsIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -151,6 +164,7 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
+  const [checkedIds, setCheckedIds] = useState(() => new Set());
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeMode, setComposeMode] = useState('new');
   const [replyTarget, setReplyTarget] = useState(null);
@@ -188,6 +202,7 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
   useEffect(() => {
     load();
     setSelectedId(null);
+    setCheckedIds(new Set());
     setFolder('inbound');
   }, [load, mailboxKey]);
 
@@ -197,7 +212,8 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     const run = async () => {
       const r = await quietSyncIfDue(90_000);
       if (cancelled) return;
-      if (r && (r.imported > 0 || r.ok)) {
+      const imported = r?.imported || 0;
+      if (r && imported > 0) {
         const { data } = await supabase
           .from('email_logs')
           .select('*')
@@ -222,11 +238,20 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     () => mailboxLogs.filter((x) => !x.deleted_at && !x.archived_at),
     [mailboxLogs]
   );
-  const inbound = useMemo(() => activeLogs.filter((x) => x.direction === 'inbound'), [activeLogs]);
-  const outbound = useMemo(() => activeLogs.filter((x) => x.direction === 'outbound'), [activeLogs]);
-  const deleted = useMemo(() => mailboxLogs.filter((x) => !!x.deleted_at), [mailboxLogs]);
+  const inbound = useMemo(
+    () => dedupeByMessageId(activeLogs.filter((x) => x.direction === 'inbound')),
+    [activeLogs]
+  );
+  const outbound = useMemo(
+    () => dedupeByMessageId(activeLogs.filter((x) => x.direction === 'outbound')),
+    [activeLogs]
+  );
+  const deleted = useMemo(
+    () => dedupeByMessageId(mailboxLogs.filter((x) => !!x.deleted_at)),
+    [mailboxLogs]
+  );
   const archived = useMemo(
-    () => mailboxLogs.filter((x) => !!x.archived_at && !x.deleted_at),
+    () => dedupeByMessageId(mailboxLogs.filter((x) => !!x.archived_at && !x.deleted_at)),
     [mailboxLogs]
   );
   const unreadCount = useMemo(
@@ -240,12 +265,52 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
         : folder === 'deleted' ? deleted
           : archived;
   const selected = folderMails.find((m) => m.id === selectedId) || null;
+  const checkedCount = checkedIds.size;
+  const allVisibleChecked =
+    folderMails.length > 0 && folderMails.every((m) => checkedIds.has(m.id));
+
+  const clearChecked = () => setCheckedIds(new Set());
+
+  const toggleChecked = (id, e) => {
+    e?.stopPropagation?.();
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleCheckAllVisible = () => {
+    if (allVisibleChecked) {
+      clearChecked();
+      return;
+    }
+    setCheckedIds(new Set(folderMails.map((m) => m.id)));
+  };
 
   const markRead = async (mail) => {
     if (!mail || mail.direction !== 'inbound' || mail.read_at) return;
     const now = new Date().toISOString();
-    await supabase.from('email_logs').update({ read_at: now }).eq('id', mail.id);
-    setLogs((prev) => prev.map((x) => (x.id === mail.id ? { ...x, read_at: now } : x)));
+    const mid = mail.message_id && String(mail.message_id).trim();
+    if (mid) {
+      await supabase
+        .from('email_logs')
+        .update({ read_at: now })
+        .eq('mailbox_key', mailboxKey)
+        .eq('message_id', mid)
+        .is('read_at', null);
+      setLogs((prev) =>
+        prev.map((x) =>
+          x.message_id === mid && detectMailboxKey(x) === mailboxKey && !x.read_at
+            ? { ...x, read_at: now }
+            : x
+        )
+      );
+    } else {
+      await supabase.from('email_logs').update({ read_at: now }).eq('id', mail.id);
+      setLogs((prev) => prev.map((x) => (x.id === mail.id ? { ...x, read_at: now } : x)));
+    }
   };
 
   const openMail = async (mail) => {
@@ -269,6 +334,11 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     }
     setLogs((prev) => prev.map((x) => (x.id === mail.id ? { ...x, deleted_at: now, archived_at: null } : x)));
     if (selectedId === mail.id) setSelectedId(null);
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(mail.id);
+      return next;
+    });
   };
 
   const softArchive = async (mail, e) => {
@@ -287,6 +357,85 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     }
     setLogs((prev) => prev.map((x) => (x.id === mail.id ? { ...x, archived_at: now, deleted_at: null } : x)));
     if (selectedId === mail.id) setSelectedId(null);
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(mail.id);
+      return next;
+    });
+  };
+
+  const bulkSoftDelete = async () => {
+    const ids = [...checkedIds];
+    if (ids.length === 0) return;
+    const ok = await notice.confirm(
+      `${ids.length} E-Mail(s) in „Gelöscht“ verschieben?`,
+      'Massen-Löschung'
+    );
+    if (!ok) return;
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from('email_logs')
+      .update({ deleted_at: now, archived_at: null })
+      .in('id', ids);
+    if (error) {
+      await notice.alert(error.message, 'Fehler');
+      return;
+    }
+    const idSet = new Set(ids);
+    setLogs((prev) =>
+      prev.map((x) => (idSet.has(x.id) ? { ...x, deleted_at: now, archived_at: null } : x))
+    );
+    if (selectedId && idSet.has(selectedId)) setSelectedId(null);
+    clearChecked();
+  };
+
+  const bulkSoftArchive = async () => {
+    const ids = [...checkedIds];
+    if (ids.length === 0) return;
+    const ok = await notice.confirm(
+      `${ids.length} E-Mail(s) archivieren?`,
+      'Massen-Archivierung'
+    );
+    if (!ok) return;
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from('email_logs')
+      .update({ archived_at: now, deleted_at: null })
+      .in('id', ids);
+    if (error) {
+      await notice.alert(error.message, 'Fehler');
+      return;
+    }
+    const idSet = new Set(ids);
+    setLogs((prev) =>
+      prev.map((x) => (idSet.has(x.id) ? { ...x, archived_at: now, deleted_at: null } : x))
+    );
+    if (selectedId && idSet.has(selectedId)) setSelectedId(null);
+    clearChecked();
+  };
+
+  const bulkRestore = async () => {
+    const ids = [...checkedIds];
+    if (ids.length === 0) return;
+    const ok = await notice.confirm(
+      `${ids.length} E-Mail(s) wiederherstellen?`,
+      'Wiederherstellen'
+    );
+    if (!ok) return;
+    const { error } = await supabase
+      .from('email_logs')
+      .update({ deleted_at: null, archived_at: null })
+      .in('id', ids);
+    if (error) {
+      await notice.alert(error.message, 'Fehler');
+      return;
+    }
+    const idSet = new Set(ids);
+    setLogs((prev) =>
+      prev.map((x) => (idSet.has(x.id) ? { ...x, deleted_at: null, archived_at: null } : x))
+    );
+    if (selectedId && idSet.has(selectedId)) setSelectedId(null);
+    clearChecked();
   };
 
   const restoreMail = async (mail, e) => {
@@ -465,7 +614,7 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
           <button
             type="button"
             className={`pf-folder${folder === 'inbound' ? ' active' : ''}`}
-            onClick={() => { setFolder('inbound'); setSelectedId(null); }}
+            onClick={() => { setFolder('inbound'); setSelectedId(null); clearChecked(); }}
           >
             Eingang
             {unreadCount > 0 && <span className="pf-badge">{unreadCount}</span>}
@@ -473,7 +622,7 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
           <button
             type="button"
             className={`pf-folder${folder === 'outbound' ? ' active' : ''}`}
-            onClick={() => { setFolder('outbound'); setSelectedId(null); }}
+            onClick={() => { setFolder('outbound'); setSelectedId(null); clearChecked(); }}
           >
             Gesendet
             <span className="pf-count">{outbound.length}</span>
@@ -481,7 +630,7 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
           <button
             type="button"
             className={`pf-folder${folder === 'archived' ? ' active' : ''}`}
-            onClick={() => { setFolder('archived'); setSelectedId(null); }}
+            onClick={() => { setFolder('archived'); setSelectedId(null); clearChecked(); }}
           >
             Archiviert
             <span className="pf-count">{archived.length}</span>
@@ -489,7 +638,7 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
           <button
             type="button"
             className={`pf-folder${folder === 'deleted' ? ' active' : ''}`}
-            onClick={() => { setFolder('deleted'); setSelectedId(null); }}
+            onClick={() => { setFolder('deleted'); setSelectedId(null); clearChecked(); }}
           >
             Gelöscht
             <span className="pf-count">{deleted.length}</span>
@@ -507,6 +656,40 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
         </aside>
 
         <div className="pf-list">
+          {!loading && folderMails.length > 0 && (
+            <div className="pf-bulk-bar">
+              <label className="pf-check-all">
+                <input
+                  type="checkbox"
+                  checked={allVisibleChecked}
+                  onChange={toggleCheckAllVisible}
+                  aria-label="Alle markieren"
+                />
+                <span>{checkedCount > 0 ? `${checkedCount} markiert` : 'Alle'}</span>
+              </label>
+              {checkedCount > 0 && (
+                <div className="pf-bulk-actions">
+                  {(folder === 'deleted' || folder === 'archived') ? (
+                    <button type="button" className="pf-bulk-btn" onClick={bulkRestore}>
+                      Wiederherstellen
+                    </button>
+                  ) : (
+                    <>
+                      <button type="button" className="pf-bulk-btn" onClick={bulkSoftArchive}>
+                        Archivieren
+                      </button>
+                      <button type="button" className="pf-bulk-btn pf-bulk-danger" onClick={bulkSoftDelete}>
+                        Löschen
+                      </button>
+                    </>
+                  )}
+                  <button type="button" className="pf-bulk-btn pf-bulk-muted" onClick={clearChecked}>
+                    Abwählen
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           {loading ? (
             <p className="pf-empty">Lade…</p>
           ) : folderMails.length === 0 ? (
@@ -523,15 +706,28 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
             folderMails.map((mail) => {
               const isUnread = folder === 'inbound' && !mail.read_at;
               const peer = mail.direction === 'inbound' ? mail.from_address : mail.to_address;
+              const isChecked = checkedIds.has(mail.id);
               return (
                 <div
                   key={mail.id}
-                  className={`pf-mail${selectedId === mail.id ? ' selected' : ''}${isUnread ? ' unread' : ''}`}
+                  className={`pf-mail${selectedId === mail.id ? ' selected' : ''}${isUnread ? ' unread' : ''}${isChecked ? ' checked' : ''}`}
                   onClick={() => openMail(mail)}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(ev) => { if (ev.key === 'Enter') openMail(mail); }}
                 >
+                  <label
+                    className="pf-mail-check"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) => toggleChecked(mail.id, e)}
+                      aria-label="E-Mail markieren"
+                    />
+                  </label>
                   <div className="pf-mail-main">
                     <div className="pf-mail-row">
                       <span className="pf-mail-peer">{peer || '—'}</span>
@@ -741,6 +937,16 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
         .pf-sync-icon.spinning { animation: pf-spin 0.9s linear infinite; }
         @keyframes pf-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .pf-list { border-right: none; overflow-x: hidden; overflow-y: auto; max-height: 70vh; min-width: 0; }
+        .pf-bulk-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; position: sticky; top: 0; z-index: 2; }
+        .pf-check-all { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: #3d4f5f; cursor: pointer; user-select: none; }
+        .pf-check-all input, .pf-mail-check input { width: 15px; height: 15px; accent-color: #1d426a; cursor: pointer; }
+        .pf-bulk-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .pf-bulk-btn { padding: 5px 10px; border: 1px solid #d8dee6; background: #fff; color: #1d426a; border-radius: 6px; font-size: 12px; cursor: pointer; }
+        .pf-bulk-btn:hover { background: #eef4fa; }
+        .pf-bulk-btn.pf-bulk-danger { color: #b91c1c; border-color: #f0c4c4; }
+        .pf-bulk-btn.pf-bulk-muted { color: #666; }
+        .pf-mail-check { display: flex; align-items: flex-start; padding-top: 2px; flex-shrink: 0; }
+        .pf-mail.checked { background: #f0f7fc; }
         .pf-attachments { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 4px; }
         .pf-attachments-label { font-size: 12px; color: #888; margin-right: 4px; }
         .pf-attachment-chip { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 999px; background: #f1f5f9; border: 1px solid #dbe3ec; font-size: 12px; color: #1d426a; cursor: pointer; }
