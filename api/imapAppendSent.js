@@ -89,21 +89,32 @@ function buildRfc822({ from, to, cc, bcc, replyTo, subject, html, attachments = 
   return lines.join('\r\n');
 }
 
+function flagHas(flags, name) {
+  if (!flags) return false;
+  if (typeof flags.has === 'function') return flags.has(name);
+  if (Array.isArray(flags)) return flags.includes(name);
+  try {
+    return Array.from(flags).includes(name);
+  } catch (_) {
+    return false;
+  }
+}
+
 async function resolveSentPath(client) {
   const boxes = await client.list();
-  const special = boxes.find((b) => b.specialUse === '\\Sent' || (b.flags || []).includes('\\Sent'));
+  const special = boxes.find((b) => b.specialUse === '\\Sent' || flagHas(b.flags, '\\Sent'));
   if (special?.path) return special.path;
 
-  const preferred = ['Sent', 'Gesendet', 'INBOX.Sent', 'INBOX.Gesendet', 'Sent Items', 'Sent Messages'];
+  const preferred = ['INBOX.Sent', 'Sent', 'Gesendet', 'INBOX.Gesendet', 'Sent Items', 'Sent Messages'];
   for (const name of preferred) {
-    const hit = boxes.find((b) => b.path === name || b.path.toLowerCase() === name.toLowerCase());
+    const hit = boxes.find((b) => b.path === name || String(b.path || '').toLowerCase() === name.toLowerCase());
     if (hit) return hit.path;
   }
   for (const b of boxes) {
     const p = String(b.path || '').toLowerCase();
     if (p.includes('sent') || p.includes('gesendet')) return b.path;
   }
-  return 'Sent';
+  return 'INBOX.Sent';
 }
 
 /**
