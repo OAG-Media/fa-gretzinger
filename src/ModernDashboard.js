@@ -1145,7 +1145,7 @@ export function ModernShell({ onLogout, navigate, role = 'mitarbeiter', children
         if (cancelled) return;
         const { data, error } = await supabase
           .from('email_logs')
-          .select('id, mailbox_key, from_address, to_address, email_type, direction, read_at, deleted_at, archived_at')
+          .select('id, mailbox_key, from_address, to_address, email_type, direction, read_at, deleted_at, archived_at, message_id')
           .eq('direction', 'inbound')
           .is('read_at', null)
           .is('deleted_at', null)
@@ -1153,7 +1153,11 @@ export function ModernShell({ onLogout, navigate, role = 'mitarbeiter', children
           .limit(500);
         if (error) throw error;
         const counts = { kv: 0, info: 0 };
+        const seen = new Set();
         for (const row of data || []) {
+          const dedupeKey = (row.message_id && String(row.message_id).trim()) || row.id;
+          if (seen.has(dedupeKey)) continue;
+          seen.add(dedupeKey);
           const key = detectMailboxKey(row);
           if (key === 'kv') counts.kv += 1;
           else counts.info += 1;
@@ -1165,9 +1169,12 @@ export function ModernShell({ onLogout, navigate, role = 'mitarbeiter', children
     };
     loadUnread();
     const t = setInterval(loadUnread, 45000);
+    const onUnread = () => { loadUnread(); };
+    window.addEventListener('fa-email-unread-changed', onUnread);
     return () => {
       cancelled = true;
       clearInterval(t);
+      window.removeEventListener('fa-email-unread-changed', onUnread);
     };
   }, [path, role]);
 

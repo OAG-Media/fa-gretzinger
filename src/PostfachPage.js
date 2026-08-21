@@ -293,24 +293,37 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     if (!mail || mail.direction !== 'inbound' || mail.read_at) return;
     const now = new Date().toISOString();
     const mid = mail.message_id && String(mail.message_id).trim();
+
+    const { error } = await supabase
+      .from('email_logs')
+      .update({ read_at: now })
+      .eq('id', mail.id);
+    if (error) {
+      console.warn('[markRead]', error.message);
+      return;
+    }
+
+    // Geschwister-Duplikate (gleiche Message-ID) mitziehen
     if (mid) {
       await supabase
         .from('email_logs')
         .update({ read_at: now })
-        .eq('mailbox_key', mailboxKey)
         .eq('message_id', mid)
         .is('read_at', null);
-      setLogs((prev) =>
-        prev.map((x) =>
-          x.message_id === mid && detectMailboxKey(x) === mailboxKey && !x.read_at
-            ? { ...x, read_at: now }
-            : x
-        )
-      );
-    } else {
-      await supabase.from('email_logs').update({ read_at: now }).eq('id', mail.id);
-      setLogs((prev) => prev.map((x) => (x.id === mail.id ? { ...x, read_at: now } : x)));
     }
+
+    setLogs((prev) =>
+      prev.map((x) => {
+        if (x.id === mail.id) return { ...x, read_at: now };
+        if (mid && x.message_id === mid && detectMailboxKey(x) === mailboxKey && !x.read_at) {
+          return { ...x, read_at: now };
+        }
+        return x;
+      })
+    );
+    try {
+      window.dispatchEvent(new CustomEvent('fa-email-unread-changed'));
+    } catch (_) { /* ignore */ }
   };
 
   const openMail = async (mail) => {
