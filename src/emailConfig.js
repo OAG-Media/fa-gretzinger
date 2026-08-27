@@ -10,7 +10,7 @@ export const MAILBOXES = {
     label: 'E-Mail',
     sublabel: `kv@${EMAIL_DOMAIN}`,
     navPath: '/postfach/kv',
-    settingsPath: '/postfach/kv/einstellungen',
+    settingsPath: '/email-vorlagen',
     uses: ['kv']
   },
   info: {
@@ -20,7 +20,7 @@ export const MAILBOXES = {
     label: 'E-Mail',
     sublabel: `info@${EMAIL_DOMAIN}`,
     navPath: '/postfach/info',
-    settingsPath: '/postfach/info/einstellungen',
+    settingsPath: '/email-vorlagen',
     uses: ['invoice', 'free', 'reply', 'general']
   }
 };

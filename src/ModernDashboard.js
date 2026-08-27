@@ -62,7 +62,7 @@ export const Icon = ({ name }) => {
       return (
         <svg className="md-nav-icon" viewBox="0 0 24 24" {...common}>
           <circle cx="12" cy="12" r="3" />
-          <path d="M12 3.5v2.2M12 18.3V20.5M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M18 6l-1.6 1.6M7.6 16.4 6 18" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
         </svg>
       );
     case 'mail':
@@ -1204,7 +1204,16 @@ export function ModernShell({ onLogout, navigate, role = 'mitarbeiter', children
         ]
       : []),
     ...mailboxNav,
-    { id: 'einstellungen', label: 'Einstellungen', icon: 'settings', path: '/einstellungen', match: (p) => p.startsWith('/einstellungen') }
+    ...(role === 'admin'
+      ? [{
+          id: 'email-vorlagen',
+          label: 'E-Mail-Vorlagen',
+          icon: 'settings',
+          path: '/email-vorlagen',
+          match: (p) => p === '/email-vorlagen' || p === '/emails' || /^\/postfach\/[^/]+\/einstellungen/.test(p)
+        }]
+      : []),
+    { id: 'einstellungen', label: 'Einstellungen', icon: 'settings', path: '/einstellungen', match: (p) => p === '/einstellungen' || p.startsWith('/einstellungen/') }
   ];
 
   const isHome = path === '/';

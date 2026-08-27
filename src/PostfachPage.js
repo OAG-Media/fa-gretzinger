@@ -6,6 +6,7 @@ import ComposeEmailModal from './ComposeEmailModal';
 import { parseAddressList } from './emailRecipients';
 import { useNotice } from './AppNotice';
 import { resolveAttachmentBlob, downloadBlob, openBlob } from './emailAttachmentUtils';
+import { GearIcon } from './icons';
 
 function emailApiBase() {
   if (typeof window !== 'undefined') {
@@ -52,12 +53,7 @@ function dedupeByMessageId(mails) {
 }
 
 function SettingsIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 3.5v2.2M12 18.3V20.5M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M18 6l-1.6 1.6M7.6 16.4 6 18" />
-    </svg>
-  );
+  return <GearIcon size={18} />;
 }
 
 function ReplyIcon() {
@@ -708,11 +704,12 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
                 <button
                   type="button"
                   className="pf-icon-btn pf-settings-btn"
-                  title="Vorlagen & Signaturen"
-                  aria-label="Vorlagen & Signaturen"
+                  title="E-Mail-Vorlagen"
+                  aria-label="E-Mail-Vorlagen"
                   onClick={() => navigate(mailbox.settingsPath)}
                 >
                   <SettingsIcon />
+                  <span className="pf-settings-label">Vorlagen</span>
                 </button>
                 <button type="button" className="pf-btn-ghost" onClick={() => navigate('/')}>← Home</button>
               </>
@@ -1061,7 +1058,8 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
         .pf-title-addr { font-size: 0.95rem; font-weight: 400; color: #8a9aab; vertical-align: middle; }
         .pf-sub { margin: 6px 0 0; color: #666; font-size: 13px; }
         .pf-top-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-        .pf-settings-btn { padding: 8px 10px; }
+        .pf-settings-btn { padding: 8px 12px; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: #1d426a; }
+        .pf-settings-label { font-size: 13px; }
         .pf-layout { display: grid; grid-template-columns: 160px 280px 6px minmax(240px, 1fr); gap: 0; min-height: 520px; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; background: #fff; }
         .pf-resizer { cursor: col-resize; background: #eef2f6; border-right: 1px solid #e5e7eb; border-left: 1px solid #e5e7eb; }
         .pf-resizer:hover { background: #dbe4ee; }

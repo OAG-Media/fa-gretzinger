@@ -146,8 +146,12 @@ export default function PdfGrabPreview({ url, filename = 'Dokument.pdf' }) {
     if (e.button !== 0) return;
     const el = viewportRef.current;
     if (!el) return;
-    el.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
+    try {
+      el.setPointerCapture?.(e.pointerId);
+    } catch (_) { /* ignore */ }
     dragRef.current = {
+      pointerId: e.pointerId,
       x: e.clientX,
       y: e.clientY,
       left: el.scrollLeft,
@@ -160,14 +164,21 @@ export default function PdfGrabPreview({ url, filename = 'Dokument.pdf' }) {
     const drag = dragRef.current;
     const el = viewportRef.current;
     if (!drag || !el) return;
-    el.scrollLeft = drag.left - (e.clientX - drag.x);
-    el.scrollTop = drag.top - (e.clientY - drag.y);
+    if (drag.pointerId != null && e.pointerId !== drag.pointerId) return;
+    const nextLeft = drag.left - (e.clientX - drag.x);
+    const nextTop = drag.top - (e.clientY - drag.y);
+    el.scrollLeft = nextLeft;
+    el.scrollTop = nextTop;
   };
 
   const endDrag = (e) => {
-    if (dragRef.current && viewportRef.current?.releasePointerCapture) {
+    const drag = dragRef.current;
+    if (!drag) return;
+    if (e?.pointerId != null && drag.pointerId != null && e.pointerId !== drag.pointerId) return;
+    const el = viewportRef.current;
+    if (el?.releasePointerCapture && drag.pointerId != null) {
       try {
-        viewportRef.current.releasePointerCapture(e.pointerId);
+        el.releasePointerCapture(drag.pointerId);
       } catch (_) { /* ignore */ }
     }
     dragRef.current = null;
@@ -213,7 +224,6 @@ export default function PdfGrabPreview({ url, filename = 'Dokument.pdf' }) {
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        onPointerLeave={endDrag}
       >
         {status === 'loading' && <p className="pdf-grab-empty">PDF wird geladen…</p>}
         {status === 'error' && <p className="pdf-grab-empty">{error || 'Fehler'}</p>}
@@ -230,10 +240,28 @@ export default function PdfGrabPreview({ url, filename = 'Dokument.pdf' }) {
         .pdf-grab-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         .pdf-grab-btn-fit { font-weight: 600; }
         .pdf-grab-meta { font-size: 11px; color: #888; width: 100%; }
-        .pdf-grab-viewport { flex: 1; min-height: 0; overflow: auto; cursor: grab; touch-action: none; user-select: none; }
+        .pdf-grab-viewport {
+          flex: 1; min-height: 0; overflow: auto;
+          cursor: grab; touch-action: none; user-select: none;
+          overscroll-behavior: contain;
+        }
         .pdf-grab-viewport.is-dragging { cursor: grabbing; }
-        .pdf-grab-pages { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 12px; min-height: 100%; box-sizing: border-box; }
-        .pdf-grab-page { display: block; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.12); pointer-events: none; }
+        /* safe center: bei Overflow links/rechts erreichbar (sonst Clip links) */
+        .pdf-grab-pages {
+          display: flex;
+          flex-direction: column;
+          align-items: safe center;
+          justify-content: safe start;
+          gap: 12px;
+          padding: 12px;
+          box-sizing: border-box;
+          width: max-content;
+          min-width: 100%;
+        }
+        @supports not (align-items: safe center) {
+          .pdf-grab-pages { align-items: flex-start; }
+        }
+        .pdf-grab-page { display: block; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.12); pointer-events: none; max-width: none; }
         .pdf-grab-empty { margin: auto; padding: 32px 16px; color: #666; font-size: 14px; text-align: center; }
       `}</style>
     </div>

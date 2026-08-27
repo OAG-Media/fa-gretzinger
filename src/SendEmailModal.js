@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { sendEmailApi, applyTemplatePlaceholders, TEMPLATE_TYPE_LABELS } from './emailApi';
 import { buildInvoicePdfAttachment } from './invoiceEmailUtils';
@@ -10,6 +11,7 @@ import { useNotice } from './AppNotice';
 import { storeEmailPdfAttachment, pdfBase64ToObjectUrl, openBlob, downloadBlob } from './emailAttachmentUtils';
 import PdfGrabPreview from './PdfGrabPreview';
 import EmailAttachBar, { isPdfAttachment } from './EmailAttachBar';
+import { GearIcon } from './icons';
 
 function normalizeCustomer(customer) {
   if (!customer) return null;
@@ -44,6 +46,7 @@ export default function SendEmailModal({
   onCustomerUpdated
 }) {
   const notice = useNotice();
+  const navigate = useNavigate();
   const mailbox = mailboxForEmailType(emailType);
   const emailFieldLabel = emailType === 'invoice' ? 'Rechnungs-E-Mail' : 'Filial-E-Mail';
   const [templates, setTemplates] = useState([]);
@@ -550,42 +553,48 @@ export default function SendEmailModal({
             <p className="send-email-from-hint">Von: {mailbox.from}</p>
           </div>
           <div className="send-email-header-actions">
-            {templates.length > 0 && (
-              <div className="send-email-tpl-wrap">
+            <div className="send-email-tpl-wrap">
+              <button
+                type="button"
+                className="send-email-tpl-btn send-email-tpl-btn-text"
+                title="Vorlagen"
+                aria-label="Vorlagen"
+              >
+                <GearIcon size={16} />
+                <span>Vorlagen</span>
+              </button>
+              <div className="send-email-tpl-menu" role="menu">
+                <div className="send-email-tpl-menu-title">Vorlage auswählen</div>
                 <button
                   type="button"
-                  className="send-email-tpl-btn"
-                  title="Vorlage auswählen"
-                  aria-label="Vorlage auswählen"
+                  className={`send-email-tpl-item${!templateId ? ' active' : ''}`}
+                  onClick={() => onPickTemplate('')}
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-                    <path d="M14 2v6h6" />
-                    <path d="M9 13h6M9 17h6" />
-                  </svg>
+                  — ohne gespeicherte Vorlage —
                 </button>
-                <div className="send-email-tpl-menu" role="menu">
-                  <div className="send-email-tpl-menu-title">Vorlage auswählen</div>
+                {templates.map((t) => (
                   <button
+                    key={t.id}
                     type="button"
-                    className={`send-email-tpl-item${!templateId ? ' active' : ''}`}
-                    onClick={() => onPickTemplate('')}
+                    className={`send-email-tpl-item${templateId === t.id ? ' active' : ''}`}
+                    onClick={() => onPickTemplate(t.id)}
                   >
-                    — ohne gespeicherte Vorlage —
+                    {t.name} ({TEMPLATE_TYPE_LABELS[t.type] || t.type})
                   </button>
-                  {templates.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      className={`send-email-tpl-item${templateId === t.id ? ' active' : ''}`}
-                      onClick={() => onPickTemplate(t.id)}
-                    >
-                      {t.name} ({TEMPLATE_TYPE_LABELS[t.type] || t.type})
-                    </button>
-                  ))}
-                </div>
+                ))}
+                <div className="send-email-tpl-sep" />
+                <button
+                  type="button"
+                  className="send-email-tpl-item send-email-tpl-manage"
+                  onClick={() => {
+                    onClose?.();
+                    navigate('/email-vorlagen');
+                  }}
+                >
+                  Vorlagen bearbeiten…
+                </button>
               </div>
-            )}
+            </div>
             <button type="button" onClick={onClose} className="send-email-btn-ghost">Abbrechen</button>
             <button type="button" disabled={!canSend || sending} onClick={handleSend} className="send-email-btn-primary">
               {sending ? 'Sendet…' : 'Senden'}
@@ -756,7 +765,7 @@ export default function SendEmailModal({
         .send-email-header h2 { margin: 0; color: #1d426a; font-weight: 500; font-size: 1.25rem; }
         .send-email-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
         .send-email-tpl-wrap { position: relative; }
-        .send-email-tpl-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #1d426a; cursor: pointer; }
+        .send-email-tpl-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #1d426a; cursor: pointer; font-size: 13px; font-weight: 600; }
         .send-email-tpl-btn:hover, .send-email-tpl-wrap:hover .send-email-tpl-btn { background: #eef4fa; }
         .send-email-tpl-menu { display: none; position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 260px; max-width: 340px; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,0.14); padding: 8px; }
         .send-email-tpl-wrap:hover .send-email-tpl-menu, .send-email-tpl-wrap:focus-within .send-email-tpl-menu { display: block; }
@@ -764,6 +773,8 @@ export default function SendEmailModal({
         .send-email-tpl-item { display: block; width: 100%; text-align: left; border: none; background: transparent; padding: 8px 10px; border-radius: 6px; font-size: 13px; color: #333; cursor: pointer; }
         .send-email-tpl-item:hover { background: #eef4fa; }
         .send-email-tpl-item.active { background: #e8f0f8; color: #1d426a; font-weight: 600; }
+        .send-email-tpl-sep { height: 1px; background: #eef2f6; margin: 6px 0; }
+        .send-email-tpl-manage { color: #1d426a; font-weight: 600; }
         .send-email-close { border: none; background: transparent; font-size: 22px; cursor: pointer; line-height: 1; padding: 4px 6px; }
         .send-email-from-hint { margin: 6px 0 0; font-size: 13px; color: #666; }
         .send-email-layout { display: grid; gap: 0; align-items: stretch; flex: 1; min-height: 0; overflow: hidden; }

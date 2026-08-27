@@ -9088,6 +9088,7 @@ function AppContent() {
         } />
         <Route path="/akustiker" element={<AkustikerPage customers={customers} setShowAddAkustikerModal={setShowAddAkustikerModal} showAddAkustikerModal={showAddAkustikerModal} newAkustiker={newAkustiker} setNewAkustiker={setNewAkustiker} handleAddAkustiker={handleAddAkustiker} navigate={navigate} loadCustomers={loadCustomers} />} />
         <Route path="/kontaktliste" element={<KontaktlistePage customers={customers} loadCustomers={loadCustomers} navigate={navigate} />} />
+        <Route path="/email-vorlagen" element={<EmailsPage navigate={navigate} role={userRole} />} />
         <Route
           path="/postfach/:mailboxKey/einstellungen"
           element={<EmailsPage navigate={navigate} role={userRole} />}

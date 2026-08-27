@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import RichTextEditor from './RichTextEditor';
 import TemplateVariableInsert from './TemplateVariableInsert';
@@ -8,15 +8,28 @@ import { hasSignature, toggleSignatureInHtml, stripSignature } from './signature
 import { getVariablesForType } from './emailTemplateVars';
 import { getMailbox, canAccessMailbox } from './emailConfig';
 import { useNotice } from './AppNotice';
+import { mailboxKeyForTemplateType } from './icons';
 
 const SIG_DEFAULT_HTML =
   '<p>Mit freundlichen Grüßen<br/>Fa. Gretzinger Hörgeräteservice<br/>info@fa-gretzinger.de</p>';
 
-function emptyFormForMailbox(mailboxKey) {
+const TYPE_TABS_ADMIN = [
+  { value: 'kv', label: 'KV' },
+  { value: 'invoice', label: 'Rechnung' },
+  { value: 'general', label: 'Normal' }
+];
+
+const TYPE_TABS_STAFF = [
+  { value: 'kv', label: 'KV' },
+  { value: 'general', label: 'Normal' }
+];
+
+function emptyFormForType(type) {
+  const mailbox_key = mailboxKeyForTemplateType(type);
   return {
     name: '',
-    type: mailboxKey === 'kv' ? 'kv' : 'invoice',
-    mailbox_key: mailboxKey,
+    type,
+    mailbox_key,
     subject: '',
     body_html:
       '<p>Guten Tag,</p><p></p><p>Mit freundlichen Grüßen<br/>Fa. Gretzinger<br/>info@fa-gretzinger.de</p>',
@@ -33,15 +46,20 @@ const emptySigForm = {
 };
 
 export default function EmailsPage({ navigate, role }) {
+  const location = useLocation();
   const { mailboxKey: paramKey } = useParams();
-  const mailboxKey = paramKey === 'kv' ? 'kv' : 'info';
-  const mailbox = getMailbox(mailboxKey);
+  const unified = location.pathname === '/email-vorlagen' || location.pathname === '/emails' || !paramKey;
+  const mailboxKey = unified ? null : (paramKey === 'kv' ? 'kv' : 'info');
+  const mailbox = mailboxKey ? getMailbox(mailboxKey) : null;
   const notice = useNotice();
+  const isAdmin = role === 'admin';
+  const typeTabs = isAdmin ? TYPE_TABS_ADMIN : TYPE_TABS_STAFF;
+  const [typeFilter, setTypeFilter] = useState(() => (isAdmin ? 'kv' : 'kv'));
   const [templates, setTemplates] = useState([]);
   const [signatures, setSignatures] = useState([]);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState(() => emptyFormForMailbox(mailboxKey));
+  const [form, setForm] = useState(() => emptyFormForType(unified ? 'kv' : (mailboxKey === 'kv' ? 'kv' : 'invoice')));
   const [sigForm, setSigForm] = useState(emptySigForm);
   const [editingId, setEditingId] = useState(null);
   const [editingSigId, setEditingSigId] = useState(null);
@@ -51,10 +69,23 @@ export default function EmailsPage({ navigate, role }) {
   const [sigPickerId, setSigPickerId] = useState('');
   const subjectInputRef = useRef(null);
   const bodyEditorRef = useRef(null);
-  const allowed = canAccessMailbox(role, mailboxKey);
 
-  const typeOptions =
-    mailboxKey === 'kv'
+  const allowed = unified
+    ? isAdmin || canAccessMailbox(role, 'kv')
+    : canAccessMailbox(role, mailboxKey);
+
+  const typeOptions = useMemo(() => {
+    if (unified) {
+      return typeTabs.map((t) => ({
+        value: t.value,
+        label: t.value === 'kv'
+          ? 'Kostenvoranschlag / Reparaturauftrag'
+          : t.value === 'invoice'
+            ? 'Rechnung'
+            : 'Standard / frei'
+      }));
+    }
+    return mailboxKey === 'kv'
       ? [
           { value: 'kv', label: 'Kostenvoranschlag / Reparaturauftrag' },
           { value: 'general', label: 'Standard / frei' }
@@ -63,6 +94,12 @@ export default function EmailsPage({ navigate, role }) {
           { value: 'invoice', label: 'Rechnung' },
           { value: 'general', label: 'Standard / frei' }
         ];
+  }, [unified, mailboxKey, typeTabs]);
+
+  const visibleTemplates = useMemo(() => {
+    if (!unified) return templates;
+    return templates.filter((t) => t.type === typeFilter);
+  }, [templates, unified, typeFilter]);
 
   const templateVariables = useMemo(
     () => getVariablesForType(form.type),
@@ -104,14 +141,27 @@ export default function EmailsPage({ navigate, role }) {
   const load = async () => {
     setLoading(true);
     try {
+      let templatesQuery = supabase
+        .from('email_templates')
+        .select('*')
+        .order('updated_at', { ascending: false });
+      if (!unified && mailboxKey) {
+        templatesQuery = templatesQuery.eq('mailbox_key', mailboxKey);
+      } else if (!isAdmin) {
+        templatesQuery = templatesQuery.in('type', ['kv', 'general']).eq('mailbox_key', 'kv');
+      }
+
+      let logsQuery = supabase
+        .from('email_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (mailboxKey) logsQuery = logsQuery.eq('mailbox_key', mailboxKey);
+
       const [{ data: t, error: te }, { data: s, error: se }, { data: l, error: le }] = await Promise.all([
-        supabase
-          .from('email_templates')
-          .select('*')
-          .eq('mailbox_key', mailboxKey)
-          .order('updated_at', { ascending: false }),
+        templatesQuery,
         supabase.from('email_signatures').select('*').order('updated_at', { ascending: false }),
-        supabase.from('email_logs').select('*').eq('mailbox_key', mailboxKey).order('created_at', { ascending: false }).limit(100)
+        logsQuery
       ]);
       if (te) throw te;
       if (se) throw se;
@@ -129,15 +179,20 @@ export default function EmailsPage({ navigate, role }) {
   };
 
   useEffect(() => {
-    setForm(emptyFormForMailbox(mailboxKey));
+    const initialType = unified
+      ? (typeTabs[0]?.value || 'kv')
+      : (mailboxKey === 'kv' ? 'kv' : 'invoice');
+    setTypeFilter(initialType);
+    setForm(emptyFormForType(initialType));
     setEditingId(null);
     setTab('templates');
     load();
-  }, [mailboxKey]);
+  }, [mailboxKey, unified]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startNew = () => {
     setEditingId(null);
-    setForm(emptyFormForMailbox(mailboxKey));
+    const t = unified ? typeFilter : (mailboxKey === 'kv' ? 'kv' : 'invoice');
+    setForm(emptyFormForType(t));
     setSigAppendChecked(false);
     setSigPickerId(defaultSignature?.id || '');
   };
@@ -147,12 +202,13 @@ export default function EmailsPage({ navigate, role }) {
     setForm({
       name: t.name,
       type: t.type,
-      mailbox_key: mailboxKey,
+      mailbox_key: t.mailbox_key || mailboxKeyForTemplateType(t.type),
       subject: t.subject,
       body_html: t.body_html,
       is_default: !!t.is_default,
       active: t.active !== false
     });
+    if (unified) setTypeFilter(t.type);
     setSigAppendChecked(hasSignature(t.body_html));
     setSigPickerId(defaultSignature?.id || '');
   };
@@ -184,18 +240,19 @@ export default function EmailsPage({ navigate, role }) {
     }
     setSaving(true);
     try {
+      const resolvedMailbox = form.mailbox_key || mailboxKeyForTemplateType(form.type);
       if (form.is_default) {
         await supabase
           .from('email_templates')
           .update({ is_default: false })
           .eq('type', form.type)
-          .eq('mailbox_key', mailboxKey)
+          .eq('mailbox_key', resolvedMailbox)
           .eq('is_default', true);
       }
 
       const payload = {
         ...form,
-        mailbox_key: mailboxKey,
+        mailbox_key: resolvedMailbox,
         name: form.name.trim(),
         subject: form.subject.trim(),
         updated_at: new Date().toISOString()
@@ -293,15 +350,23 @@ export default function EmailsPage({ navigate, role }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ margin: 0, color: '#1d426a', fontWeight: 400 }}>
-            E-Mail-Einstellungen
-            <span style={{ fontSize: '1rem', fontWeight: 400, color: '#8a9aab' }}> – {mailbox.address}</span>
+            {unified ? 'E-Mail-Vorlagen' : 'E-Mail-Einstellungen'}
+            {!unified && mailbox && (
+              <span style={{ fontSize: '1rem', fontWeight: 400, color: '#8a9aab' }}> – {mailbox.address}</span>
+            )}
           </h1>
           <p style={{ color: '#666', marginTop: 8 }}>
-            Vorlagen und Signaturen für dieses Postfach. Absender: {mailbox.from}
+            {unified
+              ? 'Vorlagen für KV, Rechnungen und normale E-Mails — sowie Signaturen.'
+              : `Vorlagen und Signaturen für dieses Postfach. Absender: ${mailbox?.from || ''}`}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={() => navigate(mailbox.navPath)} style={btnGhost}>
+          <button
+            type="button"
+            onClick={() => navigate(mailbox?.navPath || (isAdmin ? '/postfach/info' : '/postfach/kv'))}
+            style={btnGhost}
+          >
             ← Postfach
           </button>
           <button type="button" onClick={() => navigate('/')} style={btnGhost}>
@@ -309,6 +374,35 @@ export default function EmailsPage({ navigate, role }) {
           </button>
         </div>
       </div>
+
+      {unified && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+          {typeTabs.map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() => {
+                setTypeFilter(t.value);
+                setEditingId(null);
+                setForm(emptyFormForType(t.value));
+                setTab('templates');
+              }}
+              style={{
+                padding: '8px 14px',
+                borderRadius: 999,
+                border: typeFilter === t.value ? '2px solid #1d426a' : '1px solid #d1d5db',
+                background: typeFilter === t.value ? '#e8f0f8' : '#fff',
+                color: '#1d426a',
+                fontWeight: typeFilter === t.value ? 600 : 500,
+                cursor: 'pointer',
+                fontSize: 14
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 8, marginTop: 20, borderBottom: '1px solid #e5e7eb' }}>
         <TabBtn active={tab === 'templates'} onClick={() => setTab('templates')} label="E-Mail-Vorlagen" />
@@ -387,7 +481,7 @@ export default function EmailsPage({ navigate, role }) {
               </button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {templates.map((t) => (
+              {visibleTemplates.map((t) => (
                 <button
                   key={t.id}
                   type="button"
@@ -406,11 +500,12 @@ export default function EmailsPage({ navigate, role }) {
                     {TEMPLATE_TYPE_LABELS[t.type] || t.type}
                     {t.is_default ? ' · Standard' : ''}
                     {!t.active ? ' · inaktiv' : ''}
+                    {unified && t.mailbox_key ? ` · ${t.mailbox_key}@` : ''}
                   </div>
                   <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>{t.subject}</div>
                 </button>
               ))}
-              {templates.length === 0 && <p style={{ color: '#888' }}>Noch keine E-Mail-Vorlagen.</p>}
+              {visibleTemplates.length === 0 && <p style={{ color: '#888' }}>Noch keine E-Mail-Vorlagen.</p>}
             </div>
           </div>
 
@@ -428,13 +523,34 @@ export default function EmailsPage({ navigate, role }) {
             <label style={label}>Typ</label>
             <select
               value={form.type}
-              onChange={(e) => setForm((p) => ({ ...p, type: e.target.value }))}
+              onChange={(e) => {
+                const nextType = e.target.value;
+                setForm((p) => ({
+                  ...p,
+                  type: nextType,
+                  mailbox_key: mailboxKeyForTemplateType(nextType)
+                }));
+                if (unified) setTypeFilter(nextType);
+              }}
               style={input}
             >
               {typeOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
+            {form.type === 'general' && (
+              <>
+                <label style={label}>Postfach</label>
+                <select
+                  value={form.mailbox_key || 'info'}
+                  onChange={(e) => setForm((p) => ({ ...p, mailbox_key: e.target.value }))}
+                  style={input}
+                >
+                  <option value="info">info@fa-gretzinger.de</option>
+                  <option value="kv">kv@fa-gretzinger.de</option>
+                </select>
+              </>
+            )}
             <label style={label}>Betreff</label>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <input
