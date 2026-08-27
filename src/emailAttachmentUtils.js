@@ -10,6 +10,13 @@ function base64ToUint8Array(base64) {
   return bytes;
 }
 
+/** base64 PDF → Blob + object URL (Caller muss URL.revokeObjectURL aufrufen). */
+export function pdfBase64ToObjectUrl(base64) {
+  const bytes = base64ToUint8Array(base64);
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  return { blob, objectUrl: URL.createObjectURL(blob) };
+}
+
 /** Upload PDF bytes after email_logs insert; returns meta with storage_path. */
 export async function storeEmailPdfAttachment({ logId, filename, pdfBase64, contentType = 'application/pdf' }) {
   if (!logId || !pdfBase64) return null;

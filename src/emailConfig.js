@@ -61,5 +61,6 @@ export const EMAIL_TYPE_LABELS = {
   free: 'E-Mail',
   reply: 'Antwort',
   inbound: 'Eingang',
+  draft: 'Entwurf',
   general: 'Standard'
 };

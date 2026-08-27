@@ -1,8 +1,5 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
-export const DEFAULT_LOGO_URL =
-  'https://gretzinger.b-cdn.net/Webseiten/Fa-Gretzinger/Logo/Gretzinger-Ho%CC%88rgera%CC%88te%20Logo.png';
-
 const FONT_SIZES = [
   { label: 'Klein (11)', px: 11 },
   { label: 'Normal (14)', px: 14 },
@@ -18,10 +15,62 @@ const LINE_HEIGHTS = [
   { label: 'Doppel (2.0)', value: '2.0' }
 ];
 
+function Icon({ children, size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
+
+const IcoAlignLeft = () => (
+  <Icon>
+    <path d="M4 6h16M4 12h10M4 18h14" />
+  </Icon>
+);
+const IcoAlignCenter = () => (
+  <Icon>
+    <path d="M4 6h16M7 12h10M5 18h14" />
+  </Icon>
+);
+const IcoAlignRight = () => (
+  <Icon>
+    <path d="M4 6h16M10 12h10M6 18h14" />
+  </Icon>
+);
+const IcoBulletList = () => (
+  <Icon>
+    <circle cx="5" cy="7" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="5" cy="12" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="5" cy="17" r="1.2" fill="currentColor" stroke="none" />
+    <path d="M9 7h11M9 12h11M9 17h11" />
+  </Icon>
+);
+const IcoNumberList = () => (
+  <Icon>
+    <path d="M4 7h2M4 12h2M4 17h2M9 7h11M9 12h11M9 17h11" />
+    <path d="M5 5.5v3M5 10.5v3.5M4.5 17.5h1.5" />
+  </Icon>
+);
+const IcoLink = () => (
+  <Icon>
+    <path d="M10 13a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 0 0-7.07-7.07L10.5 5.5" />
+    <path d="M14 11a5 5 0 0 0-7.07 0L4.81 13.12a5 5 0 0 0 7.07 7.07L13.5 18.5" />
+  </Icon>
+);
+const IcoImage = () => (
+  <Icon>
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <circle cx="9" cy="10" r="1.5" />
+    <path d="m21 15-4.5-4.5L8 19" />
+  </Icon>
+);
+
 /** Lightweight rich-text editor (contentEditable) for email fields. */
 const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, placeholder }, ref) {
   const editorRef = useRef(null);
   const lastExternal = useRef(null);
+  const resizeRef = useRef(null);
   const [lineHeight, setLineHeight] = useState('1.5');
   const [color, setColor] = useState('#1d426a');
 
@@ -127,42 +176,31 @@ const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, pla
     exec('foreColor', c);
   };
 
+  const clearImageSelection = () => {
+    editorRef.current?.querySelectorAll('img.rte-img-selected').forEach((img) => {
+      img.classList.remove('rte-img-selected');
+      img.style.outline = '';
+    });
+  };
+
+  const selectImage = (img) => {
+    clearImageSelection();
+    img.classList.add('rte-img-selected');
+    img.style.outline = '2px solid #1d426a';
+    img.style.outlineOffset = '2px';
+  };
+
   const insertImage = (url, widthPx = 280) => {
     if (!url) return;
     insertHtml(
-      `<img src="${url}" alt="" style="width:${widthPx}px;height:auto;display:block;margin:12px 0;" />`
+      `<img src="${url}" alt="" style="width:${widthPx}px;height:auto;display:block;margin:12px 0;max-width:100%;" />`
     );
   };
 
   const insertImagePrompt = () => {
-    const url = window.prompt('Bild-URL (CDN-Link, z. B. BunnyCDN):', DEFAULT_LOGO_URL);
+    const url = window.prompt('Bild-URL (CDN-Link, z. B. BunnyCDN):', '');
     if (!url) return;
-    const w = window.prompt('Breite in Pixel (leer = 280):', '280');
-    insertImage(url.trim(), w ? parseInt(w, 10) || 280 : 280);
-  };
-
-  const insertLogo = () => {
-    const w = window.prompt('Logo-Breite in Pixel:', '280');
-    insertImage(DEFAULT_LOGO_URL, w ? parseInt(w, 10) || 280 : 280);
-  };
-
-  const resizeSelectedImage = () => {
-    const sel = window.getSelection();
-    if (!sel?.anchorNode) return;
-    let node = sel.anchorNode;
-    if (node.nodeType === 3) node = node.parentElement;
-    const img = node?.closest?.('img') || (node?.tagName === 'IMG' ? node : null);
-    if (!img) {
-      window.alert('Bitte zuerst ein Bild im Text anklicken.');
-      return;
-    }
-    const current = parseInt(img.style.width, 10) || img.width || 280;
-    const w = window.prompt('Neue Breite in Pixel:', String(current));
-    if (!w) return;
-    img.style.width = `${parseInt(w, 10) || current}px`;
-    img.style.height = 'auto';
-    img.style.maxWidth = '100%';
-    emitChange();
+    insertImage(url.trim(), 280);
   };
 
   const insertLink = () => {
@@ -174,19 +212,48 @@ const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, pla
 
   const handleEditorClick = (e) => {
     if (e.target.tagName === 'IMG') {
-      e.target.style.outline = '2px solid #1d426a';
-      editorRef.current?.querySelectorAll('img').forEach((img) => {
-        if (img !== e.target) img.style.outline = '';
-      });
+      selectImage(e.target);
+    } else {
+      clearImageSelection();
     }
+  };
+
+  const handleEditorMouseDown = (e) => {
+    if (e.target.tagName !== 'IMG') return;
+    const img = e.target;
+    const wasSelected = img.classList.contains('rte-img-selected');
+    selectImage(img);
+    // Erstes Klicken = auswählen; danach Ziehen = Größe ändern
+    if (!wasSelected) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = img.getBoundingClientRect().width;
+    resizeRef.current = { img, startX, startW };
+    const onMove = (ev) => {
+      const drag = resizeRef.current;
+      if (!drag) return;
+      const w = Math.max(48, Math.min(900, drag.startW + (ev.clientX - drag.startX)));
+      drag.img.style.width = `${Math.round(w)}px`;
+      drag.img.style.height = 'auto';
+      drag.img.style.maxWidth = '100%';
+    };
+    const onUp = () => {
+      resizeRef.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      emitChange();
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
   };
 
   return (
     <div className="rte-root">
       <div className="rte-toolbar">
-        <ToolBtn onClick={() => exec('bold')} label="B" title="Fett" style={{ fontWeight: 700 }} />
-        <ToolBtn onClick={() => exec('italic')} label="I" title="Kursiv" style={{ fontStyle: 'italic' }} />
-        <ToolBtn onClick={() => exec('underline')} label="U" title="Unterstrichen" style={{ textDecoration: 'underline' }} />
+        <ToolBtn onClick={() => exec('bold')} title="Fett" style={{ fontWeight: 700 }}>B</ToolBtn>
+        <ToolBtn onClick={() => exec('italic')} title="Kursiv" style={{ fontStyle: 'italic' }}>I</ToolBtn>
+        <ToolBtn onClick={() => exec('underline')} title="Unterstrichen" style={{ textDecoration: 'underline' }}>U</ToolBtn>
         <span className="rte-sep" />
         <select
           className="rte-select"
@@ -217,18 +284,15 @@ const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, pla
           ))}
         </select>
         <span className="rte-sep" />
-        <ToolBtn onClick={() => exec('justifyLeft')} label="≡ links" title="Linksbündig" />
-        <ToolBtn onClick={() => exec('justifyCenter')} label="≡ mitte" title="Zentriert" />
-        <ToolBtn onClick={() => exec('justifyRight')} label="≡ rechts" title="Rechtsbündig" />
+        <ToolBtn onClick={() => exec('justifyLeft')} title="Linksbündig"><IcoAlignLeft /></ToolBtn>
+        <ToolBtn onClick={() => exec('justifyCenter')} title="Zentriert"><IcoAlignCenter /></ToolBtn>
+        <ToolBtn onClick={() => exec('justifyRight')} title="Rechtsbündig"><IcoAlignRight /></ToolBtn>
         <span className="rte-sep" />
-        <ToolBtn onClick={() => exec('insertUnorderedList')} label="• Liste" title="Aufzählung" />
-        <ToolBtn onClick={() => exec('insertOrderedList')} label="1. Liste" title="Nummerierung" />
+        <ToolBtn onClick={() => exec('insertUnorderedList')} title="Aufzählung"><IcoBulletList /></ToolBtn>
+        <ToolBtn onClick={() => exec('insertOrderedList')} title="Nummerierung"><IcoNumberList /></ToolBtn>
         <span className="rte-sep" />
-        <ToolBtn onClick={insertLink} label="Link" title="Link einfügen" />
-        <ToolBtn onClick={insertImagePrompt} label="Bild" title="Bild per URL einfügen" />
-        <ToolBtn onClick={insertLogo} label="Logo" title="Gretzinger-Logo einfügen" />
-        <ToolBtn onClick={resizeSelectedImage} label="Größe" title="Bild vergrößern/verkleinern" />
-        <ToolBtn onClick={() => exec('removeFormat')} label="Format weg" title="Formatierung entfernen" />
+        <ToolBtn onClick={insertLink} title="Link einfügen"><IcoLink /></ToolBtn>
+        <ToolBtn onClick={insertImagePrompt} title="Bild per URL einfügen"><IcoImage /></ToolBtn>
       </div>
       <div
         ref={editorRef}
@@ -237,6 +301,7 @@ const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, pla
         suppressContentEditableWarning
         onInput={emitChange}
         onClick={handleEditorClick}
+        onMouseDown={handleEditorMouseDown}
         data-placeholder={placeholder || 'Text…'}
         style={{ lineHeight }}
       />
@@ -290,6 +355,21 @@ const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, pla
           margin: 0 4px;
           align-self: stretch;
         }
+        .rte-tool {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 32px;
+          height: 32px;
+          padding: 4px 8px;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          background: #fff;
+          color: #1d426a;
+          cursor: pointer;
+          font-size: 13px;
+        }
+        .rte-tool:hover { background: #eef4fa; }
         .rte-editor {
           min-height: 180px;
           padding: 14px;
@@ -311,6 +391,11 @@ const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, pla
           max-width: 100%;
           height: auto;
           cursor: pointer;
+          position: relative;
+        }
+        .rte-editor img.rte-img-selected {
+          cursor: nwse-resize;
+          box-shadow: 0 0 0 2px #1d426a;
         }
         .rte-editor a {
           color: #1d426a;
@@ -323,23 +408,10 @@ const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, pla
 
 export default RichTextEditor;
 
-function ToolBtn({ onClick, label, title, style }) {
+function ToolBtn({ onClick, title, style, children }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      style={{
-        padding: '6px 10px',
-        border: '1px solid #d1d5db',
-        borderRadius: 6,
-        background: '#fff',
-        cursor: 'pointer',
-        fontSize: 13,
-        ...style
-      }}
-    >
-      {label}
+    <button type="button" className="rte-tool" onClick={onClick} title={title} style={style}>
+      {children}
     </button>
   );
 }

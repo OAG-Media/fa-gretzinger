@@ -7,7 +7,9 @@ import RichTextEditor from './RichTextEditor';
 import { hasSignature, toggleSignatureInHtml, stripSignature } from './signatureUtils';
 import { mailboxForEmailType } from './emailConfig';
 import { useNotice } from './AppNotice';
-import { storeEmailPdfAttachment } from './emailAttachmentUtils';
+import { storeEmailPdfAttachment, pdfBase64ToObjectUrl, openBlob, downloadBlob } from './emailAttachmentUtils';
+import PdfGrabPreview from './PdfGrabPreview';
+import EmailAttachBar, { isPdfAttachment } from './EmailAttachBar';
 
 function normalizeCustomer(customer) {
   if (!customer) return null;
@@ -62,8 +64,23 @@ export default function SendEmailModal({
   const [showEditAkustiker, setShowEditAkustiker] = useState(false);
   const [editEmail, setEditEmail] = useState('');
   const [savingAkustiker, setSavingAkustiker] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
+  const [pdfPreviewBlob, setPdfPreviewBlob] = useState(null);
+  const [previewFilename, setPreviewFilename] = useState('');
+  const [previewKey, setPreviewKey] = useState('primary-pdf');
+  const [extraAttachments, setExtraAttachments] = useState([]);
+  const [previewWidth, setPreviewWidth] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem('send_email_preview_width'));
+      return Number.isFinite(v) && v >= 280 && v <= 720 ? v : 460;
+    } catch {
+      return 460;
+    }
+  });
 
   const originalEmailRef = useRef('');
+  const previewPaneRef = useRef(null);
+  const resizeDragRef = useRef(null);
 
   useEffect(() => {
     if (!open) return;
@@ -78,6 +95,8 @@ export default function SendEmailModal({
     setPdfError('');
     setAppendSignature(false);
     setShowEditAkustiker(false);
+    setExtraAttachments([]);
+    setPreviewKey('primary-pdf');
     setPdfBase64(pdfBase64Prop || '');
     setPdfFilename(pdfFilenameProp || '');
 
@@ -189,6 +208,82 @@ export default function SendEmailModal({
       cancelled = true;
     };
   }, [open, emailType, repairOrder, pdfBase64Prop]);
+
+  useEffect(() => {
+    const attachFilename = pdfFilename || (emailType === 'invoice' ? 'Rechnung.pdf' : 'Kostenvoranschlag.pdf');
+    let selected = null;
+    if (previewKey === 'primary-pdf' && pdfBase64) {
+      selected = { key: 'primary-pdf', filename: attachFilename, content: pdfBase64 };
+    } else {
+      selected = extraAttachments.find((a) => a.key === previewKey && isPdfAttachment(a)) || null;
+      if (!selected && pdfBase64) {
+        selected = { key: 'primary-pdf', filename: attachFilename, content: pdfBase64 };
+      } else if (!selected) {
+        selected = extraAttachments.find((a) => isPdfAttachment(a)) || null;
+      }
+    }
+
+    if (!selected?.content) {
+      setPdfPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return '';
+      });
+      setPdfPreviewBlob(null);
+      setPreviewFilename('');
+      return undefined;
+    }
+
+    const { blob, objectUrl } = pdfBase64ToObjectUrl(selected.content);
+    setPdfPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return objectUrl;
+    });
+    setPdfPreviewBlob(blob);
+    setPreviewFilename(selected.filename || 'Dokument.pdf');
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [pdfBase64, pdfFilename, emailType, previewKey, extraAttachments]);
+
+  useEffect(() => () => {
+    setPdfPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return '';
+    });
+  }, []);
+
+  useEffect(() => {
+    if (previewKey === 'primary-pdf') return;
+    if (previewKey && !extraAttachments.some((a) => a.key === previewKey)) {
+      setPreviewKey(pdfBase64 ? 'primary-pdf' : '');
+    }
+  }, [extraAttachments, previewKey, pdfBase64]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('send_email_preview_width', String(previewWidth));
+    } catch (_) { /* ignore */ }
+  }, [previewWidth]);
+
+  const startPreviewResize = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = previewWidth;
+    resizeDragRef.current = { startX, startW };
+    const onMove = (ev) => {
+      if (!resizeDragRef.current) return;
+      // Nach links ziehen = Vorschau größer
+      const next = Math.min(720, Math.max(280, resizeDragRef.current.startW - (ev.clientX - resizeDragRef.current.startX)));
+      setPreviewWidth(next);
+    };
+    const onUp = () => {
+      resizeDragRef.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
 
   const selectedSignature = useMemo(
     () => signatures.find((s) => s.id === signatureId) || signatures.find((s) => s.is_default) || signatures[0],
@@ -323,10 +418,22 @@ export default function SendEmailModal({
     try {
       const attachments = [];
       const attachmentMeta = [];
+      const primaryFilename = pdfFilename || (emailType === 'invoice' ? 'Rechnung.pdf' : 'Kostenvoranschlag.pdf');
       if (pdfBase64) {
-        const filename = pdfFilename || (emailType === 'invoice' ? 'Rechnung.pdf' : 'Kostenvoranschlag.pdf');
-        attachments.push({ filename, content: pdfBase64 });
-        attachmentMeta.push({ filename, content_type: 'application/pdf' });
+        attachments.push({ filename: primaryFilename, content: pdfBase64, content_type: 'application/pdf' });
+        attachmentMeta.push({ filename: primaryFilename, content_type: 'application/pdf', content: pdfBase64 });
+      }
+      for (const a of extraAttachments) {
+        attachments.push({
+          filename: a.filename,
+          content: a.content,
+          content_type: a.contentType || 'application/octet-stream'
+        });
+        attachmentMeta.push({
+          filename: a.filename,
+          content_type: a.contentType || 'application/octet-stream',
+          content: a.content
+        });
       }
 
       const result = await sendEmailApi({
@@ -353,7 +460,7 @@ export default function SendEmailModal({
           reply_to: mailbox.address,
           subject,
           body_html: bodyHtml,
-          attachments: attachmentMeta,
+          attachments: attachmentMeta.map(({ filename, content_type }) => ({ filename, content_type })),
           resend_id: result.id || null,
           status: 'sent',
           is_test: false
@@ -362,17 +469,22 @@ export default function SendEmailModal({
         .single();
       if (insertErr) throw insertErr;
 
-      if (pdfBase64 && inserted?.id && attachmentMeta[0]) {
+      if (inserted?.id && attachmentMeta.length) {
         try {
-          const stored = await storeEmailPdfAttachment({
-            logId: inserted.id,
-            filename: attachmentMeta[0].filename,
-            pdfBase64
-          });
-          if (stored) {
+          const stored = [];
+          for (const a of attachmentMeta) {
+            const s = await storeEmailPdfAttachment({
+              logId: inserted.id,
+              filename: a.filename,
+              pdfBase64: a.content,
+              contentType: a.content_type
+            });
+            if (s) stored.push(s);
+          }
+          if (stored.length) {
             await supabase
               .from('email_logs')
-              .update({ attachments: [stored] })
+              .update({ attachments: stored })
               .eq('id', inserted.id);
           }
         } catch (_) {
@@ -413,6 +525,22 @@ export default function SendEmailModal({
     ? `${customerData.company || '—'}${customerData.branch ? ` / ${customerData.branch}` : ''}`
     : null;
 
+  const focusPdfPreview = () => {
+    previewPaneRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+
+  const handlePreviewAttachment = (att) => {
+    if (!att?.key) return;
+    setPreviewKey(att.key);
+    focusPdfPreview();
+  };
+
+  const attachFilename = pdfFilename || (emailType === 'invoice' ? 'Rechnung.pdf' : 'Kostenvoranschlag.pdf');
+  const lockedAttachments = pdfBase64
+    ? [{ key: 'primary-pdf', filename: attachFilename, locked: true, content: pdfBase64, contentType: 'application/pdf' }]
+    : [];
+  const shownPreviewName = previewFilename || attachFilename;
+
   return (
     <div className="send-email-overlay" onClick={onClose}>
       <div className="send-email-modal" onClick={(e) => e.stopPropagation()}>
@@ -422,6 +550,42 @@ export default function SendEmailModal({
             <p className="send-email-from-hint">Von: {mailbox.from}</p>
           </div>
           <div className="send-email-header-actions">
+            {templates.length > 0 && (
+              <div className="send-email-tpl-wrap">
+                <button
+                  type="button"
+                  className="send-email-tpl-btn"
+                  title="Vorlage auswählen"
+                  aria-label="Vorlage auswählen"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+                    <path d="M14 2v6h6" />
+                    <path d="M9 13h6M9 17h6" />
+                  </svg>
+                </button>
+                <div className="send-email-tpl-menu" role="menu">
+                  <div className="send-email-tpl-menu-title">Vorlage auswählen</div>
+                  <button
+                    type="button"
+                    className={`send-email-tpl-item${!templateId ? ' active' : ''}`}
+                    onClick={() => onPickTemplate('')}
+                  >
+                    — ohne gespeicherte Vorlage —
+                  </button>
+                  {templates.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      className={`send-email-tpl-item${templateId === t.id ? ' active' : ''}`}
+                      onClick={() => onPickTemplate(t.id)}
+                    >
+                      {t.name} ({TEMPLATE_TYPE_LABELS[t.type] || t.type})
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <button type="button" onClick={onClose} className="send-email-btn-ghost">Abbrechen</button>
             <button type="button" disabled={!canSend || sending} onClick={handleSend} className="send-email-btn-primary">
               {sending ? 'Sendet…' : 'Senden'}
@@ -430,86 +594,130 @@ export default function SendEmailModal({
           </div>
         </div>
 
-        {customerData && (
-          <div className="send-email-akustiker-box">
-            <div><strong>Akustiker:</strong> {akustikerLabel}</div>
-            <div className={recipientForType(customerData, emailType) ? 'send-email-ak-ok' : 'send-email-ak-warn'}>
-              {recipientForType(customerData, emailType)
-                ? `${emailFieldLabel}: ${recipientForType(customerData, emailType)}`
-                : `${emailFieldLabel} noch nicht hinterlegt`}
-            </div>
-            <button type="button" className="send-email-btn-ghost send-email-ak-btn" onClick={() => {
-              setEditEmail(recipientForType(customerData, emailType) || to || '');
-              setShowEditAkustiker(true);
-            }}>
-              {emailFieldLabel} bearbeiten
-            </button>
-          </div>
-        )}
-
-        <label className="send-email-label">Empfänger</label>
-        <input className="send-email-input" value={to} onChange={(e) => setTo(e.target.value)} placeholder="name@firma.de" />
-
-        <label className="send-email-label">E-Mail-Vorlage</label>
-        <select className="send-email-input" value={templateId} onChange={(e) => onPickTemplate(e.target.value)}>
-          <option value="">— ohne gespeicherte Vorlage —</option>
-          {templates.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name} ({TEMPLATE_TYPE_LABELS[t.type] || t.type})
-            </option>
-          ))}
-        </select>
-
-        <label className="send-email-label">Betreff</label>
-        <input className="send-email-input" value={subject} onChange={(e) => setSubject(e.target.value)} />
-
-        <label className="send-email-label">Inhalt (vor dem Senden editierbar)</label>
-        <RichTextEditor value={bodyHtml} onChange={setBodyHtml} />
-
-        {signatures.length > 0 && (
-          <div className="send-email-sig-row">
-            <label className="send-email-check">
-              <input
-                type="checkbox"
-                checked={appendSignature}
-                onChange={(e) => handleSignatureToggle(e.target.checked)}
-              />
-              Signatur in Text einfügen
-            </label>
-            {appendSignature && (
-              <select
-                className="send-email-input send-email-sig-select"
-                value={signatureId}
-                onChange={(e) => handleSignaturePick(e.target.value)}
-              >
-                {signatures.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}{s.is_default ? ' (Standard)' : ''}</option>
-                ))}
-              </select>
+        <div
+          className="send-email-layout"
+          style={{ gridTemplateColumns: `minmax(280px, 1fr) 6px ${previewWidth}px` }}
+        >
+          <div className="send-email-form">
+            {customerData && (
+              <div className="send-email-akustiker-box">
+                <div><strong>Akustiker:</strong> {akustikerLabel}</div>
+                <div className={recipientForType(customerData, emailType) ? 'send-email-ak-ok' : 'send-email-ak-warn'}>
+                  {recipientForType(customerData, emailType)
+                    ? `${emailFieldLabel}: ${recipientForType(customerData, emailType)}`
+                    : `${emailFieldLabel} noch nicht hinterlegt`}
+                </div>
+                <button type="button" className="send-email-btn-ghost send-email-ak-btn" onClick={() => {
+                  setEditEmail(recipientForType(customerData, emailType) || to || '');
+                  setShowEditAkustiker(true);
+                }}>
+                  {emailFieldLabel} bearbeiten
+                </button>
+              </div>
             )}
+
+            <label className="send-email-label">Empfänger</label>
+            <input className="send-email-input" value={to} onChange={(e) => setTo(e.target.value)} placeholder="name@firma.de" />
+
+            <label className="send-email-label">Betreff</label>
+            <input className="send-email-input" value={subject} onChange={(e) => setSubject(e.target.value)} />
+
+            <div className="send-email-pdf-row">
+              <EmailAttachBar
+                attachments={extraAttachments}
+                onChange={setExtraAttachments}
+                lockedAttachments={lockedAttachments}
+                excludeKvIds={emailType === 'kv' && repairOrderId ? [repairOrderId] : []}
+                excludeInvoiceIds={emailType === 'invoice' && invoiceId ? [invoiceId] : []}
+                busyLabel={pdfLoading ? 'Haupt-PDF wird erzeugt…' : ''}
+                onPreview={handlePreviewAttachment}
+                activePreviewKey={previewKey}
+              />
+              {!pdfLoading && !pdfBase64 && (
+                <span className="send-email-pdf-warn">{pdfError || 'Kein Haupt-PDF — Zusatzanhänge und Textversand möglich.'}</span>
+              )}
+            </div>
+
+            <label className="send-email-label">Inhalt (vor dem Senden editierbar)</label>
+            <RichTextEditor value={bodyHtml} onChange={setBodyHtml} />
+
+            {signatures.length > 0 && (
+              <div className="send-email-sig-row">
+                <label className="send-email-check">
+                  <input
+                    type="checkbox"
+                    checked={appendSignature}
+                    onChange={(e) => handleSignatureToggle(e.target.checked)}
+                  />
+                  Signatur in Text einfügen
+                </label>
+                {appendSignature && (
+                  <select
+                    className="send-email-input send-email-sig-select"
+                    value={signatureId}
+                    onChange={(e) => handleSignaturePick(e.target.value)}
+                  >
+                    {signatures.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}{s.is_default ? ' (Standard)' : ''}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+
+            {error && <div className="send-email-error">{error}</div>}
+
+            <div className="send-email-actions">
+              <button type="button" onClick={onClose} className="send-email-btn-ghost">Abbrechen</button>
+              <button type="button" disabled={!canSend || sending} onClick={handleSend} className="send-email-btn-primary">
+                {sending ? 'Sendet…' : 'Senden'}
+              </button>
+            </div>
           </div>
-        )}
 
-        <div className="send-email-pdf-row">
-          {pdfLoading && <span className="send-email-pdf-info">PDF wird erzeugt…</span>}
-          {!pdfLoading && pdfBase64 && (
-            <span className="send-email-pdf-ok">PDF-Anhang: {pdfFilename || 'Dokument.pdf'}</span>
-          )}
-          {!pdfLoading && !pdfBase64 && emailType === 'invoice' && (
-            <span className="send-email-pdf-warn">{pdfError || 'Kein PDF — Versand nur als Text möglich.'}</span>
-          )}
-          {!pdfLoading && !pdfBase64 && emailType === 'kv' && (
-            <span className="send-email-pdf-warn">{pdfError || 'Kein PDF — Versand nur als Text möglich.'}</span>
-          )}
-        </div>
+          <div
+            className="send-email-resizer"
+            onMouseDown={startPreviewResize}
+            title="Breite der Vorschau ziehen"
+            role="separator"
+            aria-orientation="vertical"
+          />
 
-        {error && <div className="send-email-error">{error}</div>}
-
-        <div className="send-email-actions">
-          <button type="button" onClick={onClose} className="send-email-btn-ghost">Abbrechen</button>
-          <button type="button" disabled={!canSend || sending} onClick={handleSend} className="send-email-btn-primary">
-            {sending ? 'Sendet…' : 'Senden'}
-          </button>
+          <aside className="send-email-preview" ref={previewPaneRef}>
+            <div className="send-email-preview-top">
+              <h3 className="send-email-preview-title">PDF-Vorschau</h3>
+              <div className="send-email-preview-actions">
+                <button
+                  type="button"
+                  className="send-email-btn-ghost send-email-preview-btn"
+                  disabled={!pdfPreviewBlob}
+                  onClick={() => pdfPreviewBlob && downloadBlob(pdfPreviewBlob, shownPreviewName)}
+                >
+                  Herunterladen
+                </button>
+                <button
+                  type="button"
+                  className="send-email-btn-ghost send-email-preview-btn"
+                  disabled={!pdfPreviewBlob}
+                  onClick={() => pdfPreviewBlob && openBlob(pdfPreviewBlob)}
+                >
+                  Öffnen
+                </button>
+              </div>
+            </div>
+            <div className="send-email-preview-body">
+              {pdfLoading && previewKey === 'primary-pdf' && <p className="send-email-preview-empty">PDF wird erzeugt…</p>}
+              {!(pdfLoading && previewKey === 'primary-pdf') && !pdfPreviewUrl && (
+                <p className="send-email-preview-empty">{pdfError || 'Kein PDF verfügbar — Lupe bei einem PDF-Anhang tippen'}</p>
+              )}
+              {!(pdfLoading && previewKey === 'primary-pdf') && pdfPreviewUrl && (
+                <PdfGrabPreview url={pdfPreviewUrl} filename={shownPreviewName} />
+              )}
+            </div>
+            <div className="send-email-preview-footer">
+              {shownPreviewName || '—'}
+            </div>
+          </aside>
         </div>
       </div>
 
@@ -539,17 +747,40 @@ export default function SendEmailModal({
       )}
 
       <style>{`
-        .send-email-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 16px; text-align: left; }
+        .send-email-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 12px; text-align: left; }
         .send-email-overlay-nested { z-index: 10001; }
-        .send-email-modal { background: #fff; border-radius: 12px; width: min(720px, 100%); max-height: 92vh; overflow: auto; padding: 0 20px 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.2); text-align: left; }
-        .send-email-modal-sm { width: min(420px, 100%); padding: 20px; }
-        .send-email-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-top: 16px; }
-        .send-email-header.sticky { position: sticky; top: 0; z-index: 5; background: #fff; padding: 14px 0 12px; margin: 0 0 4px; border-bottom: 1px solid #e5e7eb; }
+        .send-email-modal { background: #fff; border-radius: 12px; width: min(1240px, 100%); height: min(92vh, 920px); max-height: 92vh; overflow: hidden; padding: 0 16px 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.2); text-align: left; display: flex; flex-direction: column; }
+        .send-email-modal-sm { width: min(420px, 100%); height: auto; max-height: 90vh; padding: 20px; overflow: auto; display: block; }
+        .send-email-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-top: 14px; flex-shrink: 0; }
+        .send-email-header.sticky { position: relative; z-index: 5; background: #fff; padding: 14px 0 12px; margin: 0 0 4px; border-bottom: 1px solid #e5e7eb; }
         .send-email-header h2 { margin: 0; color: #1d426a; font-weight: 500; font-size: 1.25rem; }
         .send-email-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        .send-email-tpl-wrap { position: relative; }
+        .send-email-tpl-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #1d426a; cursor: pointer; }
+        .send-email-tpl-btn:hover, .send-email-tpl-wrap:hover .send-email-tpl-btn { background: #eef4fa; }
+        .send-email-tpl-menu { display: none; position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 260px; max-width: 340px; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,0.14); padding: 8px; }
+        .send-email-tpl-wrap:hover .send-email-tpl-menu, .send-email-tpl-wrap:focus-within .send-email-tpl-menu { display: block; }
+        .send-email-tpl-menu-title { font-size: 12px; font-weight: 600; color: #1d426a; padding: 4px 8px 8px; border-bottom: 1px solid #eef2f6; margin-bottom: 4px; }
+        .send-email-tpl-item { display: block; width: 100%; text-align: left; border: none; background: transparent; padding: 8px 10px; border-radius: 6px; font-size: 13px; color: #333; cursor: pointer; }
+        .send-email-tpl-item:hover { background: #eef4fa; }
+        .send-email-tpl-item.active { background: #e8f0f8; color: #1d426a; font-weight: 600; }
         .send-email-close { border: none; background: transparent; font-size: 22px; cursor: pointer; line-height: 1; padding: 4px 6px; }
         .send-email-from-hint { margin: 6px 0 0; font-size: 13px; color: #666; }
-        .send-email-akustiker-box { margin-top: 12px; padding: 12px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px; line-height: 1.5; }
+        .send-email-layout { display: grid; gap: 0; align-items: stretch; flex: 1; min-height: 0; overflow: hidden; }
+        .send-email-form { min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; padding-right: 10px; padding-bottom: 8px; }
+        .send-email-resizer { cursor: col-resize; background: #eef2f6; border-left: 1px solid #e5e7eb; border-right: 1px solid #e5e7eb; width: 6px; flex-shrink: 0; }
+        .send-email-resizer:hover { background: #dbe4ee; }
+        .send-email-preview { position: static; align-self: stretch; height: 100%; min-height: 0; border: 1px solid #e5e7eb; border-radius: 10px; background: #f8fafc; display: flex; flex-direction: column; overflow: hidden; }
+        .send-email-preview-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; background: #fff; flex-shrink: 0; }
+        .send-email-preview-title { margin: 0; font-size: 14px; font-weight: 600; color: #1d426a; }
+        .send-email-preview-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .send-email-preview-btn { padding: 6px 10px; font-size: 12px; }
+        .send-email-preview-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .send-email-preview-body { flex: 1; min-height: 0; background: #eef2f6; display: flex; flex-direction: column; align-items: stretch; justify-content: stretch; overflow: hidden; }
+        .send-email-preview-frame { width: 100%; height: 100%; border: none; background: #fff; }
+        .send-email-preview-empty { margin: auto; padding: 24px; color: #666; font-size: 14px; text-align: center; }
+        .send-email-preview-footer { padding: 8px 12px; font-size: 12px; color: #555; border-top: 1px solid #e5e7eb; background: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
+        .send-email-akustiker-box { margin-top: 4px; padding: 12px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px; line-height: 1.5; }
         .send-email-ak-ok { color: #15803d; margin-top: 4px; }
         .send-email-ak-warn { color: #ea580c; margin-top: 4px; font-weight: 500; }
         .send-email-ak-btn { margin-top: 8px; padding: 6px 12px; font-size: 13px; }
@@ -558,8 +789,10 @@ export default function SendEmailModal({
         .send-email-check { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 14px; }
         .send-email-sig-row { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
         .send-email-sig-select { max-width: 280px; margin-top: 0; }
-        .send-email-pdf-row { margin-top: 10px; font-size: 13px; }
-        .send-email-pdf-ok { color: #15803d; }
+        .send-email-pdf-row { margin-top: 12px; margin-bottom: 4px; font-size: 13px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .send-email-pdf-label { color: #888; font-weight: 500; margin-right: 2px; }
+        .send-email-attach-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid #bbf7d0; border-radius: 999px; background: #f0fdf4; color: #15803d; font-size: 13px; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .send-email-attach-chip:hover { background: #dcfce7; }
         .send-email-pdf-warn { color: #ea580c; }
         .send-email-pdf-info { color: #666; }
         .send-email-error { margin-top: 10px; color: #b91c1c; font-size: 14px; }
@@ -567,6 +800,13 @@ export default function SendEmailModal({
         .send-email-btn-primary { padding: 10px 16px; background: #1d426a; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
         .send-email-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
         .send-email-btn-ghost { padding: 10px 16px; background: #fff; color: #1d426a; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; }
+        @media (max-width: 900px) {
+          .send-email-modal { height: auto; max-height: 94vh; overflow: auto; display: block; }
+          .send-email-layout { display: flex; flex-direction: column; overflow: visible; height: auto; }
+          .send-email-resizer { display: none; }
+          .send-email-form { overflow: visible; padding-right: 0; }
+          .send-email-preview { min-height: 360px; height: 50vh; }
+        }
       `}</style>
     </div>
   );

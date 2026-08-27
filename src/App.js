@@ -16,8 +16,11 @@ import KontaktlistePage from './KontaktlistePage';
 import EmailsPage from './EmailsPage';
 import PostfachPage from './PostfachPage';
 import SendEmailModal from './SendEmailModal';
+import PdfGrabPreview from './PdfGrabPreview';
 import { NoticeProvider } from './AppNotice';
 import { buildInvoiceEmailVars, buildKvEmailVars } from './emailTemplateVars';
+import { buildKvPdfAttachment } from './kvEmailUtils';
+import { pdfBase64ToObjectUrl } from './emailAttachmentUtils';
 import {
   generateRepairOrderPDF,
   FREIGABE_OPTIONS,
@@ -2057,6 +2060,9 @@ const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [viewingOrder, setViewingOrder] = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [viewPdfUrl, setViewPdfUrl] = useState('');
+  const [viewPdfName, setViewPdfName] = useState('');
+  const [viewPdfLoading, setViewPdfLoading] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingOrder, setDeletingOrder] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -2172,10 +2178,34 @@ const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
     setExpandedRows(newExpanded);
   };
 
-  // View repair order details
-  const handleViewOrder = (order) => {
+  // PDF-Vorschau für Reparaturauftrag / KV
+  const closeViewModal = () => {
+    if (viewPdfUrl) URL.revokeObjectURL(viewPdfUrl);
+    setViewPdfUrl('');
+    setViewPdfName('');
+    setViewPdfLoading(false);
+    setViewingOrder(null);
+    setShowViewModal(false);
+  };
+
+  const handleViewOrder = async (order) => {
+    if (viewPdfUrl) URL.revokeObjectURL(viewPdfUrl);
     setViewingOrder(order);
     setShowViewModal(true);
+    setViewPdfLoading(true);
+    setViewPdfUrl('');
+    setViewPdfName(`KV ${order?.kommission || ''}`.trim());
+    try {
+      const { base64, filename } = await buildKvPdfAttachment(order);
+      const { objectUrl } = pdfBase64ToObjectUrl(base64);
+      setViewPdfUrl(objectUrl);
+      if (filename) setViewPdfName(filename);
+    } catch (e) {
+      alert('PDF-Vorschau fehlgeschlagen: ' + (e.message || e));
+      closeViewModal();
+    } finally {
+      setViewPdfLoading(false);
+    }
   };
 
   // Edit repair order
@@ -3327,7 +3357,7 @@ const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
                           onMouseLeave={(e) => {
                             e.target.style.transform = 'scale(1)';
                           }}
-                          title="Anzeigen"
+                          title="KV als PDF anzeigen"
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
@@ -3754,111 +3784,74 @@ const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
       )}
 
 
-      {/* View Modal */}
-      {showViewModal && viewingOrder && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: 'white',
-            borderRadius: '8px',
-            padding: '2rem',
-            maxWidth: '90vw',
-            maxHeight: '90vh',
-            overflow: 'auto',
-            position: 'relative'
-          }}>
-            <button
-              onClick={() => setShowViewModal(false)}
-              style={{
-                position: 'absolute',
-                top: '1rem',
-                right: '1rem',
-                background: '#6c757d',
-                color: 'white',
-                border: 'none',
-                borderRadius: '50%',
-                width: '32px',
-                height: '32px',
-                cursor: 'pointer',
-                fontSize: '16px'
-              }}
-            >
-              ×
-            </button>
-            
-            <h2 style={{ margin: '0 0 1.5rem 0', color: '#1d426a' }}>
-              Reparaturauftrag Details
-            </h2>
-            
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
-              <div>
-                <h4 style={{ margin: '0 0 1rem 0', color: '#1d426a', textAlign: 'left' }}>Kundendaten</h4>
-                <div style={{ textAlign: 'left' }}>
-                  <p><strong>Firma:</strong> {viewingOrder.customers?.company || '-'}</p>
-                  <p><strong>Filiale:</strong> {viewingOrder.customers?.branch || '-'}</p>
-                  <p><strong>Adresse:</strong> {viewingOrder.customers?.street}, {viewingOrder.customers?.location}, {viewingOrder.customers?.country}</p>
-                </div>
-              </div>
-              
-              <div>
-                <h4 style={{ margin: '0 0 1rem 0', color: '#1d426a', textAlign: 'left' }}>Reparatur Details</h4>
-                <div style={{ textAlign: 'left' }}>
-                  <p><strong>Kommission:</strong> {viewingOrder.kommission || '-'}</p>
-                  <p><strong>Hersteller:</strong> {viewingOrder.hersteller || '-'}</p>
-                  <p><strong>Gerätetyp:</strong> {viewingOrder.geraetetyp || '-'}</p>
-                  <p><strong>Seriennummer:</strong> {viewingOrder.seriennummer || '-'}</p>
-                </div>
-              </div>
-              
-              <div>
-                <h4 style={{ margin: '0 0 1rem 0', color: '#1d426a', textAlign: 'left' }}>Preise</h4>
-                <div style={{ textAlign: 'left' }}>
-                  <p><strong>Nettopreis:</strong> {formatPrice(viewingOrder.nettopreis)}</p>
-                  <p><strong>Porto:</strong> {formatPrice(viewingOrder.porto)}</p>
-                  <p><strong>Gesamt:</strong> {formatPrice((viewingOrder.nettopreis || 0) + (viewingOrder.porto || 0))}</p>
-                </div>
-              </div>
+      {/* KV PDF-Vorschau */}
+      {showViewModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 16
+          }}
+          onClick={closeViewModal}
+        >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: 12,
+              width: 'min(960px, 100%)',
+              height: 'min(88vh, 900px)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              boxShadow: '0 18px 50px rgba(0,0,0,0.28)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 12,
+              padding: '12px 14px',
+              borderBottom: '1px solid #e5e7eb'
+            }}>
+              <h2 style={{ margin: 0, color: '#1d426a', fontSize: '1.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {viewPdfName || `KV ${viewingOrder?.kommission || ''}`.trim() || 'PDF-Vorschau'}
+              </h2>
+              <button
+                type="button"
+                onClick={closeViewModal}
+                style={{
+                  background: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: 32,
+                  height: 32,
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  flexShrink: 0
+                }}
+              >
+                ×
+              </button>
             </div>
-            
-                            <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center', gap: '1rem' }}>
-                  <button
-                    onClick={() => handleEditOrder(viewingOrder.id)}
-                    style={{
-                      padding: '10px 20px',
-                      background: 'none',
-                      color: '#1d426a',
-                      border: '1px solid #1d426a',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.target.style.transform = 'scale(1.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.transform = 'scale(1)';
-                    }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z"/>
-                    </svg>
-                    Bearbeiten
-                  </button>
-                </div>
+            <div style={{ flex: 1, minHeight: 0, background: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
+              {viewPdfLoading && (
+                <p style={{ textAlign: 'center', color: '#888', padding: 40 }}>PDF wird erzeugt…</p>
+              )}
+              {!viewPdfLoading && viewPdfUrl && (
+                <PdfGrabPreview url={viewPdfUrl} filename={viewPdfName || 'KV.pdf'} />
+              )}
+              {!viewPdfLoading && !viewPdfUrl && (
+                <p style={{ textAlign: 'center', color: '#888', padding: 40 }}>Keine Vorschau verfügbar.</p>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -4728,32 +4721,6 @@ const ErstellteRechnungenPage = () => {
                         title="Rechnung per E-Mail senden"
                       >
                         <MailIcon size={14} />
-                      </button>
-                      {/* Excel Button */}
-                      <button
-                        onClick={() => handleDownloadInvoiceExcel(invoice)}
-                        style={{
-                          background: 'none',
-                          color: '#217346',
-                          border: '1px solid #217346',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          padding: '6px 8px',
-                          fontSize: '12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          transition: 'all 0.2s ease'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.target.style.transform = 'scale(1.05)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.target.style.transform = 'scale(1)';
-                        }}
-                        title="Excel exportieren"
-                      >
-                        XLS
                       </button>
 
                       {/* PDF Button */}

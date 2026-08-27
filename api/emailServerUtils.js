@@ -8,9 +8,20 @@ const SUPABASE_URL =
 const DEFAULT_FROM = process.env.RESEND_FROM || 'Fa. Gretzinger <info@fa-gretzinger.de>';
 const DEFAULT_REPLY_TO = process.env.RESEND_REPLY_TO || 'info@fa-gretzinger.de';
 
-function detectMailboxKey(fromAddress, toAddress) {
-  const blob = `${fromAddress || ''} ${toAddress || ''}`.toLowerCase();
-  if (blob.includes('kv@fa-gretzinger.de') || blob.includes('kv@inbound.')) return 'kv';
+/** Resend-Empfangsadresse → echte Firmenadresse für Anzeige/Ablage. */
+function normalizeAppAddresses(value) {
+  if (!value) return value;
+  return String(value).replace(/@inbound\.fa-gretzinger\.de/gi, '@fa-gretzinger.de');
+}
+
+function detectMailboxKey(fromAddress, toAddress, ccAddress) {
+  const to = `${toAddress || ''}`.toLowerCase();
+  if (to.includes('kv@')) return 'kv';
+  if (to.includes('info@')) return 'info';
+  const blob = `${fromAddress || ''} ${toAddress || ''} ${ccAddress || ''}`.toLowerCase();
+  if (blob.includes('kv@fa-gretzinger.de') || blob.includes('kv@inbound.') || blob.includes('kv@')) {
+    return 'kv';
+  }
   return 'info';
 }
 
@@ -95,9 +106,11 @@ async function importInboundEmail(emailId, eventMeta = {}) {
   const ccList = Array.isArray(email.cc) ? email.cc : email.cc ? [email.cc] : [];
   const bccList = Array.isArray(email.bcc) ? email.bcc : email.bcc ? [email.bcc] : [];
   const html = email.html || (email.text ? `<pre style="white-space:pre-wrap;font-family:inherit">${escapeHtml(email.text)}</pre>` : '');
-  const toJoined = toList.join(', ') || (eventMeta.to || []).join(', ');
-  const fromJoined = email.from || eventMeta.from || '';
-  const mailboxKey = detectMailboxKey(fromJoined, toJoined);
+  const toJoined = normalizeAppAddresses(toList.join(', ') || (eventMeta.to || []).join(', '));
+  const fromJoined = normalizeAppAddresses(email.from || eventMeta.from || '');
+  const ccJoined = normalizeAppAddresses(ccList.join(', ') || null);
+  const bccJoined = normalizeAppAddresses(bccList.join(', ') || null);
+  const mailboxKey = detectMailboxKey(fromJoined, toJoined, ccJoined);
   const messageId = (email.message_id || eventMeta.message_id || '').trim() || null;
 
   if (messageId) {
@@ -128,8 +141,8 @@ async function importInboundEmail(emailId, eventMeta = {}) {
     mailbox_key: mailboxKey,
     from_address: fromJoined,
     to_address: toJoined,
-    cc_address: ccList.join(', ') || null,
-    bcc_address: bccList.join(', ') || null,
+    cc_address: ccJoined,
+    bcc_address: bccJoined,
     reply_to: null,
     subject: email.subject || eventMeta.subject || '(ohne Betreff)',
     body_html: html,
@@ -164,5 +177,6 @@ module.exports = {
   supabaseInsertEmailLog,
   fetchResendReceivedEmail,
   importInboundEmail,
-  findExistingByMessageId
+  findExistingByMessageId,
+  normalizeAppAddresses
 };

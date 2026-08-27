@@ -7,7 +7,12 @@
 
 const { ImapFlow } = require('imapflow');
 const { simpleParser } = require('mailparser');
-const { supabaseInsertEmailLog, SUPABASE_URL, findExistingByMessageId } = require('./emailServerUtils');
+const {
+  supabaseInsertEmailLog,
+  SUPABASE_URL,
+  findExistingByMessageId,
+  normalizeAppAddresses
+} = require('./emailServerUtils');
 
 const DEFAULT_HOST = 'imap.hostinger.com';
 const DEFAULT_PORT = 993;
@@ -108,9 +113,13 @@ async function syncOneMailbox(mailboxKey, { limit = 40, days = 14 } = {}) {
             continue;
           }
 
-          const fromJoined = formatAddresses(parsed.from) || formatAddresses(msg.envelope?.from) || '';
-          const toJoined = formatAddresses(parsed.to) || formatAddresses(msg.envelope?.to) || auth.user;
-          const ccJoined = formatAddresses(parsed.cc) || null;
+          const fromJoined = normalizeAppAddresses(
+            formatAddresses(parsed.from) || formatAddresses(msg.envelope?.from) || ''
+          );
+          const toJoined = normalizeAppAddresses(
+            formatAddresses(parsed.to) || formatAddresses(msg.envelope?.to) || auth.user
+          );
+          const ccJoined = normalizeAppAddresses(formatAddresses(parsed.cc) || null);
           const html =
             parsed.html ||
             (parsed.textHtml ? parsed.textHtml : null) ||

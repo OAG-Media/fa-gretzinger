@@ -137,6 +137,44 @@ function ArchiveIcon() {
   );
 }
 
+/** Geschlossen = ungelesen markieren */
+function EnvelopeClosedIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3 7 9 7 9-7" />
+    </svg>
+  );
+}
+
+/** Offen = gelesen markieren */
+function EnvelopeOpenIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 9.5 12 3l9 6.5" />
+      <path d="M5 9v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9" />
+      <path d="m5 9 7 5 7-5" />
+    </svg>
+  );
+}
+
+function RestoreIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <path d="M3 4v5h5" />
+    </svg>
+  );
+}
+
+function ClearSelectionIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  );
+}
+
 function DownloadIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -168,6 +206,7 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeMode, setComposeMode] = useState('new');
   const [replyTarget, setReplyTarget] = useState(null);
+  const [draftTarget, setDraftTarget] = useState(null);
   const [previewAtt, setPreviewAtt] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
@@ -243,7 +282,15 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     [activeLogs]
   );
   const outbound = useMemo(
-    () => dedupeByMessageId(activeLogs.filter((x) => x.direction === 'outbound')),
+    () => dedupeByMessageId(
+      activeLogs.filter((x) => x.direction === 'outbound' && x.status !== 'draft')
+    ),
+    [activeLogs]
+  );
+  const drafts = useMemo(
+    () => dedupeByMessageId(
+      activeLogs.filter((x) => x.direction === 'outbound' && x.status === 'draft')
+    ),
     [activeLogs]
   );
   const deleted = useMemo(
@@ -262,8 +309,9 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
   const folderMails =
     folder === 'inbound' ? inbound
       : folder === 'outbound' ? outbound
-        : folder === 'deleted' ? deleted
-          : archived;
+        : folder === 'drafts' ? drafts
+          : folder === 'deleted' ? deleted
+            : archived;
   const selected = folderMails.find((m) => m.id === selectedId) || null;
   const checkedCount = checkedIds.size;
   const allVisibleChecked =
@@ -324,11 +372,6 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     try {
       window.dispatchEvent(new CustomEvent('fa-email-unread-changed'));
     } catch (_) { /* ignore */ }
-  };
-
-  const openMail = async (mail) => {
-    setSelectedId(mail.id);
-    await markRead(mail);
   };
 
   const softDelete = async (mail, e) => {
@@ -451,6 +494,51 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     clearChecked();
   };
 
+  const bulkMarkRead = async () => {
+    const ids = [...checkedIds];
+    if (ids.length === 0) return;
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from('email_logs')
+      .update({ read_at: now })
+      .in('id', ids)
+      .eq('direction', 'inbound');
+    if (error) {
+      await notice.alert(error.message, 'Fehler');
+      return;
+    }
+    const idSet = new Set(ids);
+    setLogs((prev) =>
+      prev.map((x) => (idSet.has(x.id) && x.direction === 'inbound' ? { ...x, read_at: now } : x))
+    );
+    clearChecked();
+    try {
+      window.dispatchEvent(new CustomEvent('fa-email-unread-changed'));
+    } catch (_) { /* ignore */ }
+  };
+
+  const bulkMarkUnread = async () => {
+    const ids = [...checkedIds];
+    if (ids.length === 0) return;
+    const { error } = await supabase
+      .from('email_logs')
+      .update({ read_at: null })
+      .in('id', ids)
+      .eq('direction', 'inbound');
+    if (error) {
+      await notice.alert(error.message, 'Fehler');
+      return;
+    }
+    const idSet = new Set(ids);
+    setLogs((prev) =>
+      prev.map((x) => (idSet.has(x.id) && x.direction === 'inbound' ? { ...x, read_at: null } : x))
+    );
+    clearChecked();
+    try {
+      window.dispatchEvent(new CustomEvent('fa-email-unread-changed'));
+    } catch (_) { /* ignore */ }
+  };
+
   const restoreMail = async (mail, e) => {
     e?.stopPropagation?.();
     if (!mail) return;
@@ -556,6 +644,7 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     if (!allowComposeFree && mailboxKey === 'info') return;
     setComposeMode('new');
     setReplyTarget(null);
+    setDraftTarget(null);
     setComposeOpen(true);
   };
 
@@ -563,7 +652,24 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     if (!selected || folder !== 'inbound') return;
     setComposeMode(replyMode);
     setReplyTarget(selected);
+    setDraftTarget(null);
     setComposeOpen(true);
+  };
+
+  const openDraft = (mail) => {
+    setComposeMode('new');
+    setReplyTarget(null);
+    setDraftTarget(mail);
+    setComposeOpen(true);
+  };
+
+  const openMail = async (mail) => {
+    if (mail?.status === 'draft') {
+      openDraft(mail);
+      return;
+    }
+    setSelectedId(mail.id);
+    await markRead(mail);
   };
 
   const selectedCc = selected ? parseAddressList(selected.cc_address) : [];
@@ -642,6 +748,14 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
           </button>
           <button
             type="button"
+            className={`pf-folder${folder === 'drafts' ? ' active' : ''}`}
+            onClick={() => { setFolder('drafts'); setSelectedId(null); clearChecked(); }}
+          >
+            Entwürfe
+            <span className="pf-count">{drafts.length}</span>
+          </button>
+          <button
+            type="button"
             className={`pf-folder${folder === 'archived' ? ' active' : ''}`}
             onClick={() => { setFolder('archived'); setSelectedId(null); clearChecked(); }}
           >
@@ -683,21 +797,33 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
               {checkedCount > 0 && (
                 <div className="pf-bulk-actions">
                   {(folder === 'deleted' || folder === 'archived') ? (
-                    <button type="button" className="pf-bulk-btn" onClick={bulkRestore}>
-                      Wiederherstellen
+                    <button type="button" className="pf-bulk-btn" onClick={bulkRestore} title="Wiederherstellen" aria-label="Wiederherstellen">
+                      <RestoreIcon />
                     </button>
                   ) : (
                     <>
-                      <button type="button" className="pf-bulk-btn" onClick={bulkSoftArchive}>
-                        Archivieren
-                      </button>
-                      <button type="button" className="pf-bulk-btn pf-bulk-danger" onClick={bulkSoftDelete}>
-                        Löschen
+                      {folder === 'inbound' && (
+                        <>
+                          <button type="button" className="pf-bulk-btn" onClick={bulkMarkRead} title="Als gelesen markieren" aria-label="Als gelesen markieren">
+                            <EnvelopeOpenIcon />
+                          </button>
+                          <button type="button" className="pf-bulk-btn" onClick={bulkMarkUnread} title="Als ungelesen markieren" aria-label="Als ungelesen markieren">
+                            <EnvelopeClosedIcon />
+                          </button>
+                        </>
+                      )}
+                      {folder !== 'drafts' && (
+                        <button type="button" className="pf-bulk-btn" onClick={bulkSoftArchive} title="Archivieren" aria-label="Archivieren">
+                          <ArchiveIcon />
+                        </button>
+                      )}
+                      <button type="button" className="pf-bulk-btn pf-bulk-danger" onClick={bulkSoftDelete} title="Löschen" aria-label="Löschen">
+                        <TrashIcon />
                       </button>
                     </>
                   )}
-                  <button type="button" className="pf-bulk-btn pf-bulk-muted" onClick={clearChecked}>
-                    Abwählen
+                  <button type="button" className="pf-bulk-btn pf-bulk-muted" onClick={clearChecked} title="Auswahl aufheben" aria-label="Auswahl aufheben">
+                    <ClearSelectionIcon />
                   </button>
                 </div>
               )}
@@ -711,9 +837,11 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
                 ? 'Noch keine Eingänge. „Synchronisieren“ oder Hostinger-Weiterleitung prüfen.'
                 : folder === 'outbound'
                   ? 'Noch keine gesendeten Mails.'
-                  : folder === 'archived'
-                    ? 'Noch keine archivierten Mails.'
-                    : 'Papierkorb ist leer.'}
+                  : folder === 'drafts'
+                    ? 'Keine Entwürfe.'
+                    : folder === 'archived'
+                      ? 'Noch keine archivierten Mails.'
+                      : 'Papierkorb ist leer.'}
             </p>
           ) : (
             folderMails.map((mail) => {
@@ -917,11 +1045,13 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
 
       <ComposeEmailModal
         open={composeOpen}
-        onClose={() => setComposeOpen(false)}
+        onClose={() => { setComposeOpen(false); setDraftTarget(null); setReplyTarget(null); }}
         mode={composeMode}
         replyToMail={replyTarget}
+        draftMail={draftTarget}
         mailboxKey={mailboxKey}
-        onSent={() => { load(); setComposeOpen(false); }}
+        onSent={() => { load(); setComposeOpen(false); setDraftTarget(null); }}
+        onDraftSaved={() => { load(); }}
       />
 
       <style>{`
@@ -954,7 +1084,7 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
         .pf-check-all { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: #3d4f5f; cursor: pointer; user-select: none; }
         .pf-check-all input, .pf-mail-check input { width: 15px; height: 15px; accent-color: #1d426a; cursor: pointer; }
         .pf-bulk-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-        .pf-bulk-btn { padding: 5px 10px; border: 1px solid #d8dee6; background: #fff; color: #1d426a; border-radius: 6px; font-size: 12px; cursor: pointer; }
+        .pf-bulk-btn { padding: 6px 8px; border: 1px solid #d8dee6; background: #fff; color: #1d426a; border-radius: 6px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; line-height: 0; }
         .pf-bulk-btn:hover { background: #eef4fa; }
         .pf-bulk-btn.pf-bulk-danger { color: #b91c1c; border-color: #f0c4c4; }
         .pf-bulk-btn.pf-bulk-muted { color: #666; }
