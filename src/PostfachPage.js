@@ -16,6 +16,17 @@ function emailApiBase() {
   return '';
 }
 
+function outboundStatusBadge(mail) {
+  if (mail?.direction !== 'outbound' || mail?.status === 'draft') return null;
+  if (mail.status === 'bounced') {
+    return { label: 'Nicht zustellbar', className: 'pf-status-bounced' };
+  }
+  if (mail.status === 'sent') {
+    return { label: 'Gesendet', className: 'pf-status-sent' };
+  }
+  return null;
+}
+
 async function syncInboundApi() {
   const resp = await fetch(`${emailApiBase()}/api/sync-inbound`, { method: 'POST' });
   const data = await resp.json().catch(() => ({}));
@@ -41,15 +52,21 @@ export { quietSyncIfDue };
 
 /** Eine sichtbare Zeile pro Message-ID (Resend + IMAP sonst doppelt). */
 function dedupeByMessageId(mails) {
-  const seen = new Set();
-  const out = [];
+  const byKey = new Map();
   for (const m of mails || []) {
     const key = (m.message_id && String(m.message_id).trim()) || m.id;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(m);
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, m);
+      continue;
+    }
+    // Bei Duplikaten: nicht gelöschte bevorzugen
+    if (!prev.deleted_at && m.deleted_at) continue;
+    if (prev.deleted_at && !m.deleted_at) {
+      byKey.set(key, m);
+    }
   }
-  return out;
+  return Array.from(byKey.values());
 }
 
 function SettingsIcon() {
@@ -283,6 +300,14 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     ),
     [activeLogs]
   );
+  const bouncedOutbound = useMemo(
+    () => outbound.filter((x) => x.status === 'bounced'),
+    [outbound]
+  );
+  const unacknowledgedBounces = useMemo(
+    () => bouncedOutbound.filter((x) => !x.bounce_acknowledged_at),
+    [bouncedOutbound]
+  );
   const drafts = useMemo(
     () => dedupeByMessageId(
       activeLogs.filter((x) => x.direction === 'outbound' && x.status === 'draft')
@@ -376,15 +401,27 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     const ok = await notice.confirm('Diese E-Mail in „Gelöscht“ verschieben?', 'Löschen');
     if (!ok) return;
     const now = new Date().toISOString();
-    const { error } = await supabase
-      .from('email_logs')
-      .update({ deleted_at: now, archived_at: null })
-      .eq('id', mail.id);
+    const mid = mail.message_id && String(mail.message_id).trim();
+    let query = supabase.from('email_logs').update({ deleted_at: now, archived_at: null });
+    if (mid) {
+      query = query.eq('mailbox_key', mailboxKey).eq('message_id', mid);
+    } else {
+      query = query.eq('id', mail.id);
+    }
+    const { error } = await query;
     if (error) {
       await notice.alert(error.message, 'Fehler');
       return;
     }
-    setLogs((prev) => prev.map((x) => (x.id === mail.id ? { ...x, deleted_at: now, archived_at: null } : x)));
+    setLogs((prev) =>
+      prev.map((x) => {
+        if (mid && x.message_id === mid && detectMailboxKey(x) === mailboxKey) {
+          return { ...x, deleted_at: now, archived_at: null };
+        }
+        if (!mid && x.id === mail.id) return { ...x, deleted_at: now, archived_at: null };
+        return x;
+      })
+    );
     if (selectedId === mail.id) setSelectedId(null);
     setCheckedIds((prev) => {
       const next = new Set(prev);
@@ -533,6 +570,41 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     try {
       window.dispatchEvent(new CustomEvent('fa-email-unread-changed'));
     } catch (_) { /* ignore */ }
+  };
+
+  const setBounceAcknowledged = async (ids, acknowledged) => {
+    const idList = Array.isArray(ids) ? ids : [ids];
+    if (idList.length === 0) return;
+    const now = acknowledged ? new Date().toISOString() : null;
+    const { error } = await supabase
+      .from('email_logs')
+      .update({ bounce_acknowledged_at: now })
+      .in('id', idList)
+      .eq('status', 'bounced');
+    if (error) {
+      await notice.alert(error.message, 'Fehler');
+      return false;
+    }
+    const idSet = new Set(idList);
+    setLogs((prev) =>
+      prev.map((x) => (idSet.has(x.id) ? { ...x, bounce_acknowledged_at: now } : x))
+    );
+    return true;
+  };
+
+  const acknowledgeBounce = async (mail, acknowledged = true, e) => {
+    e?.stopPropagation?.();
+    if (!mail || mail.status !== 'bounced') return;
+    await setBounceAcknowledged([mail.id], acknowledged);
+  };
+
+  const bulkAcknowledgeBounces = async () => {
+    const ids = folderMails
+      .filter((m) => checkedIds.has(m.id) && m.status === 'bounced' && !m.bounce_acknowledged_at)
+      .map((m) => m.id);
+    if (ids.length === 0) return;
+    const ok = await setBounceAcknowledged(ids, true);
+    if (ok) clearChecked();
   };
 
   const restoreMail = async (mail, e) => {
@@ -742,6 +814,11 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
           >
             Gesendet
             <span className="pf-count">{outbound.length}</span>
+            {unacknowledgedBounces.length > 0 && (
+              <span className="pf-bounce-hint" title="Nicht bestätigte Zustellfehler">
+                {unacknowledgedBounces.length} ⚠
+              </span>
+            )}
           </button>
           <button
             type="button"
@@ -809,6 +886,19 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
                           </button>
                         </>
                       )}
+                      {folder === 'outbound' && folderMails.some(
+                        (m) => checkedIds.has(m.id) && m.status === 'bounced' && !m.bounce_acknowledged_at
+                      ) && (
+                        <button
+                          type="button"
+                          className="pf-bulk-btn pf-bulk-warn"
+                          onClick={bulkAcknowledgeBounces}
+                          title="Warnung ausblenden (bleibt rot markiert)"
+                          aria-label="Warnung ausblenden"
+                        >
+                          ✓⚠
+                        </button>
+                      )}
                       {folder !== 'drafts' && (
                         <button type="button" className="pf-bulk-btn" onClick={bulkSoftArchive} title="Archivieren" aria-label="Archivieren">
                           <ArchiveIcon />
@@ -845,10 +935,12 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
               const isUnread = folder === 'inbound' && !mail.read_at;
               const peer = mail.direction === 'inbound' ? mail.from_address : mail.to_address;
               const isChecked = checkedIds.has(mail.id);
+              const statusBadge = outboundStatusBadge(mail);
+              const showBounceAck = folder === 'outbound' && mail.status === 'bounced';
               return (
                 <div
                   key={mail.id}
-                  className={`pf-mail${selectedId === mail.id ? ' selected' : ''}${isUnread ? ' unread' : ''}${isChecked ? ' checked' : ''}`}
+                  className={`pf-mail${selectedId === mail.id ? ' selected' : ''}${isUnread ? ' unread' : ''}${isChecked ? ' checked' : ''}${mail.status === 'bounced' ? ' bounced' : ''}`}
                   onClick={() => openMail(mail)}
                   role="button"
                   tabIndex={0}
@@ -866,6 +958,21 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
                       aria-label="E-Mail markieren"
                     />
                   </label>
+                  {showBounceAck && (
+                    <label
+                      className="pf-bounce-ack"
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      title={mail.bounce_acknowledged_at ? 'Warnung wieder anzeigen' : 'Warnung ausblenden — bleibt rot markiert'}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!mail.bounce_acknowledged_at}
+                        onChange={(e) => acknowledgeBounce(mail, e.target.checked, e)}
+                        aria-label="Zustellwarnung bestätigen"
+                      />
+                    </label>
+                  )}
                   <div className="pf-mail-main">
                     <div className="pf-mail-row">
                       <span className="pf-mail-peer">{peer || '—'}</span>
@@ -875,6 +982,9 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
                     </div>
                     <div className="pf-mail-subject">{mail.subject || '(ohne Betreff)'}</div>
                     <div className="pf-mail-meta">
+                      {statusBadge && (
+                        <span className={`pf-status-pill ${statusBadge.className}`}>{statusBadge.label}</span>
+                      )}
                       {EMAIL_TYPE_LABELS[mail.email_type] || mail.email_type || '—'}
                       {attachmentListFor(mail).length > 0 ? ' · 📎' : ''}
                     </div>
@@ -974,6 +1084,21 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
                     {selected.created_at ? new Date(selected.created_at).toLocaleString('de-DE') : '—'}
                   </div>
                 </div>
+                {selected.status === 'bounced' && selected.error_message && (
+                  <div className="pf-bounce-alert" role="alert">
+                    <strong>Nicht zustellbar</strong>
+                    <pre>{selected.error_message}</pre>
+                    {!selected.bounce_acknowledged_at && (
+                      <button
+                        type="button"
+                        className="pf-bounce-ack-btn"
+                        onClick={() => acknowledgeBounce(selected, true)}
+                      >
+                        Zur Kenntnis genommen — Warnung ausblenden
+                      </button>
+                    )}
+                  </div>
+                )}
                 {attachmentListFor(selected).length > 0 && (
                   <div className="pf-attachments">
                     <div className="pf-attachments-label">Anhänge</div>
@@ -1106,6 +1231,18 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
         .pf-mail:hover .pf-mail-actions, .pf-mail.selected .pf-mail-actions { opacity: 1; }
         .pf-mail-act { border: none; background: transparent; color: #3d4f5f; cursor: pointer; padding: 4px; border-radius: 6px; line-height: 0; display: inline-flex; align-items: center; justify-content: center; }
         .pf-mail-act:hover { background: #e5edf5; color: #1d426a; }
+        .pf-mail.bounced { border-left: 3px solid #dc2626; background: #fff7f7; }
+        .pf-bounce-hint { margin-left: 6px; color: #dc2626; font-size: 11px; font-weight: 600; }
+        .pf-bounce-ack { display: flex; align-items: flex-start; padding-top: 2px; flex-shrink: 0; }
+        .pf-bounce-ack input { width: 15px; height: 15px; accent-color: #dc2626; cursor: pointer; }
+        .pf-bulk-warn { color: #b45309; font-size: 13px; font-weight: 700; }
+        .pf-bounce-ack-btn { margin-top: 10px; padding: 8px 12px; border: 1px solid #fca5a5; background: #fff; color: #b91c1c; border-radius: 8px; cursor: pointer; font-size: 13px; }
+        .pf-bounce-ack-btn:hover { background: #fef2f2; }
+        .pf-status-pill { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 999px; margin-right: 6px; vertical-align: middle; }
+        .pf-status-sent { background: #ecfdf5; color: #047857; }
+        .pf-status-bounced { background: #fef2f2; color: #b91c1c; }
+        .pf-bounce-alert { margin: 12px 0 0; padding: 12px 14px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; color: #7f1d1d; font-size: 13px; }
+        .pf-bounce-alert pre { margin: 8px 0 0; white-space: pre-wrap; font-family: inherit; font-size: 12px; color: #991b1b; }
         .pf-detail { overflow-y: auto; max-height: 70vh; padding: 16px 20px; }
         .pf-detail-empty { color: #888; padding: 40px 20px; text-align: center; }
         .pf-detail-head h3 { margin: 0; color: #1d1d1d; font-weight: 600; font-size: 1.15rem; line-height: 1.35; }

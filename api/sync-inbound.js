@@ -1,7 +1,7 @@
 // Admin-Sync: Resend-Inbound + Hostinger IMAP Inbox → email_logs
 // Env: RESEND_API_KEY, SUPABASE_SERVICE_ROLE_KEY, IMAP_*
 
-const { SUPABASE_URL, importInboundEmail } = require('./emailServerUtils');
+const { SUPABASE_URL, importInboundEmail, syncOutboundBounces } = require('./emailServerUtils');
 const { syncImapInboxes } = require('./imapSyncInbox');
 
 module.exports = async function handler(req, res) {
@@ -65,6 +65,7 @@ module.exports = async function handler(req, res) {
     }
 
     const imap = await syncImapInboxes({ limit: 50, days: 21 });
+    const bounces = await syncOutboundBounces({ days: 21, limit: 150 });
 
     return res.status(200).json({
       ok: true,
@@ -76,7 +77,8 @@ module.exports = async function handler(req, res) {
         total: resendTotal,
         error: resendError
       },
-      imap
+      imap,
+      bounces
     });
   } catch (e) {
     console.error('[sync-inbound]', e);

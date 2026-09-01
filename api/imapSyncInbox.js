@@ -54,9 +54,14 @@ function escapeHtml(s) {
     .replace(/>/g, '&gt;');
 }
 
+async function findAnyByMessageId(messageId, mailboxKey) {
+  const hit = await findExistingByMessageId(messageId, mailboxKey);
+  return hit?.id ? hit : null;
+}
+
 async function existsByMessageId(messageId, mailboxKey) {
   // Auch soft-gelöschte zählen → kein Re-Import derselben Message-ID
-  const hit = await findExistingByMessageId(messageId, mailboxKey);
+  const hit = await findAnyByMessageId(messageId, mailboxKey);
   return !!hit?.id;
 }
 
@@ -99,6 +104,13 @@ async function syncOneMailbox(mailboxKey, { limit = 40, days = 14 } = {}) {
           const parsed = await simpleParser(msg.source);
           const messageId = (parsed.messageId || msg.envelope?.messageId || '').trim();
           const syntheticId = messageId || `imap:${mailboxKey}:${msg.uid}`;
+          const subject = parsed.subject || msg.envelope?.subject || '(ohne Betreff)';
+
+          // Bounce-NDR: wird beim Versand direkt in email_logs geschrieben — nicht erneut per IMAP
+          if (subject.startsWith('Nicht zustellbar:')) {
+            skipped += 1;
+            continue;
+          }
 
           if (await existsByMessageId(syntheticId, mailboxKey)) {
             skipped += 1;
@@ -144,7 +156,7 @@ async function syncOneMailbox(mailboxKey, { limit = 40, days = 14 } = {}) {
             cc_address: ccJoined,
             bcc_address: null,
             reply_to: formatAddresses(parsed.replyTo) || null,
-            subject: parsed.subject || msg.envelope?.subject || '(ohne Betreff)',
+            subject,
             body_html: html,
             body_text: parsed.text || null,
             attachments,

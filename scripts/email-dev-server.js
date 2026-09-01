@@ -17,7 +17,7 @@ function loadEnvLocal() {
 const env = { ...loadEnvLocal(), ...process.env };
 Object.assign(process.env, env);
 
-const { importInboundEmail, SUPABASE_URL } = require('../api/emailServerUtils');
+const { importInboundEmail, SUPABASE_URL, syncOutboundBounces } = require('../api/emailServerUtils');
 const { appendSentCopy } = require('../api/imapAppendSent');
 const { syncImapInboxes } = require('../api/imapSyncInbox');
 
@@ -186,16 +186,40 @@ const server = http.createServer(async (req, res) => {
         }
 
         const imap = await syncImapInboxes({ limit: 50, days: 21 });
+        const bounces = await syncOutboundBounces({ days: 21, limit: 150 });
         return sendJson(res, 200, {
           ok: true,
           imported: imported + (imap.imported || 0),
           skipped: skipped + (imap.skipped || 0),
-          imap
+          imap,
+          bounces
         });
       } catch (e) {
         return sendJson(res, 500, { error: e.message || 'Sync fehlgeschlagen' });
       }
     })();
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/api/resend-events') {
+    let raw = '';
+    req.on('data', (chunk) => {
+      raw += chunk;
+      if (raw.length > 5_000_000) req.destroy();
+    });
+    req.on('end', async () => {
+      try {
+        const { handleResendBounceEvent } = require('../api/emailServerUtils');
+        const event = JSON.parse(raw || '{}');
+        if (event.type === 'email.bounced') {
+          const result = await handleResendBounceEvent(event.data || {});
+          return sendJson(res, 200, { ok: true, ...result });
+        }
+        return sendJson(res, 200, { ok: true, ignored: event.type || 'unknown' });
+      } catch (e) {
+        return sendJson(res, 500, { error: e.message || 'Webhook-Fehler' });
+      }
+    });
     return;
   }
 
@@ -227,6 +251,6 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`[email-dev] http://localhost:${PORT}`);
-  console.log(`[email-dev] POST /api/send-email | /api/sync-inbound | /api/resend-inbound`);
+  console.log(`[email-dev] POST /api/send-email | /api/sync-inbound | /api/resend-inbound | /api/resend-events`);
   console.log(`[email-dev] From: ${DEFAULT_FROM} | Reply-To: ${DEFAULT_REPLY_TO}`);
 });

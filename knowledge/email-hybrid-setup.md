@@ -37,6 +37,9 @@ Für Papa am Handy: Eingang sieht er per IMAP. App-Gesendet am Handy erst mit sp
 2. **Resend → Webhooks**
    - URL: `https://fa-gretzinger.vercel.app/api/resend-inbound`
    - Event: `email.received`
+   - **Zusätzlich (Bounce-Benachrichtigung):**
+   - URL: `https://fa-gretzinger.vercel.app/api/resend-events`
+   - Event: `email.bounced` (Pflicht), optional `email.delivery_delayed`
 3. **Hostinger → E-Mail → Weiterleitung** (Kopie behalten!)
    - `kv@fa-gretzinger.de` → `kv@inbound.fa-gretzinger.de`
    - `info@fa-gretzinger.de` → `info@inbound.fa-gretzinger.de`
@@ -166,3 +169,27 @@ IMAP_KV_PASSWORD=********
 - Periodischer Auto-Sync / Realtime-Badge
 - Outlook-Threading, Ordner
 - Langer-Filialen / Doppel-Akustiker-Check
+
+## 8. Bounce-Benachrichtigung (nicht zustellbare E-Mails)
+
+Wenn Resend eine ausgehende Mail nicht zustellen kann (`email.bounced`):
+
+1. **Webhook** `POST /api/resend-events` (Resend Dashboard → Webhooks)
+2. `email_logs.status` wird auf `bounced` gesetzt, `error_message` enthält deutschen Grund
+3. **NDR-ähnliche E-Mail** an `info@` bzw. `kv@` (je nach Postfach) mit Empfänger, Betreff, Grund und Handlungstipps
+4. **Fallback:** Bei „Synchronisieren“ prüft `/api/sync-inbound` zusätzlich kürzlich gesendete Mails bei Resend (`syncOutboundBounces`)
+
+### Typische Ursache (kein österreichisches Sondergesetz)
+
+Wenn nur ein Empfänger (z. B. `buchhaltung@optikbauer.at` über `mail2.itpool.at`) ablehnt,
+andere `.de`/`.at`-Adressen aber ankommen und manueller Versand über `fa-gretzinger@t-online.de` klappt:
+
+- **Empfänger-seitige Filter** (Spam/Transaktionsmail/AWS SES), nicht fehlendes SPF/DKIM bei uns
+- Resend meldet oft nur `Undetermined` ohne SMTP-Detail — der IT-Partner des Empfängers muss `fa-gretzinger.de` / `amazonses.com` erlauben oder eine alternative Adresse nennen
+
+### Resend Webhook einrichten
+
+| URL | Events |
+| --- | --- |
+| `https://fa-gretzinger.vercel.app/api/resend-events` | `email.bounced`, optional `email.delivery_delayed` |
+
