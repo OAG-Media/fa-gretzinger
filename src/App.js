@@ -2051,12 +2051,35 @@ const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkus
 };
 
 // Erstellte Reperaturaufträge Page Component
+const REPAIR_LIST_FILTERS_KEY = 'fa_repair_orders_list_filters';
+
+function loadRepairListFilters() {
+  try {
+    const raw = sessionStorage.getItem(REPAIR_LIST_FILTERS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveRepairListFilters(filters) {
+  try {
+    sessionStorage.setItem(REPAIR_LIST_FILTERS_KEY, JSON.stringify(filters));
+  } catch {
+    // ignore
+  }
+}
+
 const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
+  const navigate = useNavigate();
+  const savedFiltersRef = useRef(loadRepairListFilters());
+  const savedFilters = savedFiltersRef.current;
+
   const [repairOrders, setRepairOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('werkstattausgang');
-  const [sortOrder, setSortOrder] = useState('desc');
+  const [searchTerm, setSearchTerm] = useState(savedFilters?.searchTerm ?? '');
+  const [sortBy, setSortBy] = useState(savedFilters?.sortBy ?? 'werkstattausgang');
+  const [sortOrder, setSortOrder] = useState(savedFilters?.sortOrder ?? 'desc');
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [viewingOrder, setViewingOrder] = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
@@ -2065,12 +2088,12 @@ const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
   const [viewPdfLoading, setViewPdfLoading] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingOrder, setDeletingOrder] = useState(null);
-  const [showArchived, setShowArchived] = useState(false);
+  const [showArchived, setShowArchived] = useState(savedFilters?.showArchived ?? false);
   const [mailTarget, setMailTarget] = useState(null);
   
   // Pagination State
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(8);
+  const [currentPage, setCurrentPage] = useState(savedFilters?.currentPage ?? 1);
+  const [itemsPerPage, setItemsPerPage] = useState(savedFilters?.itemsPerPage ?? 8);
   
   // Success Modal State
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -2080,25 +2103,26 @@ const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
   const [hoveredButton, setHoveredButton] = useState(null);
   
   // Date Filtering State
-  const [dateFilterField, setDateFilterField] = useState('werkstattausgang'); // werkstattausgang, werkstatteingang, gesendet_an_werkstatt
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFilterField, setDateFilterField] = useState(savedFilters?.dateFilterField ?? 'werkstattausgang');
+  const [dateFrom, setDateFrom] = useState(savedFilters?.dateFrom ?? '');
+  const [dateTo, setDateTo] = useState(savedFilters?.dateTo ?? '');
   const [showMonthPicker, setShowMonthPicker] = useState(false);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(savedFilters?.selectedYear ?? new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(savedFilters?.selectedMonth ?? new Date().getMonth() + 1);
   
   // Company Filtering State
-  const [selectedCompany, setSelectedCompany] = useState('');
+  const [selectedCompany, setSelectedCompany] = useState(savedFilters?.selectedCompany ?? '');
   const [companySearchTerm, setCompanySearchTerm] = useState('');
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
-  const [selectedBranch, setSelectedBranch] = useState('');
+  const [selectedBranch, setSelectedBranch] = useState(savedFilters?.selectedBranch ?? '');
   
   // Invoice Status Filtering State
-  const [showOnlyUnused, setShowOnlyUnused] = useState(false);
+  const [showOnlyUnused, setShowOnlyUnused] = useState(savedFilters?.showOnlyUnused ?? false);
   
   // Selection State
   const [selectedOrders, setSelectedOrders] = useState(new Set());
   const [selectAll, setSelectAll] = useState(false);
+  const skipPageResetRef = useRef(true);
 
   const getOrderInvoiceNumber = (order) =>
     order.invoice_items?.[0]?.invoice?.invoice_number || null;
@@ -2161,10 +2185,38 @@ const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
     loadRepairOrders();
   }, []);
 
-  // Reset pagination when filters change
+  // Reset pagination when filters change (not on initial restore)
   useEffect(() => {
+    if (skipPageResetRef.current) {
+      skipPageResetRef.current = false;
+      return;
+    }
     setCurrentPage(1);
   }, [searchTerm, dateFrom, dateTo, dateFilterField, selectedCompany, selectedBranch, showOnlyUnused]);
+
+  // Suchmaske merken (zurück aus Bearbeiten / Browser-Zurück)
+  useEffect(() => {
+    saveRepairListFilters({
+      searchTerm,
+      sortBy,
+      sortOrder,
+      dateFilterField,
+      dateFrom,
+      dateTo,
+      selectedCompany,
+      selectedBranch,
+      showOnlyUnused,
+      showArchived,
+      currentPage,
+      itemsPerPage,
+      selectedYear,
+      selectedMonth
+    });
+  }, [
+    searchTerm, sortBy, sortOrder, dateFilterField, dateFrom, dateTo,
+    selectedCompany, selectedBranch, showOnlyUnused, showArchived,
+    currentPage, itemsPerPage, selectedYear, selectedMonth
+  ]);
   
 
   // Toggle row expansion
@@ -2210,8 +2262,11 @@ const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
 
   // Edit repair order
   const handleEditOrder = (orderId) => {
-    // Navigate to repair order form with edit parameter
-    window.location.href = `/reperaturauftrag?edit=${orderId}`;
+    navigate(`/reperaturauftrag?edit=${orderId}`);
+  };
+
+  const handleDuplicateOrder = (orderId) => {
+    navigate(`/reperaturauftrag?duplicate=${orderId}`);
   };
 
 
@@ -3361,6 +3416,28 @@ const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                          </svg>
+                        </button>
+                        {/* Duplicate Button (Doppelversorgung) */}
+                        <button
+                          onClick={() => handleDuplicateOrder(order.id)}
+                          style={{
+                            background: 'none',
+                            color: '#1d426a',
+                            border: '1px solid #1d426a',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            padding: '6px 8px',
+                            fontSize: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.2s ease'
+                          }}
+                          title="KV duplizieren (Doppelversorgung)"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M16,1H4C2.9,1 2,1.9 2,3V17H4V3H16V1M19,5H8C6.9,5 6,5.9 6,7V21C6,22.1 6.9,23 8,23H19C20.1,23 21,22.1 21,21V7C21,5.9 20.1,5 19,5M19,21H8V7H19V21Z"/>
                           </svg>
                         </button>
                         {/* Edit Button */}
@@ -7950,6 +8027,7 @@ function AppContent() {
 
   // Edit Repair Order State
   const [isEditing, setIsEditing] = useState(false);
+  const [isDuplicating, setIsDuplicating] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState(null);
   
   // Success Modal State
@@ -8039,156 +8117,185 @@ function AppContent() {
     
     // Reset editing state
     setIsEditing(false);
+    setIsDuplicating(false);
     setEditingOrderId(null);
     setSelectedCustomer(null);
     setSelectedCompany(null);
     setCustomerSearch('');
   };
 
+  const navigateToRepairList = () => navigate('/erstellte-reperaturauftrage');
+
+  // Populate form fields from loaded repair order
+  const applyOrderToForm = (order) => {
+    setSelectedCustomer(order.customers);
+    setSelectedCompany(order.customers.company);
+
+    setKommission(order.kommission || '');
+    setHersteller(order.hersteller || '');
+    setGeraetetyp(order.geraetetyp || '');
+    setSeriennummer(order.seriennummer || '');
+    setWerkstatteingang(order.werkstatteingang || '');
+    setZubehoer(order.zubehoer || '');
+    setKvDate(order.kv_date || '');
+    setPerMethod(order.per_method || 'Fax');
+    setWerkstattNotiz(order.werkstatt_notiz || '');
+    setWerkstattDate(order.werkstatt_date || '');
+    setWerkstattausgang(order.werkstattausgang || '');
+    setGesaendetAnWerkstatt(order.gesendet_an_werkstatt || '');
+    setNotes(order.notes || '');
+
+    if (order.fehlerangaben) {
+      const fehlerData = order.fehlerangaben;
+      setManualFehler1(fehlerData.manual1?.text || '');
+      setManualFehler2(fehlerData.manual2?.text || '');
+      setManualFehler3(fehlerData.manual3?.text || '');
+      setManualFehlerChecked1(fehlerData.manual1?.checked || false);
+      setManualFehlerChecked2(fehlerData.manual2?.checked || false);
+      setManualFehlerChecked3(fehlerData.manual3?.checked || false);
+    }
+
+    setCountry(order.country || 'DE');
+    setFreigabe(order.freigabe || 'Keine angabe');
+    setKvMethod(order.kv_method || 'keine Angabe');
+    setKvFreigabeDate(order.kv_date_freigabe || '');
+    setKulanz(order.kulanz || false);
+    setReklamationDate(order.reklamation_date || '');
+    setGarantieDate(order.garantie_date || '');
+    setKulanzPorto(order.kulanz_porto || 'ja');
+    setManualPorto(order.manual_porto || '');
+    setIdoHdo(order.ido_hdo || 'IDO');
+    setAustriaArbeitszeit(order.austria_arbeitszeit || '26');
+
+    setKostenvoranschlagChecked(order.kostenvoranschlag_checked || false);
+    setKostenvoranschlagAmount(order.kostenvoranschlag_amount || '');
+    setUnrepariertKostenlos(!!order.unrepariert_kostenlos);
+    setPdfVersion(order.pdf_version != null ? order.pdf_version : 1);
+
+    if (order['ausgeführte_arbeiten']) {
+      const arbeitenData = order['ausgeführte_arbeiten'];
+      const newArbeiten = {};
+      const newArbeitenManual = {};
+
+      Object.keys(arbeitenData).forEach((key) => {
+        if (key === '_custom') {
+          setCustomArbeiten(Array.isArray(arbeitenData[key]) ? arbeitenData[key].slice(0, MAX_CUSTOM_ARBEITEN) : []);
+          return;
+        }
+        if (arbeitenData[key] && arbeitenData[key].checked) {
+          newArbeiten[key] = true;
+          if (arbeitenData[key].input) {
+            newArbeitenManual[key] = arbeitenData[key].input;
+          }
+        }
+      });
+
+      if (!arbeitenData._custom) setCustomArbeiten([]);
+
+      setArbeiten(newArbeiten);
+      setArbeitenManual(newArbeitenManual);
+
+      const standardServices = ['fehlerdiagnose', 'reinigung', 'kleinmaterial', 'arbeitszeit', 'endkontrolle'];
+      const allStandardSelected = standardServices.every((service) => newArbeiten[service] === true);
+      setSelectAllStandard(allStandardSelected);
+    } else {
+      setSelectAllStandard(false);
+      setCustomArbeiten([]);
+    }
+
+    if (order.fehlerangaben) {
+      const fehlerData = order.fehlerangaben;
+      const newFehler = {};
+
+      Object.keys(fehlerData).forEach((key) => {
+        if (key !== 'manual1' && key !== 'manual2' && key !== 'manual3' && fehlerData[key]) {
+          newFehler[key] = true;
+        }
+      });
+
+      setFehler(newFehler);
+    }
+  };
+
+  const fetchRepairOrderForForm = async (orderId) => {
+    const { data, error } = await supabase
+      .from('repair_orders')
+      .select(`
+        *,
+        customers (
+          id,
+          company,
+          branch,
+          street,
+          location,
+          country,
+          email,
+          invoice_email
+        )
+      `)
+      .eq('id', orderId)
+      .single();
+
+    if (error) throw error;
+    return data;
+  };
+
   // Load repair order data for editing
   const loadRepairOrderForEdit = async (orderId) => {
     try {
-      const { data, error } = await supabase
-        .from('repair_orders')
-        .select(`
-          *,
-          customers (
-            id,
-            company,
-            branch,
-            street,
-            location,
-            country,
-            email,
-            invoice_email
-          )
-        `)
-        .eq('id', orderId)
-        .single();
-
-      if (error) throw error;
-
-      const order = data;
-      
-      // Set customer
-      setSelectedCustomer(order.customers);
-      setSelectedCompany(order.customers.company);
-      
-      // Set repair order details
-      setKommission(order.kommission || '');
-      setHersteller(order.hersteller || '');
-      setGeraetetyp(order.geraetetyp || '');
-      setSeriennummer(order.seriennummer || '');
-      setWerkstatteingang(order.werkstatteingang || '');
-      setZubehoer(order.zubehoer || '');
-      setKvDate(order.kv_date || '');
-      setPerMethod(order.per_method || 'Fax');
-      setWerkstattNotiz(order.werkstatt_notiz || '');
-      setWerkstattDate(order.werkstatt_date || '');
-      setWerkstattausgang(order.werkstattausgang || '');
-      setGesaendetAnWerkstatt(order.gesendet_an_werkstatt || '');
-      setNotes(order.notes || '');
-      
-      // Set manual fehlerangaben
-      if (order.fehlerangaben) {
-        const fehler = order.fehlerangaben;
-        setManualFehler1(fehler.manual1?.text || '');
-        setManualFehler2(fehler.manual2?.text || '');
-        setManualFehler3(fehler.manual3?.text || '');
-        setManualFehlerChecked1(fehler.manual1?.checked || false);
-        setManualFehlerChecked2(fehler.manual2?.checked || false);
-        setManualFehlerChecked3(fehler.manual3?.checked || false);
-      }
-      
-      // Set form settings
-      setCountry(order.country || 'DE');
-      setFreigabe(order.freigabe || 'Keine angabe');
-      setKvMethod(order.kv_method || 'keine Angabe');
-      setKvFreigabeDate(order.kv_date_freigabe || '');
-      setKulanz(order.kulanz || false);
-      setReklamationDate(order.reklamation_date || '');
-      setGarantieDate(order.garantie_date || '');
-      setKulanzPorto(order.kulanz_porto || 'ja');
-      setManualPorto(order.manual_porto || '');
-      setIdoHdo(order.ido_hdo || 'IDO');
-      setAustriaArbeitszeit(order.austria_arbeitszeit || '26');
-      
-      // Set Kostenvoranschlag
-      setKostenvoranschlagChecked(order.kostenvoranschlag_checked || false);
-      setKostenvoranschlagAmount(order.kostenvoranschlag_amount || '');
-      setUnrepariertKostenlos(!!order.unrepariert_kostenlos);
-      setPdfVersion(order.pdf_version != null ? order.pdf_version : 1);
-      
-      // Set arbeiten and fehler
-      if (order['ausgeführte_arbeiten']) {
-        const arbeiten = order['ausgeführte_arbeiten'];
-        const newArbeiten = {};
-        const newArbeitenManual = {};
-        
-        Object.keys(arbeiten).forEach(key => {
-          if (key === '_custom') {
-            setCustomArbeiten(Array.isArray(arbeiten[key]) ? arbeiten[key].slice(0, MAX_CUSTOM_ARBEITEN) : []);
-            return;
-          }
-          if (arbeiten[key] && arbeiten[key].checked) {
-            newArbeiten[key] = true;
-            if (arbeiten[key].input) {
-              newArbeitenManual[key] = arbeiten[key].input;
-            }
-          }
-        });
-        
-        if (!arbeiten._custom) setCustomArbeiten([]);
-        
-        setArbeiten(newArbeiten);
-        setArbeitenManual(newArbeitenManual);
-        
-        // Check if all 5 standard services are selected and update selectAllStandard accordingly
-        const standardServices = ['fehlerdiagnose', 'reinigung', 'kleinmaterial', 'arbeitszeit', 'endkontrolle'];
-        const allStandardSelected = standardServices.every(service => newArbeiten[service] === true);
-        setSelectAllStandard(allStandardSelected);
-      } else {
-        // No arbeiten data, so selectAllStandard should be false
-        setSelectAllStandard(false);
-        setCustomArbeiten([]);
-      }
-      
-      if (order.fehlerangaben) {
-        const fehler = order.fehlerangaben;
-        const newFehler = {};
-        
-        Object.keys(fehler).forEach(key => {
-          if (key !== 'manual1' && key !== 'manual2' && key !== 'manual3' && fehler[key]) {
-            newFehler[key] = true;
-          }
-        });
-        
-        setFehler(newFehler);
-      }
-      
-      // Set editing state
+      const order = await fetchRepairOrderForForm(orderId);
+      applyOrderToForm(order);
+      setIsDuplicating(false);
       setIsEditing(true);
       setEditingOrderId(orderId);
-      
     } catch (error) {
       console.error('Error loading repair order for edit:', error);
       alert('Fehler beim Laden des Reparaturauftrags');
     }
   };
 
+  // Duplicate repair order (Doppelversorgung) — copy data, new KV
+  const loadRepairOrderForDuplicate = async (orderId) => {
+    try {
+      const order = await fetchRepairOrderForForm(orderId);
+      applyOrderToForm(order);
+
+      setKommission('');
+      setWerkstatteingang('');
+      setWerkstattausgang('');
+      setGesaendetAnWerkstatt('');
+      setKvDate('');
+      setKvFreigabeDate('');
+      setReklamationDate('');
+      setGarantieDate('');
+      setWerkstattDate('');
+
+      setIsDuplicating(true);
+      setIsEditing(false);
+      setEditingOrderId(null);
+      setHasUnsavedChanges(true);
+    } catch (error) {
+      console.error('Error loading repair order for duplicate:', error);
+      alert('Fehler beim Duplizieren des Reparaturauftrags');
+    }
+  };
+
   // Check if we're editing on route change
   useEffect(() => {
     if (location.pathname === '/reperaturauftrag') {
-      const urlParams = new URLSearchParams(window.location.search);
+      const urlParams = new URLSearchParams(location.search);
       const editId = urlParams.get('edit');
-      
+      const duplicateId = urlParams.get('duplicate');
+
       if (editId) {
         loadRepairOrderForEdit(editId);
+      } else if (duplicateId) {
+        loadRepairOrderForDuplicate(duplicateId);
       } else {
         handleReset();
       }
     }
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
 
   // Handlers
   const handleCountry = (e) => setCountry(e.target.value);
@@ -8554,7 +8661,7 @@ function AppContent() {
       handleReset();
       
       // Navigate back to repair orders overview after save (both new and edit)
-      navigate('/erstellte-reperaturauftrage');
+      navigateToRepairList();
       
     } catch (error) {
       console.error('Error saving repair order:', error);
@@ -9132,13 +9239,13 @@ function AppContent() {
                   </button>
                   <span style={{ color: '#999' }}>/</span>
                   <span style={{ color: '#333', fontWeight: '500' }}>
-                    {isEditing ? 'Reperaturauftrag bearbeiten' : 'Reperaturauftrag erstellen'}
+                    {isDuplicating ? 'KV duplizieren (Doppelversorgung)' : isEditing ? 'Reperaturauftrag bearbeiten' : 'Reperaturauftrag erstellen'}
                   </span>
-                  {isEditing && (
+                  {(isEditing || isDuplicating) && (
                     <>
                       <span style={{ color: '#999' }}>/</span>
                       <button 
-                        onClick={() => navigate('/erstellte-reperaturauftrage')}
+                        onClick={navigateToRepairList}
                         style={{ 
                           background: 'none', 
                           border: 'none', 
