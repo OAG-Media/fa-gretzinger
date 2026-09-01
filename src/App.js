@@ -3386,6 +3386,12 @@ const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
                             gap: '4px',
                             transition: 'all 0.2s ease'
                           }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }}
                           title="KV / Auftrag per E-Mail senden"
                         >
                           <MailIcon size={14} />
@@ -3433,6 +3439,12 @@ const ErstellteReperaturauftragePage = ({ userRole = 'mitarbeiter' }) => {
                             alignItems: 'center',
                             gap: '4px',
                             transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'scale(1)';
                           }}
                           title="KV duplizieren (Doppelversorgung)"
                         >
@@ -4793,7 +4805,14 @@ const ErstellteRechnungenPage = () => {
                           fontSize: '12px',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '4px'
+                          gap: '4px',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'scale(1.05)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'scale(1)';
                         }}
                         title="Rechnung per E-Mail senden"
                       >
