@@ -34,22 +34,6 @@ async function syncInboundApi() {
   return data;
 }
 
-/** Hintergrund-Sync max. alle `minMs` (vermeidet Doppel-IMAP von Home + Postfach). */
-async function quietSyncIfDue(minMs = 90_000) {
-  try {
-    const key = 'fa_email_last_sync_at';
-    const last = Number(sessionStorage.getItem(key) || 0);
-    if (Date.now() - last < minMs) return null;
-    sessionStorage.setItem(key, String(Date.now()));
-    return await syncInboundApi();
-  } catch (e) {
-    console.warn('[email auto-sync]', e.message || e);
-    return null;
-  }
-}
-
-export { quietSyncIfDue };
-
 /** Eine sichtbare Zeile pro Message-ID (Resend + IMAP sonst doppelt). */
 function dedupeByMessageId(mails) {
   const byKey = new Map();
@@ -258,27 +242,25 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     setFolder('inbound');
   }, [load, mailboxKey]);
 
-  // Auto: einmal beim Öffnen + alle ~90s im Hintergrund (IMAP + Resend)
+  // Sync nur beim Öffnen / Tab-Wechsel (kein Hintergrund-Polling → spart Vercel CPU)
   useEffect(() => {
     let cancelled = false;
-    const run = async () => {
-      const r = await quietSyncIfDue(90_000);
-      if (cancelled) return;
-      const imported = r?.imported || 0;
-      if (r && imported > 0) {
+    (async () => {
+      try {
+        await syncInboundApi();
+        if (cancelled) return;
         const { data } = await supabase
           .from('email_logs')
           .select('*')
           .order('created_at', { ascending: false })
           .limit(500);
         if (!cancelled && data) setLogs(data);
+      } catch (e) {
+        console.warn('[email sync on open]', e.message || e);
       }
-    };
-    run();
-    const t = setInterval(run, 90_000);
+    })();
     return () => {
       cancelled = true;
-      clearInterval(t);
     };
   }, [mailboxKey]);
 

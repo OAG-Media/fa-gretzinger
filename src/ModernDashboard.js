@@ -3,7 +3,6 @@ import { useLocation } from 'react-router-dom';
 import { supabase, fetchAllPages } from './supabaseClient';
 import { useAdminDashboardPrefs } from './dashboardPrefs';
 import { mailboxesForRole, detectMailboxKey } from './emailConfig';
-import { quietSyncIfDue } from './PostfachPage';
 import './ModernDashboard.css';
 
 const MONTHS_DE = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
@@ -1137,12 +1136,11 @@ export function ModernShell({ onLogout, navigate, role = 'mitarbeiter', children
   const showInvoices = role === 'admin';
   const [unreadByMailbox, setUnreadByMailbox] = useState({ kv: 0, info: 0 });
 
+  // Unread-Badge nur aus Supabase (kein IMAP/Vercel-Sync im Hintergrund)
   useEffect(() => {
     let cancelled = false;
     const loadUnread = async () => {
       try {
-        await quietSyncIfDue(120_000);
-        if (cancelled) return;
         const { data, error } = await supabase
           .from('email_logs')
           .select('id, mailbox_key, from_address, to_address, email_type, direction, read_at, deleted_at, archived_at, message_id')
@@ -1168,12 +1166,10 @@ export function ModernShell({ onLogout, navigate, role = 'mitarbeiter', children
       }
     };
     loadUnread();
-    const t = setInterval(loadUnread, 45000);
     const onUnread = () => { loadUnread(); };
     window.addEventListener('fa-email-unread-changed', onUnread);
     return () => {
       cancelled = true;
-      clearInterval(t);
       window.removeEventListener('fa-email-unread-changed', onUnread);
     };
   }, [path, role]);
