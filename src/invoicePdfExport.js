@@ -149,27 +149,31 @@ const renderShortHeader = (doc) => {
   doc.addImage('https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png', 'PNG', LOGO_LEFT, HEADER_TOP, smallLogoWidth, smallLogoHeight);
 };
 
-// Render invoice information
-const renderInvoiceInfo = (doc, invoiceData) => {
-  const { INVOICE_INFO_TOP, INVOICE_NUMBER_LEFT, INVOICE_DATE_LEFT, PERIOD_TEXT_TOP } = PDF_LAYOUT;
+// Render invoice information (optional topY wenn Adresse inkl. USt-ID mehr Platz braucht)
+const renderInvoiceInfo = (doc, invoiceData, topY = PDF_LAYOUT.INVOICE_INFO_TOP) => {
+  const { INVOICE_NUMBER_LEFT, INVOICE_DATE_LEFT, INVOICE_INFO_HEIGHT, PERIOD_TEXT_TO_TABLE_GAP } = PDF_LAYOUT;
+  const infoTop = topY;
+  const periodTop = infoTop + INVOICE_INFO_HEIGHT;
   
   // Invoice number (left)
   doc.setFontSize(PDF_LAYOUT.FONT_SIZE_LARGE);
   doc.setFont('helvetica', 'bold');
-  doc.text(`Rechnung Nr. ${invoiceData.invoiceNumber}`, INVOICE_NUMBER_LEFT, INVOICE_INFO_TOP);
+  doc.text(`Rechnung Nr. ${invoiceData.invoiceNumber}`, INVOICE_NUMBER_LEFT, infoTop);
   
   // Invoice date (right aligned)
   doc.setFontSize(PDF_LAYOUT.FONT_SIZE_NORMAL);
   doc.setFont('helvetica', 'normal');
   const invoiceDate = new Date(invoiceData.invoiceDate).toLocaleDateString('de-DE');
-  doc.text(invoiceDate, INVOICE_DATE_LEFT, INVOICE_INFO_TOP, { align: 'right' });
+  doc.text(invoiceDate, INVOICE_DATE_LEFT, infoTop, { align: 'right' });
   
   // Period text
   doc.setFontSize(PDF_LAYOUT.FONT_SIZE_NORMAL);
   const periodStart = new Date(invoiceData.periodStart).toLocaleDateString('de-DE');
   const periodEnd = new Date(invoiceData.periodEnd).toLocaleDateString('de-DE');
   doc.text(`Die nachfolgenden Leistungen wurden für den Zeitraum von ${periodStart} bis ${periodEnd} berechnet.`, 
-           INVOICE_NUMBER_LEFT, PERIOD_TEXT_TOP);
+           INVOICE_NUMBER_LEFT, periodTop);
+
+  return periodTop + PERIOD_TEXT_TO_TABLE_GAP;
 };
 
 const formatCountryLabel = (value) => {
@@ -184,7 +188,7 @@ const formatCountryLabel = (value) => {
   return raw;
 };
 
-// Render customer address
+// Render customer address — returns end Y (unter letzter Zeile) für Layout darunter
 const renderCustomerAddress = (doc, customer) => {
   const { CUSTOMER_ADDRESS_TOP, CUSTOMER_ADDRESS_LEFT } = PDF_LAYOUT;
   
@@ -195,25 +199,26 @@ const renderCustomerAddress = (doc, customer) => {
   
   // Straße/Ort: Billing wenn vorhanden, sonst Filiale.
   // Land: immer billing_country wenn gesetzt (Pflichtfeld) — kein stilles DE-Fallback.
-  const hasBillingAddr = !!(customer.billing_street || customer.billing_location);
-  const street = hasBillingAddr ? (customer.billing_street || customer.street) : customer.street;
-  const location = hasBillingAddr ? (customer.billing_location || customer.location) : customer.location;
-  const country = formatCountryLabel(customer.billing_country || customer.country);
+  const hasBillingAddr = !!(customer?.billing_street || customer?.billing_location);
+  const street = hasBillingAddr ? (customer.billing_street || customer.street) : customer?.street;
+  const location = hasBillingAddr ? (customer.billing_location || customer.location) : customer?.location;
+  const country = formatCountryLabel(customer?.billing_country || customer?.country);
+  const ustId = String(customer?.ust_id || '').trim();
   
   // Only show company name (not branch to avoid duplication)
-  if (customer.company) {
-    doc.text(customer.company, CUSTOMER_ADDRESS_LEFT, currentY);
+  if (customer?.company) {
+    doc.text(String(customer.company), CUSTOMER_ADDRESS_LEFT, currentY);
     currentY += 4;
   }
   
   if (street) {
-    doc.text(street, CUSTOMER_ADDRESS_LEFT, currentY);
+    doc.text(String(street), CUSTOMER_ADDRESS_LEFT, currentY);
     currentY += 4;
   }
   
   // City/location on its own line
   if (location) {
-    doc.text(location, CUSTOMER_ADDRESS_LEFT, currentY);
+    doc.text(String(location), CUSTOMER_ADDRESS_LEFT, currentY);
     currentY += 4;
   }
   
@@ -223,10 +228,13 @@ const renderCustomerAddress = (doc, customer) => {
     currentY += 4;
   }
 
-  // USt-ID immer anzeigen wenn hinterlegt (DE und AT)
-  if (customer.ust_id) {
-    doc.text(`USt-ID-Nr.: ${customer.ust_id}`, CUSTOMER_ADDRESS_LEFT, currentY);
+  // USt-ID immer unter dem Land, sobald hinterlegt (DE und AT, alle Akustiker)
+  if (ustId) {
+    doc.text(`USt-ID-Nr.: ${ustId}`, CUSTOMER_ADDRESS_LEFT, currentY);
+    currentY += 4;
   }
+
+  return currentY;
 };
 
 // Render table header
@@ -554,16 +562,19 @@ export const generateInvoicePDF = (invoiceData, selectedOrders, options = {}) =>
     const isLastPage = pageIndex === pages.length - 1;
     
     // Render header
+    let tableStartY = isFirstPage
+      ? PDF_LAYOUT.TABLE_START_Y
+      : PDF_LAYOUT.HEADER_TOP + PDF_LAYOUT.LOGO_HEIGHT / 2 + 20;
     if (isFirstPage) {
       renderHeader(doc);
-      renderCustomerAddress(doc, invoiceData.customer);
-      renderInvoiceInfo(doc, invoiceData);
+      const addressEndY = renderCustomerAddress(doc, invoiceData.customer);
+      // Rechnungsnr. erst unter Adresse (+ USt-ID), mind. Standard-Abstand
+      const infoTop = Math.max(PDF_LAYOUT.INVOICE_INFO_TOP, addressEndY + 6);
+      tableStartY = renderInvoiceInfo(doc, invoiceData, infoTop);
     } else {
       renderShortHeader(doc);
     }
     
-    // Render table header - start earlier on page 2+ (reduced by 20%)
-    const tableStartY = isFirstPage ? PDF_LAYOUT.TABLE_START_Y : PDF_LAYOUT.HEADER_TOP + PDF_LAYOUT.LOGO_HEIGHT / 2 + 20; // 20px below smaller logo (reduced from 25px)
     let currentY = renderTableHeader(doc, tableStartY);
     
     // Render table rows

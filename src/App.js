@@ -989,7 +989,12 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                           <tr key={customer.id} style={{ borderTop: '1px solid #f0f0f0' }}>
                             <td style={{ padding: '10px 14px' }}>{customer.branch || '—'}</td>
                             <td style={{ padding: '10px 14px' }}>{customer.location || '—'}</td>
-                            <td style={{ padding: '10px 14px' }}>{customer.country || '—'}</td>
+                            <td style={{ padding: '10px 14px' }}>
+                              <div>{customer.country || '—'}</div>
+                              {customer.ust_id ? (
+                                <div style={{ fontSize: 12, color: '#555', marginTop: 2 }}>USt-ID: {customer.ust_id}</div>
+                              ) : null}
+                            </td>
                             <td style={{ padding: '10px 14px', textAlign: 'right' }}>
                               <button onClick={() => handleEditCustomer(customer)} style={{ marginRight: 8, padding: '4px 10px', border: '1px solid #1d426a', background: 'none', color: '#1d426a', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Bearbeiten</button>
                               <button onClick={() => handleArchiveCustomer(customer)} style={{ padding: '4px 10px', border: '1px solid #dc3545', background: 'none', color: '#dc3545', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>Archivieren</button>
@@ -1179,7 +1184,10 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                     {customer.location || '-'}
                   </td>
                   <td style={{ padding: '16px', fontSize: '14px', color: '#333' }}>
-                    {customer.country || '-'}
+                    <div>{customer.country || '-'}</div>
+                    {customer.ust_id ? (
+                      <div style={{ fontSize: 12, color: '#555', marginTop: 2 }}>USt-ID: {customer.ust_id}</div>
+                    ) : null}
                   </td>
                   <td style={{ padding: '16px', textAlign: 'center' }}>
                     <div style={{ display: 'flex', justifyContent: 'center', gap: '4px' }}>
