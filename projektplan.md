@@ -50,6 +50,14 @@ App läuft produktiv auf Vercel (`fa-gretzinger.vercel.app`), Daten in Supabase 
 - Native App für Papa: Postfach + freie E-Mails von zu Hause (gleiche Supabase/Resend-API)
 - Erst nach stabilem Postfach in Production; kein aktiver Sprint
 
+## Erledigt (2026-11-01)
+- Rechnungen: echtes Soft-Archiv (`invoices.archived`) + Archiv-Ansicht / Wiederherstellen (vorher Hard-Delete)
+- PDF/UI: USt-ID immer anzeigen wenn hinterlegt; Land aus `billing_country` (kein stilles DE)
+- Rechnungsland Pflicht beim Akustiker-Anlegen und Rechnung speichern
+- Rechnung **8558** wiederhergestellt: PDF aus Hostinger Sent; Entwurf 8590 (identisch) → Nr. 8558, Status sent, Mail an kuk@optikbauer.at
+- Rechnungen-Liste: Sortierung (Default Nr.), Status = Versandstatus; Auge-Vorschau (PdfGrabPreview, mehrseitig)
+- Rechnungsnr.: rot bei Duplikat (Speichern blockiert), gelb bei Nummernlücke (+ Bestätigung beim Speichern)
+
 ## Erledigt (2026-07-29)
 - Gutschrift in Kommission-Spalte (UI/PDF/Excel)
 - Excel-Export für Rechnungspositionen

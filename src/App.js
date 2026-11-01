@@ -20,7 +20,13 @@ import PdfGrabPreview from './PdfGrabPreview';
 import { NoticeProvider } from './AppNotice';
 import { buildInvoiceEmailVars, buildKvEmailVars } from './emailTemplateVars';
 import { buildKvPdfAttachment } from './kvEmailUtils';
+import { buildInvoicePdfAttachment } from './invoiceEmailUtils';
 import { pdfBase64ToObjectUrl } from './emailAttachmentUtils';
+import {
+  evaluateInvoiceNumber,
+  getExpectedNextInvoiceNumber,
+  invoiceNumberBorderColor
+} from './invoiceNumberValidation';
 import {
   generateRepairOrderPDF,
   FREIGABE_OPTIONS,
@@ -102,6 +108,17 @@ const COUNTRY_OPTIONS = [
   { key: 'DE', label: 'Deutschland', arbeitszeit: 22.0, porto: 5.95, tax_rate: 0.19 },
   { key: 'AT', label: 'Österreich', arbeitszeit: 26.0, porto: 9.0, tax_rate: 0.0 },
 ];
+
+const isAustriaCountry = (value) => {
+  const n = String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  return n === 'at' || n.includes('osterreich') || n.includes('austria');
+};
+
+const countryToCode = (value, fallback = 'DE') =>
+  isAustriaCountry(value) ? 'AT' : (value ? 'DE' : fallback);
 
 const MAX_CUSTOM_ARBEITEN = 3;
 const PDF_VERSION_CURRENT = 2;
@@ -422,7 +439,7 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
     invoice_email: '',
     billing_street: '',
     billing_location: '',
-    billing_country: 'DE',
+    billing_country: '',
     ust_id: ''
   });
   
@@ -594,13 +611,14 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
       company: customer.company || '',
       street: customer.street || '',
       location: customer.location || '',
-      country: customer.country === 'Österreich' ? 'AT' : 'DE',
+      country: countryToCode(customer.country),
       contact_person: customer.contact_person || '',
       email: customer.email || '',
       invoice_email: customer.invoice_email || '',
       billing_street: customer.billing_street || '',
       billing_location: customer.billing_location || '',
-      billing_country: customer.billing_country === 'Österreich' ? 'AT' : 'DE',
+      // Kein stilles Fallback auf Filialland — Rechnungsland muss gesetzt sein
+      billing_country: customer.billing_country ? countryToCode(customer.billing_country, '') : '',
       ust_id: customer.ust_id || ''
     });
     setShowEditModal(true);
@@ -608,8 +626,16 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
 
   const handleUpdateCustomer = async () => {
     try {
-      // Check if billing address is being updated and if there are other acousticians from the same company
-      const hasBillingAddress = editForm.billing_street || editForm.billing_location || editForm.billing_country;
+      if (!editForm.billing_country) {
+        alert('Rechnungsland fehlt.\n\nBitte unter Rechnungsadresse das Land (Deutschland oder Österreich) auswählen.');
+        return;
+      }
+      if (editForm.billing_country === 'AT' && !String(editForm.ust_id || '').trim()) {
+        alert('Für Österreich bitte eine USt-ID-Nr. angeben.');
+        return;
+      }
+
+      const hasBillingAddress = !!(editForm.billing_street || editForm.billing_location);
       const otherAcousticians = customers.filter(customer => 
         customer.company === editForm.company && 
         customer.id !== editingCustomer.id &&
@@ -619,7 +645,7 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
 
       let shouldUpdateAll = false;
       
-      if (hasBillingAddress && otherAcousticians.length > 0) {
+      if ((hasBillingAddress || editForm.billing_country) && otherAcousticians.length > 0) {
         const confirmMessage = `${otherAcousticians.length} weitere Akustiker für ${editForm.company} entdeckt, möchten Sie diese Rechnungsadresse für alle weiteren ${otherAcousticians.length} Akustiker übernehmen?`;
         shouldUpdateAll = window.confirm(confirmMessage);
       }
@@ -634,8 +660,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
         contact_person: editForm.contact_person,
         email: editForm.email || null,
         invoice_email: editForm.invoice_email || null,
-        billing_street: editForm.billing_street,
-        billing_location: editForm.billing_location,
+        billing_street: editForm.billing_street || null,
+        billing_location: editForm.billing_location || null,
         billing_country: editForm.billing_country === 'DE' ? 'Deutschland' : 'Österreich',
         ust_id: editForm.ust_id || null
       };
@@ -652,8 +678,8 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
         const { error: bulkError } = await supabase
           .from('customers')
           .update({
-            billing_street: editForm.billing_street,
-            billing_location: editForm.billing_location,
+            billing_street: editForm.billing_street || null,
+            billing_location: editForm.billing_location || null,
             billing_country: editForm.billing_country === 'DE' ? 'Deutschland' : 'Österreich'
           })
           .in('id', otherAcousticians.map(customer => customer.id));
@@ -1575,20 +1601,22 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
                 
                 <div style={{ marginBottom: '1rem' }}>
                   <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
-                    Land
+                    Rechnungsland *
                   </label>
                   <select
                     value={editForm.billing_country}
                     onChange={(e) => setEditForm(prev => ({ ...prev, billing_country: e.target.value }))}
+                    required
                     style={{
                       width: '100%',
                       padding: '10px 12px',
-                      border: '1px solid #ddd',
+                      border: editForm.billing_country ? '1px solid #ddd' : '1px solid #dc3545',
                       borderRadius: '4px',
                       fontSize: '14px',
                       boxSizing: 'border-box'
                     }}
                   >
+                    <option value="">— bitte wählen —</option>
                     <option value="DE">Deutschland</option>
                     <option value="AT">Österreich</option>
                   </select>
@@ -1596,14 +1624,14 @@ const AkustikerPage = ({ customers, setShowAddAkustikerModal, showAddAkustikerMo
 
                 <div style={{ marginBottom: '1rem' }}>
                   <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
-                    USt-ID-Nr{editForm.country === 'AT' ? ' *' : ''}
+                    USt-ID-Nr{editForm.billing_country === 'AT' ? ' *' : ''}
                   </label>
                   <input
                     type="text"
                     value={editForm.ust_id || ''}
                     onChange={(e) => setEditForm(prev => ({ ...prev, ust_id: e.target.value }))}
-                    placeholder={editForm.country === 'AT' ? 'ATU12345678' : 'z. B. DE285394860'}
-                    required={editForm.country === 'AT'}
+                    placeholder={editForm.billing_country === 'AT' ? 'ATU12345678' : 'z. B. DE285394860'}
+                    required={editForm.billing_country === 'AT'}
                     style={{
                       width: '100%',
                       padding: '10px 12px',
@@ -1974,20 +2002,22 @@ const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkus
             
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
-                Land
+                Rechnungsland *
               </label>
               <select
                 value={newAkustiker.billing_country}
                 onChange={(e) => setNewAkustiker(prev => ({ ...prev, billing_country: e.target.value }))}
+                required
                 style={{
                   width: '100%',
                   padding: '10px 12px',
-                  border: '1px solid #ddd',
+                  border: newAkustiker.billing_country ? '1px solid #ddd' : '1px solid #dc3545',
                   borderRadius: '4px',
                   fontSize: '14px',
                   boxSizing: 'border-box'
                 }}
               >
+                <option value="">— bitte wählen —</option>
                 <option value="DE">Deutschland</option>
                 <option value="AT">Österreich</option>
               </select>
@@ -1995,14 +2025,14 @@ const AddAkustikerModal = ({ isOpen, onClose, onSubmit, newAkustiker, setNewAkus
 
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', textAlign: 'left' }}>
-                USt-ID-Nr{newAkustiker.country === 'AT' ? ' *' : ''}
+                USt-ID-Nr{newAkustiker.billing_country === 'AT' ? ' *' : ''}
               </label>
               <input
                 type="text"
                 value={newAkustiker.ust_id}
                 onChange={(e) => setNewAkustiker(prev => ({ ...prev, ust_id: e.target.value }))}
-                placeholder={newAkustiker.country === 'AT' ? 'ATU12345678' : 'z. B. DE285394860'}
-                required={newAkustiker.country === 'AT'}
+                placeholder={newAkustiker.billing_country === 'AT' ? 'ATU12345678' : 'z. B. DE285394860'}
+                required={newAkustiker.billing_country === 'AT'}
                 style={{
                   width: '100%',
                   padding: '10px 12px',
@@ -4147,6 +4177,43 @@ const ErstellteRechnungenPage = () => {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedAkustiker, setSelectedAkustiker] = useState('');
   const [mailTarget, setMailTarget] = useState(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [sortKey, setSortKey] = useState('invoice_number');
+  const [sortDir, setSortDir] = useState('desc'); // höchste Rechnungsnr. zuerst
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [viewingInvoice, setViewingInvoice] = useState(null);
+  const [viewPdfUrl, setViewPdfUrl] = useState('');
+  const [viewPdfName, setViewPdfName] = useState('');
+  const [viewPdfLoading, setViewPdfLoading] = useState(false);
+
+  const closeViewModal = () => {
+    if (viewPdfUrl) URL.revokeObjectURL(viewPdfUrl);
+    setViewPdfUrl('');
+    setViewPdfName('');
+    setViewPdfLoading(false);
+    setViewingInvoice(null);
+    setShowViewModal(false);
+  };
+
+  const handleViewInvoice = async (invoice) => {
+    if (viewPdfUrl) URL.revokeObjectURL(viewPdfUrl);
+    setViewingInvoice(invoice);
+    setShowViewModal(true);
+    setViewPdfLoading(true);
+    setViewPdfUrl('');
+    setViewPdfName(`Rechnung ${invoice?.invoice_number || ''}`.trim());
+    try {
+      const { base64, filename } = await buildInvoicePdfAttachment(invoice);
+      const { objectUrl } = pdfBase64ToObjectUrl(base64);
+      setViewPdfUrl(objectUrl);
+      if (filename) setViewPdfName(filename);
+    } catch (e) {
+      alert('PDF-Vorschau fehlgeschlagen: ' + (e.message || e));
+      closeViewModal();
+    } finally {
+      setViewPdfLoading(false);
+    }
+  };
 
   // Load invoices from database
   const loadInvoices = async () => {
@@ -4163,10 +4230,12 @@ const ErstellteRechnungenPage = () => {
             street,
             location,
             country,
-            email
+            email,
+            invoice_email
           )
         `)
-        .order('created_at', { ascending: false });
+        .eq('archived', showArchived)
+        .order('invoice_number', { ascending: false });
 
       if (error) throw error;
       setInvoices(data || []);
@@ -4178,9 +4247,20 @@ const ErstellteRechnungenPage = () => {
     }
   };
 
+  const toggleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'invoice_number' || key === 'invoice_date' || key === 'subtotal' || key === 'tax_amount' || key === 'total_amount' || key === 'email_sent_at'
+        ? 'desc'
+        : 'asc');
+    }
+  };
+
   useEffect(() => {
     loadInvoices();
-  }, []);
+  }, [showArchived]);
 
   const handleMonthSelection = (year, month) => {
     const endOfMonth = new Date(year, month, 0);
@@ -4210,67 +4290,140 @@ const ErstellteRechnungenPage = () => {
       .replace(',', '.')
       .trim();
 
-  const filteredInvoices = invoices.filter((invoice) => {
-    // Akustiker / company filter
-    if (selectedAkustiker && invoice.customers?.company !== selectedAkustiker) {
-      return false;
-    }
-
-    // Date range filter (invoice_date)
-    if (dateFrom || dateTo) {
-      const invDate = invoice.invoice_date || '';
-      if (dateFrom && invDate < dateFrom) return false;
-      if (dateTo && invDate > dateTo) return false;
-    }
-
-    if (!searchTerm.trim()) return true;
-
-    const term = searchTerm.toLowerCase().trim();
-    const amountTerm = normalizeSearchAmount(searchTerm);
-
-    const searchableText = [
-      invoice.invoice_number,
-      invoice.status,
-      invoice.customers?.company,
-      invoice.customers?.branch,
-      invoice.customers?.street,
-      invoice.customers?.location,
-      invoice.customers?.country,
-      invoice.invoice_date,
-      invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('de-DE') : '',
-      invoice.period_start,
-      invoice.period_end,
-      invoice.subtotal != null ? Number(invoice.subtotal).toFixed(2) : '',
-      invoice.subtotal != null ? Number(invoice.subtotal).toFixed(2).replace('.', ',') : '',
-      invoice.tax_amount != null ? Number(invoice.tax_amount).toFixed(2) : '',
-      invoice.tax_amount != null ? Number(invoice.tax_amount).toFixed(2).replace('.', ',') : '',
-      invoice.total_amount != null ? Number(invoice.total_amount).toFixed(2) : '',
-      invoice.total_amount != null ? Number(invoice.total_amount).toFixed(2).replace('.', ',') : ''
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
-
-    if (searchableText.includes(term)) return true;
-
-    // Amount search (netto / brutto / mwst)
-    if (amountTerm && !Number.isNaN(Number(amountTerm))) {
-      const needle = Number(amountTerm);
-      const amounts = [
-        Number(invoice.subtotal),
-        Number(invoice.tax_amount),
-        Number(invoice.total_amount)
-      ].filter((n) => !Number.isNaN(n));
-
-      // Exact or starts-with on formatted amounts
-      if (amounts.some((n) => Math.abs(n - needle) < 0.005)) return true;
-      if (amounts.some((n) => n.toFixed(2).startsWith(amountTerm) || n.toFixed(2).replace('.', ',').startsWith(searchTerm.trim()))) {
-        return true;
+  const filteredInvoices = invoices
+    .filter((invoice) => {
+      // Akustiker / company filter
+      if (selectedAkustiker && invoice.customers?.company !== selectedAkustiker) {
+        return false;
       }
-    }
 
-    return false;
-  });
+      // Date range filter (invoice_date)
+      if (dateFrom || dateTo) {
+        const invDate = invoice.invoice_date || '';
+        if (dateFrom && invDate < dateFrom) return false;
+        if (dateTo && invDate > dateTo) return false;
+      }
+
+      if (!searchTerm.trim()) return true;
+
+      const term = searchTerm.toLowerCase().trim();
+      const amountTerm = normalizeSearchAmount(searchTerm);
+
+      const searchableText = [
+        invoice.invoice_number,
+        invoice.status,
+        invoice.customers?.company,
+        invoice.customers?.branch,
+        invoice.customers?.street,
+        invoice.customers?.location,
+        invoice.customers?.country,
+        invoice.invoice_date,
+        invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('de-DE') : '',
+        invoice.period_start,
+        invoice.period_end,
+        invoice.email_sent_at ? 'versendet' : 'noch nicht versendet',
+        invoice.subtotal != null ? Number(invoice.subtotal).toFixed(2) : '',
+        invoice.subtotal != null ? Number(invoice.subtotal).toFixed(2).replace('.', ',') : '',
+        invoice.tax_amount != null ? Number(invoice.tax_amount).toFixed(2) : '',
+        invoice.tax_amount != null ? Number(invoice.tax_amount).toFixed(2).replace('.', ',') : '',
+        invoice.total_amount != null ? Number(invoice.total_amount).toFixed(2) : '',
+        invoice.total_amount != null ? Number(invoice.total_amount).toFixed(2).replace('.', ',') : ''
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      if (searchableText.includes(term)) return true;
+
+      // Amount search (netto / brutto / mwst)
+      if (amountTerm && !Number.isNaN(Number(amountTerm))) {
+        const needle = Number(amountTerm);
+        const amounts = [
+          Number(invoice.subtotal),
+          Number(invoice.tax_amount),
+          Number(invoice.total_amount)
+        ].filter((n) => !Number.isNaN(n));
+
+        // Exact or starts-with on formatted amounts
+        if (amounts.some((n) => Math.abs(n - needle) < 0.005)) return true;
+        if (amounts.some((n) => n.toFixed(2).startsWith(amountTerm) || n.toFixed(2).replace('.', ',').startsWith(searchTerm.trim()))) {
+          return true;
+        }
+      }
+
+      return false;
+    })
+    .slice()
+    .sort((a, b) => {
+      const dir = sortDir === 'asc' ? 1 : -1;
+      const num = (v) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : 0;
+      };
+      let cmp = 0;
+      switch (sortKey) {
+        case 'email_sent_at': {
+          const av = a.email_sent_at ? 1 : 0;
+          const bv = b.email_sent_at ? 1 : 0;
+          cmp = av - bv;
+          if (cmp === 0) {
+            cmp = String(a.email_sent_at || '').localeCompare(String(b.email_sent_at || ''));
+          }
+          break;
+        }
+        case 'invoice_number':
+          cmp = num(a.invoice_number) - num(b.invoice_number);
+          break;
+        case 'customer': {
+          const ac = `${a.customers?.company || ''} ${a.customers?.branch || ''}`.trim();
+          const bc = `${b.customers?.company || ''} ${b.customers?.branch || ''}`.trim();
+          cmp = ac.localeCompare(bc, 'de');
+          break;
+        }
+        case 'invoice_date':
+          cmp = String(a.invoice_date || '').localeCompare(String(b.invoice_date || ''));
+          break;
+        case 'subtotal':
+          cmp = num(a.subtotal) - num(b.subtotal);
+          break;
+        case 'tax_amount':
+          cmp = num(a.tax_amount) - num(b.tax_amount);
+          break;
+        case 'total_amount':
+          cmp = num(a.total_amount) - num(b.total_amount);
+          break;
+        default:
+          cmp = 0;
+      }
+      if (cmp === 0) {
+        // stabile Zweit-Sortierung nach Rechnungsnummer
+        cmp = num(a.invoice_number) - num(b.invoice_number);
+      }
+      return cmp * dir;
+    });
+
+  const SortTh = ({ colKey, children, align = 'center', width }) => {
+    const active = sortKey === colKey;
+    const arrow = active ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+    return (
+      <th
+        onClick={() => toggleSort(colKey)}
+        style={{
+          padding: '12px',
+          textAlign: align,
+          fontWeight: '600',
+          color: active ? '#1d426a' : '#333',
+          width,
+          cursor: 'pointer',
+          userSelect: 'none',
+          whiteSpace: 'nowrap'
+        }}
+        title="Klicken zum Sortieren"
+      >
+        {children}{arrow}
+      </th>
+    );
+  };
 
   // Invoice action handlers
   const handleDownloadInvoicePDF = async (invoice) => {
@@ -4396,103 +4549,36 @@ const ErstellteRechnungenPage = () => {
   };
 
   const handleArchiveInvoice = async (invoice) => {
-    if (window.confirm(`Möchten Sie Rechnung ${invoice.invoice_number} wirklich archivieren?`)) {
-      try {
-        // Delete the invoice (for now, until we add archived column)
-        const { error: deleteError } = await supabase
-          .from('invoices')
-          .delete()
-          .eq('id', invoice.id);
-
-        if (deleteError) throw deleteError;
-
-        // Reset repair orders status to null for ANY deleted invoice
-        const { data: invoiceItems, error: itemsError } = await supabase
-          .from('invoice_items')
-          .select('repair_order_id')
-          .eq('invoice_id', invoice.id)
-          .not('repair_order_id', 'is', null);
-
-        if (itemsError) throw itemsError;
-
-        if (invoiceItems && invoiceItems.length > 0) {
-          const repairOrderIds = invoiceItems.map(item => item.repair_order_id);
-          const { error: resetError } = await supabase
-            .from('repair_orders')
-            .update({ invoice_status: null })
-            .in('id', repairOrderIds);
-
-          if (resetError) throw resetError;
-        }
-
-        alert('Rechnung erfolgreich archiviert');
-        loadInvoices(); // Reload the list
-      } catch (error) {
-        console.error('Error archiving invoice:', error);
-        alert('Fehler beim Archivieren der Rechnung: ' + error.message);
-      }
+    if (!window.confirm(`Möchten Sie Rechnung ${invoice.invoice_number} wirklich archivieren?\n\nSie bleibt im Archiv erhalten und kann wiederhergestellt werden.`)) {
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from('invoices')
+        .update({ archived: true, updated_at: new Date().toISOString() })
+        .eq('id', invoice.id);
+      if (error) throw error;
+      alert('Rechnung erfolgreich archiviert');
+      loadInvoices();
+    } catch (error) {
+      console.error('Error archiving invoice:', error);
+      alert('Fehler beim Archivieren der Rechnung: ' + error.message);
     }
   };
 
-  // Change invoice status
-  const handleChangeStatus = async (invoice, newStatus) => {
-    const statusLabels = {
-      'draft': 'Entwurf',
-      'sent': 'Gesendet', 
-      'paid': 'Bezahlt'
-    };
-
-    if (window.confirm(`Möchten Sie den Status von Rechnung ${invoice.invoice_number} wirklich zu "${statusLabels[newStatus]}" ändern?`)) {
-      try {
-        const updateData = {
-          status: newStatus,
-          updated_at: new Date().toISOString()
-        };
-
-        // Add timestamps based on status
-        if (newStatus === 'sent' && invoice.status !== 'sent') {
-          updateData.sent_at = new Date().toISOString();
-        } else if (newStatus === 'paid' && invoice.status !== 'paid') {
-          updateData.paid_at = new Date().toISOString();
-        } else if (newStatus === 'draft') {
-          updateData.sent_at = null;
-          updateData.paid_at = null;
-        }
-
-        const { error: updateError } = await supabase
-          .from('invoices')
-          .update(updateData)
-          .eq('id', invoice.id);
-
-        if (updateError) throw updateError;
-
-        // Update repair orders status accordingly
-        const { data: invoiceItems, error: itemsError } = await supabase
-          .from('invoice_items')
-          .select('repair_order_id')
-          .eq('invoice_id', invoice.id)
-          .not('repair_order_id', 'is', null);
-
-        if (itemsError) throw itemsError;
-
-        if (invoiceItems && invoiceItems.length > 0) {
-          const repairOrderIds = invoiceItems.map(item => item.repair_order_id);
-          const repairOrderStatus = newStatus === 'sent' || newStatus === 'paid' ? 'invoiced' : 'draft';
-          
-          const { error: statusError } = await supabase
-            .from('repair_orders')
-            .update({ invoice_status: repairOrderStatus })
-            .in('id', repairOrderIds);
-
-          if (statusError) throw statusError;
-        }
-
-        alert(`Status erfolgreich zu "${statusLabels[newStatus]}" geändert`);
-        loadInvoices(); // Reload the list
-      } catch (error) {
-        console.error('Error changing status:', error);
-        alert('Fehler beim Ändern des Status: ' + error.message);
-      }
+  const handleRestoreInvoice = async (invoice) => {
+    if (!window.confirm(`Rechnung ${invoice.invoice_number} wiederherstellen?`)) return;
+    try {
+      const { error } = await supabase
+        .from('invoices')
+        .update({ archived: false, updated_at: new Date().toISOString() })
+        .eq('id', invoice.id);
+      if (error) throw error;
+      alert('Rechnung wiederhergestellt');
+      loadInvoices();
+    } catch (error) {
+      console.error('Error restoring invoice:', error);
+      alert('Fehler beim Wiederherstellen: ' + error.message);
     }
   };
 
@@ -4516,10 +4602,12 @@ const ErstellteRechnungenPage = () => {
     <div style={{ padding: '2rem' }}>
       <header style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid #eee', paddingBottom: '1rem' }}>
         <img src="https://oag-media.b-cdn.net/fa-gretzinger/gretzinger-logo.png" alt="Gretzinger Logo" style={{ height: 60, marginRight: 24 }} />
-        <h1 style={{ fontWeight: 400, color: '#1d426a', fontSize: '1.8rem', margin: 0 }}>Erstellte Rechnungen</h1>
+        <h1 style={{ fontWeight: 400, color: '#1d426a', fontSize: '1.8rem', margin: 0 }}>
+          {showArchived ? 'Archivierte Rechnungen' : 'Erstellte Rechnungen'}
+        </h1>
       </header>
 
-      <div style={{ marginBottom: '2rem' }}>
+      <div style={{ marginBottom: '2rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
         <button
           onClick={() => window.location.href = '/'}
           style={{
@@ -4543,10 +4631,25 @@ const ErstellteRechnungenPage = () => {
         >
           ← Zurück zum Hauptmenü
         </button>
+        <button
+          type="button"
+          onClick={() => setShowArchived(!showArchived)}
+          style={{
+            padding: '8px 16px',
+            background: showArchived ? '#1d426a' : '#6c757d',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }}
+        >
+          {showArchived ? 'Aktive Rechnungen anzeigen' : 'Archiv anzeigen'}
+        </button>
       </div>
 
       {/* Live search + date filters */}
-      {invoices.length > 0 && (
+      {(invoices.length > 0 || searchTerm || dateFrom || dateTo || selectedAkustiker) && (
         <div style={{
           marginBottom: '1.5rem',
           padding: '1rem',
@@ -4706,8 +4809,12 @@ const ErstellteRechnungenPage = () => {
           padding: '4rem',
           color: '#666'
         }}>
-          <h3>Noch keine Rechnungen erstellt</h3>
-          <p>Erstellen Sie Ihre erste Rechnung über die Reparaturaufträge.</p>
+          <h3>{showArchived ? 'Keine archivierten Rechnungen' : 'Noch keine Rechnungen erstellt'}</h3>
+          <p>
+            {showArchived
+              ? 'Archivierte Rechnungen erscheinen hier und können wiederhergestellt werden.'
+              : 'Erstellen Sie Ihre erste Rechnung über die Reparaturaufträge.'}
+          </p>
         </div>
       ) : filteredInvoices.length === 0 ? (
         <div style={{
@@ -4732,14 +4839,13 @@ const ErstellteRechnungenPage = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#f8f9fa', borderBottom: '1px solid #e0e0e0' }}>
-                <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '60px' }}>Status</th>
-                <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '120px' }}>Rechnung Nr.</th>
-                <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#333' }}>Kunde</th>
-                <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '120px' }}>Datum</th>
-                <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600', color: '#333', width: '100px' }}>Netto</th>
-                <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600', color: '#333', width: '80px' }}>MwSt.</th>
-                <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600', color: '#333', width: '100px' }}>Gesamt</th>
-                <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '120px' }}>Rechnung versendet</th>
+                <SortTh colKey="email_sent_at" width="140px">Status</SortTh>
+                <SortTh colKey="invoice_number" width="120px">Rechnung Nr.</SortTh>
+                <SortTh colKey="customer" align="left">Kunde</SortTh>
+                <SortTh colKey="invoice_date" width="120px">Datum</SortTh>
+                <SortTh colKey="subtotal" align="right" width="100px">Netto</SortTh>
+                <SortTh colKey="tax_amount" align="right" width="80px">MwSt.</SortTh>
+                <SortTh colKey="total_amount" align="right" width="100px">Gesamt</SortTh>
                 <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#333', width: '180px' }}>Aktionen</th>
               </tr>
             </thead>
@@ -4750,24 +4856,7 @@ const ErstellteRechnungenPage = () => {
                   backgroundColor: 'transparent'
                 }}>
                   <td style={{ padding: '12px', textAlign: 'center' }}>
-                    <select
-                      value={invoice.status || 'draft'}
-                      onChange={(e) => handleChangeStatus(invoice, e.target.value)}
-                      style={{
-                        padding: '4px 8px',
-                        border: '1px solid #ddd',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        background: 'white',
-                        cursor: 'pointer',
-                        color: invoice.status === 'draft' ? '#856404' : invoice.status === 'sent' ? '#155724' : '#004085',
-                        fontWeight: '500'
-                      }}
-                    >
-                      <option value="draft">Entwurf</option>
-                      <option value="sent">Gesendet</option>
-                      <option value="paid">Bezahlt</option>
-                    </select>
+                    <SentStatusBadge sentAt={invoice.email_sent_at} />
                   </td>
                   <td style={{ padding: '12px', textAlign: 'center', fontWeight: '500' }}>
                     {invoice.invoice_number}
@@ -4787,9 +4876,6 @@ const ErstellteRechnungenPage = () => {
                   </td>
                   <td style={{ padding: '12px', textAlign: 'right', fontSize: '14px', fontWeight: '600', color: '#1d426a' }}>
                     {invoice.total_amount.toFixed(2)}€
-                  </td>
-                  <td style={{ padding: '12px', textAlign: 'center' }}>
-                    <SentStatusBadge sentAt={invoice.email_sent_at} />
                   </td>
                   <td style={{ padding: '12px' }}>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
@@ -4817,6 +4903,35 @@ const ErstellteRechnungenPage = () => {
                         title="Rechnung per E-Mail senden"
                       >
                         <MailIcon size={14} />
+                      </button>
+
+                      {/* View / Auge */}
+                      <button
+                        onClick={() => handleViewInvoice(invoice)}
+                        style={{
+                          background: 'none',
+                          color: '#1d426a',
+                          border: '1px solid #1d426a',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          padding: '6px 8px',
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'scale(1.05)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'scale(1)';
+                        }}
+                        title="Rechnung als PDF anzeigen"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                        </svg>
                       </button>
 
                       {/* PDF Button */}
@@ -4877,40 +4992,142 @@ const ErstellteRechnungenPage = () => {
                         </svg>
                       </button>
                       
-                      {/* Delete Button */}
-                      <button 
-                        onClick={() => handleArchiveInvoice(invoice)} 
-                        style={{
-                          background: 'none',
-                          color: '#1d426a',
-                          border: '1px solid #1d426a',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          padding: '6px 8px',
-                          fontSize: '12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          transition: 'all 0.2s ease'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.target.style.transform = 'scale(1.05)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.target.style.transform = 'scale(1)';
-                        }}
-                        title="Archivieren"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M9,3V4H4V6H5V19A2,2 0 0,0 7,21H17A2,2 0 0,0 19,19V6H20V4H15V3H9M7,6H17V19H7V6M9,8V17H11V8H9M13,8V17H15V8H13Z"/>
-                        </svg>
-                      </button>
+                      {/* Archive / Restore */}
+                      {showArchived ? (
+                        <button
+                          onClick={() => handleRestoreInvoice(invoice)}
+                          style={{
+                            background: 'none',
+                            color: '#15803d',
+                            border: '1px solid #15803d',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            padding: '6px 8px',
+                            fontSize: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }}
+                          title="Wiederherstellen"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12.5,8C9.85,8 7.45,9 5.6,10.6L2,7V16H11L7.38,12.38C8.77,11.22 10.54,10.5 12.5,10.5C16.04,10.5 19.05,12.81 20.1,16L22.47,15.22C21.08,11.03 17.15,8 12.5,8Z"/>
+                          </svg>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleArchiveInvoice(invoice)}
+                          style={{
+                            background: 'none',
+                            color: '#1d426a',
+                            border: '1px solid #1d426a',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            padding: '6px 8px',
+                            fontSize: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }}
+                          title="Archivieren"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M3,3H21V7H3V3M4,8H20V21H4V8M9.5,11A0.5,0.5 0 0,0 9,11.5V13H15V11.5A0.5,0.5 0 0,0 14.5,11H9.5Z"/>
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Rechnungs-PDF-Vorschau (wie KV: Grab/Zoom, mehrseitig) */}
+      {showViewModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 16
+          }}
+          onClick={closeViewModal}
+        >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: 12,
+              width: 'min(960px, 100%)',
+              height: 'min(88vh, 900px)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              boxShadow: '0 18px 50px rgba(0,0,0,0.28)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 12,
+              padding: '12px 14px',
+              borderBottom: '1px solid #e5e7eb'
+            }}>
+              <h2 style={{ margin: 0, color: '#1d426a', fontSize: '1.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {viewPdfName || `Rechnung ${viewingInvoice?.invoice_number || ''}`.trim() || 'PDF-Vorschau'}
+              </h2>
+              <button
+                type="button"
+                onClick={closeViewModal}
+                style={{
+                  background: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: 32,
+                  height: 32,
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  flexShrink: 0
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, background: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
+              {viewPdfLoading && (
+                <p style={{ textAlign: 'center', color: '#888', padding: 40 }}>PDF wird erzeugt…</p>
+              )}
+              {!viewPdfLoading && viewPdfUrl && (
+                <PdfGrabPreview url={viewPdfUrl} filename={viewPdfName || 'Rechnung.pdf'} />
+              )}
+              {!viewPdfLoading && !viewPdfUrl && (
+                <p style={{ textAlign: 'center', color: '#888', padding: 40 }}>Keine Vorschau verfügbar.</p>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -4946,7 +5163,13 @@ const RechnungErstellenPage = () => {
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd] = useState('');
   const [isEditingNumber, setIsEditingNumber] = useState(false);
-  const [numberValidation, setNumberValidation] = useState({ isValid: true, message: '' });
+  const [numberValidation, setNumberValidation] = useState({
+    level: 'ok',
+    isValid: true,
+    message: '',
+    expectedNext: null
+  });
+  const [suggestedInvoiceNumber, setSuggestedInvoiceNumber] = useState('');
 
   // Manual line items state
   const [manualItems, setManualItems] = useState([]);
@@ -4968,69 +5191,25 @@ const RechnungErstellenPage = () => {
   const [draftInvoiceId, setDraftInvoiceId] = useState(null);
   const draftInvoiceIdRef = useRef(null);
 
-  // Get next invoice number
+  // Get next invoice number (höchste vergebene Nummer + 1)
   const getNextInvoiceNumber = async () => {
     try {
-      const { data, error } = await supabase
-        .from('invoices')
-        .select('invoice_number')
-        .order('id', { ascending: false })
-        .limit(1);
-
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        const lastNumber = parseInt(data[0].invoice_number);
-        return (lastNumber + 1).toString();
-      } else {
-        // Start from 8125 if no invoices exist (continuing from your example 8124)
-        return '8125';
-      }
+      return await getExpectedNextInvoiceNumber(supabase, {
+        excludeInvoiceId: draftInvoiceIdRef.current
+      });
     } catch (error) {
       console.error('Error getting next invoice number:', error);
-      return '8125'; // Fallback
+      return '8125';
     }
   };
 
-  // Validate invoice number for duplicates
   const validateInvoiceNumber = async (number, excludeInvoiceId = null) => {
-    if (!number.trim()) {
-      setNumberValidation({ isValid: false, message: 'Rechnungsnummer ist erforderlich' });
-      return false;
-    }
-
-    try {
-      let query = supabase
-        .from('invoices')
-        .select('id')
-        .eq('invoice_number', number.trim());
-
-      if (excludeInvoiceId) {
-        query = query.neq('id', excludeInvoiceId);
-      }
-
-      const { data, error } = await query.limit(1);
-
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        setNumberValidation({ 
-          isValid: false, 
-          message: 'Diese Rechnungsnummer ist bereits vergeben' 
-        });
-        return false;
-      } else {
-        setNumberValidation({ isValid: true, message: '' });
-        return true;
-      }
-    } catch (error) {
-      console.error('Error validating invoice number:', error);
-      setNumberValidation({ 
-        isValid: false, 
-        message: 'Fehler bei der Validierung' 
-      });
-      return false;
-    }
+    const result = await evaluateInvoiceNumber(supabase, number, {
+      excludeInvoiceId,
+      originalNumber: suggestedInvoiceNumber || null
+    });
+    setNumberValidation(result);
+    return result;
   };
 
   useEffect(() => {
@@ -5064,7 +5243,14 @@ const RechnungErstellenPage = () => {
 
   const loadNextInvoiceNumber = async () => {
     const nextNumber = await getNextInvoiceNumber();
+    setSuggestedInvoiceNumber(nextNumber);
     setInvoiceNumber(nextNumber);
+    setNumberValidation({
+      level: 'ok',
+      isValid: true,
+      message: '',
+      expectedNext: nextNumber
+    });
   };
 
   const clearInvoiceAutoSaveTimer = () => {
@@ -5116,8 +5302,25 @@ const RechnungErstellenPage = () => {
     return rows;
   };
 
+  const assertBillingCountryForInvoice = () => {
+    const customers = selectedOrders.map((o) => o.customers).filter(Boolean);
+    const missing = customers.filter((c) => !c.billing_country);
+    if (missing.length === 0) return true;
+    const names = [...new Set(missing.map((c) => c.company || c.branch || 'Unbekannt'))].join(', ');
+    alert(
+      'Rechnungsland fehlt.\n\n' +
+        `Beim Akustiker fehlt die Rechnungsadresse → Land:\n${names}\n\n` +
+        'Bitte unter Akustiker das Rechnungsland setzen (Deutschland oder Österreich). Ohne Angabe wird keine Rechnung gespeichert.'
+    );
+    return false;
+  };
+
   // Insert once, then update — prevents duplicate invoice_number on auto-save + manual save
   const persistInvoice = async ({ status = 'draft', sentAt = null } = {}) => {
+    if (!assertBillingCountryForInvoice()) {
+      throw new Error('Rechnungsland fehlt');
+    }
+
     const { subtotal, taxRate, totalTax, grandTotal } = calculateInvoiceTotals();
 
     const invoicePayload = {
@@ -5188,6 +5391,11 @@ const RechnungErstellenPage = () => {
   const handleAutoSave = async () => {
     if (isAutoSaving || selectedOrders.length === 0) return;
     if (!invoiceNumber.trim() || !invoiceDate) return;
+    // Kein Auto-Save ohne Rechnungsland (Alert erst beim manuellen Speichern)
+    if (selectedOrders.some((o) => !o.customers?.billing_country)) return;
+    // Bei ungültiger / abweichender Nr. nicht still speichern
+    const nrCheck = await validateInvoiceNumber(invoiceNumber, draftInvoiceIdRef.current);
+    if (!nrCheck.isValid || nrCheck.level === 'warn') return;
 
     try {
       setIsAutoSaving(true);
@@ -5558,6 +5766,20 @@ const RechnungErstellenPage = () => {
     URL.revokeObjectURL(link.href);
   };
 
+  const confirmInvoiceNumberBeforeSave = async () => {
+    const result = await validateInvoiceNumber(invoiceNumber, draftInvoiceIdRef.current);
+    if (!result.isValid) {
+      alert(result.message || 'Bitte korrigieren Sie die Rechnungsnummer.');
+      return false;
+    }
+    if (result.level === 'warn') {
+      return window.confirm(
+        `${result.message}\n\nMöchten Sie die Rechnung trotzdem mit der Nummer ${invoiceNumber.trim()} speichern?`
+      );
+    }
+    return true;
+  };
+
   // Invoice saving handlers
   const handleSaveInvoice = async () => {
     try {
@@ -5565,12 +5787,8 @@ const RechnungErstellenPage = () => {
         alert('Bitte füllen Sie alle Pflichtfelder aus.');
         return;
       }
-
-      const isValid = await validateInvoiceNumber(invoiceNumber, draftInvoiceIdRef.current);
-      if (!isValid) {
-        alert('Bitte korrigieren Sie die Rechnungsnummer.');
-        return;
-      }
+      if (!assertBillingCountryForInvoice()) return;
+      if (!(await confirmInvoiceNumberBeforeSave())) return;
 
       clearInvoiceAutoSaveTimer();
       await persistInvoice({ status: 'draft' });
@@ -5593,12 +5811,8 @@ const RechnungErstellenPage = () => {
         alert('Bitte füllen Sie alle Pflichtfelder aus.');
         return;
       }
-
-      const isValid = await validateInvoiceNumber(invoiceNumber, draftInvoiceIdRef.current);
-      if (!isValid) {
-        alert('Bitte korrigieren Sie die Rechnungsnummer.');
-        return;
-      }
+      if (!assertBillingCountryForInvoice()) return;
+      if (!(await confirmInvoiceNumberBeforeSave())) return;
 
       clearInvoiceAutoSaveTimer();
       await persistInvoice({
@@ -5682,7 +5896,7 @@ const RechnungErstellenPage = () => {
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#333', fontSize: '14px' }}>
               Rechnungsnummer *
             </label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               {isEditingNumber ? (
                 <input
                   type="text"
@@ -5702,20 +5916,23 @@ const RechnungErstellenPage = () => {
                   autoFocus
                   style={{
                     padding: '6px 10px',
-                    border: `1px solid ${numberValidation.isValid ? '#ddd' : '#dc3545'}`,
+                    border: `2px solid ${invoiceNumberBorderColor(numberValidation)}`,
                     borderRadius: '4px',
                     fontSize: '14px',
-                    flex: 1
+                    flex: 1,
+                    color: numberValidation.level === 'error' ? '#b91c1c' : (numberValidation.level === 'warn' ? '#b45309' : undefined)
                   }}
                 />
               ) : (
                 <div style={{
                   padding: '6px 10px',
-                  border: `1px solid ${numberValidation.isValid ? '#ddd' : '#dc3545'}`,
+                  border: `2px solid ${invoiceNumberBorderColor(numberValidation)}`,
                   borderRadius: '4px',
                   fontSize: '14px',
                   background: '#f8f9fa',
-                  flex: 1
+                  flex: 1,
+                  color: numberValidation.level === 'error' ? '#b91c1c' : (numberValidation.level === 'warn' ? '#b45309' : undefined),
+                  fontWeight: numberValidation.level !== 'ok' ? 600 : 400
                 }}>
                   {invoiceNumber}
                 </div>
@@ -5738,10 +5955,10 @@ const RechnungErstellenPage = () => {
                 </svg>
               </button>
               
-              {!numberValidation.isValid && (
+              {numberValidation.level !== 'ok' && numberValidation.message && (
                 <span
                   style={{
-                    color: '#dc3545',
+                    color: numberValidation.level === 'error' ? '#dc3545' : '#d97706',
                     fontSize: '14px',
                     cursor: 'help'
                   }}
@@ -5751,6 +5968,17 @@ const RechnungErstellenPage = () => {
                 </span>
               )}
             </div>
+            {numberValidation.level !== 'ok' && numberValidation.message && (
+              <div style={{
+                marginTop: 6,
+                fontSize: 12,
+                lineHeight: 1.35,
+                color: numberValidation.level === 'error' ? '#b91c1c' : '#92400e',
+                maxWidth: 420
+              }}>
+                {numberValidation.message}
+              </div>
+            )}
           </div>
           
           {/* Invoice Date */}
@@ -5828,9 +6056,9 @@ const RechnungErstellenPage = () => {
             // Smart invoice address selection logic
             const customers = selectedOrders.map(order => order.customers);
             
-            // Check if any customer has a billing address
+            // Echte Rechnungsadresse nur bei Straße/Ort (nicht nur billing_country)
             const customersWithBillingAddress = customers.filter(customer => 
-              customer.billing_street || customer.billing_location || customer.billing_country
+              customer.billing_street || customer.billing_location
             );
             
             // If any customer has billing address, use the first one with billing address
@@ -5839,8 +6067,22 @@ const RechnungErstellenPage = () => {
               ? customersWithBillingAddress[0] 
               : customers[0];
             
-            const hasBillingAddress = selectedCustomer.billing_street || selectedCustomer.billing_location || selectedCustomer.billing_country;
+            const hasBillingAddress = !!(selectedCustomer.billing_street || selectedCustomer.billing_location);
             const usingFallback = !hasBillingAddress;
+            const displayStreet = hasBillingAddress
+              ? (selectedCustomer.billing_street || selectedCustomer.street)
+              : selectedCustomer.street;
+            const displayLocation = hasBillingAddress
+              ? (selectedCustomer.billing_location || selectedCustomer.location)
+              : selectedCustomer.location;
+            const rawCountry = hasBillingAddress
+              ? (selectedCustomer.billing_country || selectedCustomer.country)
+              : (selectedCustomer.country || selectedCustomer.billing_country);
+            const displayCountry = isAustriaCountry(rawCountry)
+              ? 'Österreich'
+              : (rawCountry
+                ? (/^(de|deutschland|germany)$/i.test(String(rawCountry).trim()) ? 'Deutschland' : rawCountry)
+                : '');
             
             return (
               <div style={{ position: 'relative' }}>
@@ -5890,15 +6132,15 @@ const RechnungErstellenPage = () => {
                       Adresse:
                     </div>
                     <div style={{ color: '#333' }}>
-                      {(selectedCustomer.billing_street || selectedCustomer.street) && (
-                        <div>{selectedCustomer.billing_street || selectedCustomer.street}</div>
+                      {displayStreet && (
+                        <div>{displayStreet}</div>
                       )}
-                      {(selectedCustomer.billing_location || selectedCustomer.location) && (
-                        <div>{selectedCustomer.billing_location || selectedCustomer.location}</div>
+                      {displayLocation && (
+                        <div>{displayLocation}</div>
                       )}
-                      {(selectedCustomer.billing_country || selectedCustomer.country) && (
+                      {displayCountry && (
                         <div style={{ marginBottom: selectedCustomer.ust_id ? '4px' : 0 }}>
-                          {selectedCustomer.billing_country || selectedCustomer.country}
+                          {displayCountry}
                         </div>
                       )}
                       {selectedCustomer.ust_id && (
@@ -6533,7 +6775,13 @@ const RechnungBearbeitenPage = () => {
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd] = useState('');
   const [isEditingNumber, setIsEditingNumber] = useState(false);
-  const [numberValidation, setNumberValidation] = useState({ isValid: true, message: '' });
+  const [numberValidation, setNumberValidation] = useState({
+    level: 'ok',
+    isValid: true,
+    message: '',
+    expectedNext: null
+  });
+  const [originalInvoiceNumber, setOriginalInvoiceNumber] = useState('');
   
   // Manual item state
   const [manualItems, setManualItems] = useState([]);
@@ -6549,6 +6797,15 @@ const RechnungBearbeitenPage = () => {
   const [autoSaveTimeout, setAutoSaveTimeout] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
+
+  const validateEditInvoiceNumber = async (number) => {
+    const result = await evaluateInvoiceNumber(supabase, number, {
+      excludeInvoiceId: id,
+      originalNumber: originalInvoiceNumber || null
+    });
+    setNumberValidation(result);
+    return result;
+  };
 
   useEffect(() => {
     loadInvoice();
@@ -6635,6 +6892,8 @@ const RechnungBearbeitenPage = () => {
 
       // Set form state
       setInvoiceNumber(invoiceData.invoice_number);
+      setOriginalInvoiceNumber(invoiceData.invoice_number || '');
+      setNumberValidation({ level: 'ok', isValid: true, message: '', expectedNext: null });
       setInvoiceDate(invoiceData.invoice_date);
       setPeriodStart(invoiceData.period_start);
       setPeriodEnd(invoiceData.period_end);
@@ -6791,6 +7050,27 @@ const RechnungBearbeitenPage = () => {
 
   const handleSave = async () => {
     try {
+      if (!invoice?.customer?.billing_country) {
+        alert(
+          'Rechnungsland fehlt.\n\n' +
+            `Beim Akustiker „${invoice?.customer?.company || 'Unbekannt'}“ ist kein Rechnungsland gesetzt.\n` +
+            'Bitte unter Akustiker Deutschland oder Österreich als Rechnungsland wählen.'
+        );
+        return;
+      }
+
+      const nrCheck = await validateEditInvoiceNumber(invoiceNumber);
+      if (!nrCheck.isValid) {
+        alert(nrCheck.message || 'Bitte korrigieren Sie die Rechnungsnummer.');
+        return;
+      }
+      if (nrCheck.level === 'warn') {
+        const ok = window.confirm(
+          `${nrCheck.message}\n\nMöchten Sie die Rechnung trotzdem mit der Nummer ${String(invoiceNumber).trim()} speichern?`
+        );
+        if (!ok) return;
+      }
+
       setSaving(true);
       
       const { subtotal, taxRate, totalTax: taxAmount, grandTotal: totalAmount } = calculateInvoiceTotals();
@@ -7213,15 +7493,30 @@ const RechnungBearbeitenPage = () => {
             <input
               type="text"
               value={invoiceNumber}
-              onChange={(e) => setInvoiceNumber(e.target.value)}
+              onChange={(e) => {
+                setInvoiceNumber(e.target.value);
+                validateEditInvoiceNumber(e.target.value);
+              }}
               style={{
                 padding: '6px 10px',
-                border: '1px solid #ddd',
+                border: `2px solid ${invoiceNumberBorderColor(numberValidation)}`,
                 borderRadius: '4px',
                 fontSize: '14px',
-                width: '100%'
+                width: '100%',
+                color: numberValidation.level === 'error' ? '#b91c1c' : (numberValidation.level === 'warn' ? '#b45309' : undefined),
+                fontWeight: numberValidation.level !== 'ok' ? 600 : 400
               }}
             />
+            {numberValidation.level !== 'ok' && numberValidation.message && (
+              <div style={{
+                marginTop: 6,
+                fontSize: 12,
+                lineHeight: 1.35,
+                color: numberValidation.level === 'error' ? '#b91c1c' : '#92400e'
+              }}>
+                {numberValidation.message}
+              </div>
+            )}
           </div>
           
           <div>
@@ -7305,9 +7600,23 @@ const RechnungBearbeitenPage = () => {
           <div style={{ marginBottom: '4px' }}>
             {invoice.customer.billing_street || invoice.customer.street}
           </div>
-          <div style={{ marginBottom: invoice.customer.ust_id ? '4px' : 0 }}>
-            {invoice.customer.billing_location || invoice.customer.location}, {invoice.customer.billing_country || invoice.customer.country}
-          </div>
+          {(() => {
+            const hasBillingAddr = !!(invoice.customer.billing_street || invoice.customer.billing_location);
+            const loc = hasBillingAddr
+              ? (invoice.customer.billing_location || invoice.customer.location)
+              : invoice.customer.location;
+            const rawCountry = hasBillingAddr
+              ? (invoice.customer.billing_country || invoice.customer.country)
+              : (invoice.customer.country || invoice.customer.billing_country);
+            const country = isAustriaCountry(rawCountry)
+              ? 'Österreich'
+              : (rawCountry ? (String(rawCountry).toLowerCase() === 'de' || String(rawCountry).toLowerCase().includes('deutsch') ? 'Deutschland' : rawCountry) : '');
+            return (
+              <div style={{ marginBottom: invoice.customer.ust_id ? '4px' : 0 }}>
+                {[loc, country].filter(Boolean).join(', ')}
+              </div>
+            );
+          })()}
           {invoice.customer.ust_id && (
             <div style={{ color: '#333' }}>
               USt-ID-Nr.: {invoice.customer.ust_id}
@@ -8040,7 +8349,7 @@ function AppContent() {
     invoice_email: '',
     billing_street: '',
     billing_location: '',
-    billing_country: 'DE',
+    billing_country: '',
     ust_id: ''
   });
 
@@ -8368,6 +8677,15 @@ function AppContent() {
   // Add New Akustiker handler
   const handleAddAkustiker = async () => {
     try {
+      if (!newAkustiker.billing_country) {
+        alert('Rechnungsland fehlt.\n\nBitte unter Rechnungsadresse das Land (Deutschland oder Österreich) auswählen — keine automatische Annahme.');
+        return;
+      }
+      if (newAkustiker.billing_country === 'AT' && !String(newAkustiker.ust_id || '').trim()) {
+        alert('Für Österreich bitte eine USt-ID-Nr. angeben.');
+        return;
+      }
+
       // Check for duplicate (exact match: name + branch + street)
       const isDuplicate = customers.some(customer => 
         customer.company === newAkustiker.company &&
@@ -8390,8 +8708,8 @@ function AppContent() {
         contact_person: newAkustiker.contact_person || '',
         email: newAkustiker.email || null,
         invoice_email: newAkustiker.invoice_email || null,
-        billing_street: newAkustiker.billing_street,
-        billing_location: newAkustiker.billing_location,
+        billing_street: newAkustiker.billing_street || null,
+        billing_location: newAkustiker.billing_location || null,
         billing_country: newAkustiker.billing_country === 'DE' ? 'Deutschland' : 'Österreich',
         ust_id: newAkustiker.ust_id || null,
         archived: false
@@ -8418,7 +8736,7 @@ function AppContent() {
         invoice_email: '',
         billing_street: '',
         billing_location: '',
-        billing_country: 'DE',
+        billing_country: '',
         ust_id: ''
       });
       setShowAddAkustikerModal(false);

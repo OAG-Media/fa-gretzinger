@@ -605,6 +605,7 @@ const ModernHome = () => {
             supabase
               .from('invoices')
               .select('id, invoice_date, created_at, total_amount, subtotal, status')
+              .eq('archived', false)
               .order('invoice_date', { ascending: false })
           )
         ]);

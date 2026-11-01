@@ -127,6 +127,7 @@ export default function EmailAttachBar({
           const { data, error: err } = await supabase
             .from('invoices')
             .select('id, invoice_number, invoice_date, period_end, customers(company, branch)')
+            .eq('archived', false)
             .order('created_at', { ascending: false })
             .limit(150);
           if (err) throw err;

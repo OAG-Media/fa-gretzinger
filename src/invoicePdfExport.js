@@ -172,6 +172,18 @@ const renderInvoiceInfo = (doc, invoiceData) => {
            INVOICE_NUMBER_LEFT, PERIOD_TEXT_TOP);
 };
 
+const formatCountryLabel = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const n = raw
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (n === 'at' || n.includes('osterreich') || n.includes('austria')) return 'Österreich';
+  if (n === 'de' || n.includes('deutschland') || n.includes('germany')) return 'Deutschland';
+  return raw;
+};
+
 // Render customer address
 const renderCustomerAddress = (doc, customer) => {
   const { CUSTOMER_ADDRESS_TOP, CUSTOMER_ADDRESS_LEFT } = PDF_LAYOUT;
@@ -181,10 +193,12 @@ const renderCustomerAddress = (doc, customer) => {
   
   let currentY = CUSTOMER_ADDRESS_TOP;
   
-  // Use billing address if available, otherwise use main address
-  const street = customer.billing_street || customer.street;
-  const location = customer.billing_location || customer.location;
-  const country = customer.billing_country || customer.country;
+  // Straße/Ort: Billing wenn vorhanden, sonst Filiale.
+  // Land: immer billing_country wenn gesetzt (Pflichtfeld) — kein stilles DE-Fallback.
+  const hasBillingAddr = !!(customer.billing_street || customer.billing_location);
+  const street = hasBillingAddr ? (customer.billing_street || customer.street) : customer.street;
+  const location = hasBillingAddr ? (customer.billing_location || customer.location) : customer.location;
+  const country = formatCountryLabel(customer.billing_country || customer.country);
   
   // Only show company name (not branch to avoid duplication)
   if (customer.company) {
@@ -206,6 +220,12 @@ const renderCustomerAddress = (doc, customer) => {
   // Country on separate line below
   if (country) {
     doc.text(country, CUSTOMER_ADDRESS_LEFT, currentY);
+    currentY += 4;
+  }
+
+  // USt-ID immer anzeigen wenn hinterlegt (DE und AT)
+  if (customer.ust_id) {
+    doc.text(`USt-ID-Nr.: ${customer.ust_id}`, CUSTOMER_ADDRESS_LEFT, currentY);
   }
 };
 
@@ -343,7 +363,12 @@ const normalizeCountry = (value) =>
     .trim();
 
 const needsReverseChargeNote = (customer, extras = {}) => {
-  const country = normalizeCountry(customer?.country || customer?.billing_country);
+  const hasBillingAddr = !!(customer?.billing_street || customer?.billing_location);
+  const country = normalizeCountry(
+    hasBillingAddr
+      ? (customer?.billing_country || customer?.country)
+      : (customer?.country || customer?.billing_country)
+  );
   const company = (customer?.company || '').toLowerCase();
   const taxRate = Number(extras.taxRate);
 
