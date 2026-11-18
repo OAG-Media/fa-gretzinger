@@ -36,9 +36,18 @@ App läuft produktiv auf Vercel (`fa-gretzinger.vercel.app`), Daten in Supabase 
 - Postfach: Anhänge-Vorschau (Download/Öffnen), Löschen/Archivieren + Ordner, verschiebbare Spalten
 - DB: `email_logs.attachments`, `deleted_at`, `archived_at`; Storage-Bucket `email-attachments`
 
+## Erledigt (2026-11-01) — Postfach Spam
+- Ordner **Spam** unter Gelöscht; „Als Spam“ + „Absender blockieren“ (kv@ / info@)
+- DB: `email_logs.spam_at`, Tabelle `email_blocked_senders`; blockierte Absender landen beim Import automatisch im Spam
+
+## Erledigt (2026-11-18) — Anhänge / IDO-PDF / Seriennr.
+- Inbound-Anhänge: IMAP+Resend → Storage `email-attachments`; Sync-Backfill + `/api/ensure-inbound-attachments`
+- KV-PDF: Arbeitszeit aus `ido_hdo` (IDO=26 / HDO=22); Labels+Kalkulation bereinigt; alte DB-Werte getauscht
+- Seriennummer-Check beim Auftrag: Hinweis Garantie (&lt;6 Monate) bzw. außerhalb, mit Eingangsdatum
+- Rechnungen nutzen `nettopreis` → Beträge waren bereits korrekt
+
 ## Offen / als Nächstes
 - Hostinger+Resend Hybrid-Empfang fertig einrichten (Checkliste in `knowledge/email-hybrid-setup.md`)
-- Commit/Push auf Vercel (nur auf Nutzerwunsch)
 - Restliche Browser-`alert()` in App.js / Kunden / Rechnungen auf AppNotice umstellen
 - Später: Outlook-Threading, Ordner, IMAP-Gesendet-Sync
 

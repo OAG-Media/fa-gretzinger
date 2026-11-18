@@ -589,10 +589,16 @@ export function mapRepairOrderToPdfData(order, arbeitszeitFallback = 22) {
     }
   });
 
-  const isAt = (order.country || 'DE') === 'AT';
+  const isAt = (order.country || 'DE') === 'AT';  const resolveDeArbeitszeit = () => {
+    const typ = String(order.ido_hdo || '').toUpperCase();
+    if (typ === 'IDO') return 26;
+    if (typ === 'HDO') return 22;
+    if (typ === 'SCHWIERIG') return 32;
+    return Number(arbeitszeitFallback) || 22;
+  };
   const arbeitszeit = isAt
     ? (Number(order.austria_arbeitszeit) || 26)
-    : arbeitszeitFallback;
+    : resolveDeArbeitszeit();
 
   return {
     selectedCustomer: order.customers || null,

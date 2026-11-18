@@ -25,6 +25,32 @@ function detectMailboxKey(fromAddress, toAddress, ccAddress) {
   return 'info';
 }
 
+/** Erste E-Mail-Adresse aus "Name <addr@x.de>" / freiem Text. */
+function extractEmailAddress(value) {
+  const s = String(value || '').trim();
+  if (!s) return '';
+  const angle = s.match(/<([^>]+@[^>]+)>/);
+  if (angle) return angle[1].trim().toLowerCase();
+  const bare = s.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return bare ? bare[0].toLowerCase() : '';
+}
+
+async function isSenderBlocked(mailboxKey, fromAddress) {
+  const email = extractEmailAddress(fromAddress);
+  if (!email || !mailboxKey) return false;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) return false;
+  const resp = await fetch(
+    `${SUPABASE_URL}/rest/v1/email_blocked_senders?select=id` +
+      `&mailbox_key=eq.${encodeURIComponent(mailboxKey)}` +
+      `&email_address=eq.${encodeURIComponent(email)}` +
+      `&limit=1`,
+    { headers: { apikey: key, Authorization: `Bearer ${key}` } }
+  );
+  const data = await resp.json().catch(() => []);
+  return Array.isArray(data) && data.length > 0;
+}
+
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
     let raw = '';
@@ -63,6 +89,140 @@ async function supabaseInsertEmailLog(row) {
   return Array.isArray(data) ? data[0] : data;
 }
 
+function safeAttachmentFilename(name, index = 0) {
+  const raw = String(name || `Anhang-${index + 1}`).replace(/[\\/]/g, '_').trim();
+  return raw || `Anhang-${index + 1}`;
+}
+
+function attachmentsNeedStorage(atts) {
+  if (!Array.isArray(atts) || atts.length === 0) return true;
+  return atts.some((a) => !a?.storage_path);
+}
+
+async function uploadBytesToEmailAttachments(logId, filename, bytes, contentType) {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY nicht konfiguriert');
+  const safeName = safeAttachmentFilename(filename);
+  const path = `${logId}/${safeName}`;
+  const resp = await fetch(
+    `${SUPABASE_URL}/storage/v1/object/email-attachments/${encodeURIComponent(logId)}/${encodeURIComponent(safeName)}`,
+    {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': contentType || 'application/octet-stream',
+        'x-upsert': 'true'
+      },
+      body: bytes
+    }
+  );
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    throw new Error(`Storage-Upload fehlgeschlagen (${resp.status}): ${errText || safeName}`);
+  }
+  return {
+    filename: safeName,
+    content_type: contentType || 'application/octet-stream',
+    size: bytes?.byteLength || bytes?.length || null,
+    storage_path: path
+  };
+}
+
+/** items: [{ filename, contentType, content: Buffer|Uint8Array|ArrayBuffer }] */
+async function storeInboundAttachmentItems(logId, items = []) {
+  const stored = [];
+  for (let i = 0; i < items.length; i += 1) {
+    const item = items[i];
+    if (!item?.content) continue;
+    const buf = Buffer.isBuffer(item.content)
+      ? item.content
+      : Buffer.from(item.content);
+    if (!buf.length) continue;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      stored.push(
+        await uploadBytesToEmailAttachments(
+          logId,
+          item.filename || `Anhang-${i + 1}`,
+          buf,
+          item.contentType || item.content_type || 'application/octet-stream'
+        )
+      );
+    } catch (e) {
+      console.warn('[inbound-att upload]', e.message || e);
+      stored.push({
+        filename: safeAttachmentFilename(item.filename, i),
+        content_type: item.contentType || item.content_type || 'application/octet-stream',
+        size: buf.length,
+        error: e.message || 'upload_failed'
+      });
+    }
+  }
+  return stored;
+}
+
+async function listResendReceivedAttachments(emailId) {
+  const key = process.env.RESEND_API_KEY;
+  if (!key || !emailId) return [];
+  const resp = await fetch(
+    `https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}/attachments`,
+    { headers: { Authorization: `Bearer ${key}` } }
+  );
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    console.warn('[resend-atts list]', data?.message || resp.status);
+    return [];
+  }
+  return Array.isArray(data?.data) ? data.data : [];
+}
+
+async function fetchResendAttachmentItems(emailId) {
+  const list = await listResendReceivedAttachments(emailId);
+  const items = [];
+  for (const att of list) {
+    if (!att?.download_url) continue;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const resp = await fetch(att.download_url);
+      if (!resp.ok) continue;
+      // eslint-disable-next-line no-await-in-loop
+      const ab = await resp.arrayBuffer();
+      items.push({
+        filename: att.filename || 'Anhang',
+        contentType: att.content_type || 'application/octet-stream',
+        content: Buffer.from(ab),
+        size: att.size || ab.byteLength
+      });
+    } catch (e) {
+      console.warn('[resend-atts download]', att.filename, e.message || e);
+    }
+  }
+  return items;
+}
+
+async function ensureAttachmentsForLog(log, { force = false } = {}) {
+  if (!log?.id) return log;
+  const existing = Array.isArray(log.attachments) ? log.attachments : [];
+  if (!force && existing.length > 0 && !attachmentsNeedStorage(existing)) {
+    return log;
+  }
+
+  let items = [];
+  if (log.resend_received_id) {
+    items = await fetchResendAttachmentItems(log.resend_received_id);
+  }
+  if (!items.length) {
+    return log;
+  }
+
+  const stored = await storeInboundAttachmentItems(log.id, items);
+  if (!stored.length) return log;
+
+  await supabasePatchEmailLog(`id=eq.${log.id}`, { attachments: stored });
+  return { ...log, attachments: stored };
+}
+
 async function fetchResendReceivedEmail(emailId) {
   const key = process.env.RESEND_API_KEY;
   if (!key) throw new Error('RESEND_API_KEY nicht konfiguriert');
@@ -85,7 +245,7 @@ async function findExistingByMessageId(messageId, mailboxKey) {
   if (!mid) return null;
 
   const resp = await fetch(
-    `${SUPABASE_URL}/rest/v1/email_logs?select=id,read_at,resend_received_id,deleted_at,created_at` +
+    `${SUPABASE_URL}/rest/v1/email_logs?select=id,read_at,resend_received_id,deleted_at,created_at,attachments` +
     `&mailbox_key=eq.${encodeURIComponent(mailboxKey)}` +
     `&message_id=eq.${encodeURIComponent(mid)}` +
     `&order=created_at.asc&limit=10`,
@@ -112,25 +272,19 @@ async function importInboundEmail(emailId, eventMeta = {}) {
   if (messageId) {
     const existing = await findExistingByMessageId(messageId, mailboxKey);
     if (existing?.id) {
-      // Schon per IMAP da → Resend-ID nachtragen, kein Duplikat
-      if (!existing.resend_received_id) {
-        const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-        await fetch(`${SUPABASE_URL}/rest/v1/email_logs?id=eq.${existing.id}`, {
-          method: 'PATCH',
-          headers: {
-            apikey: key,
-            Authorization: `Bearer ${key}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            resend_received_id: emailId
-          })
-        });
+      // Schon per IMAP da → Resend-ID nachtragen, Anhänge nachziehen, kein Duplikat
+      const patch = {};
+      if (!existing.resend_received_id) patch.resend_received_id = emailId;
+      if (Object.keys(patch).length) {
+        await supabasePatchEmailLog(`id=eq.${existing.id}`, patch);
       }
+      const full = { ...existing, ...patch, resend_received_id: emailId };
+      await ensureAttachmentsForLog(full, { force: attachmentsNeedStorage(existing.attachments) });
       return { duplicate: true, id: existing.id };
     }
   }
 
+  const blocked = await isSenderBlocked(mailboxKey, fromJoined);
   const row = {
     direction: 'inbound',
     email_type: 'inbound',
@@ -143,15 +297,24 @@ async function importInboundEmail(emailId, eventMeta = {}) {
     subject: email.subject || eventMeta.subject || '(ohne Betreff)',
     body_html: html,
     body_text: email.text || null,
+    attachments: [],
     resend_id: null,
     resend_received_id: emailId,
     message_id: messageId,
     status: 'received',
-    is_test: false
+    is_test: false,
+    spam_at: blocked ? new Date().toISOString() : null
   };
 
   try {
-    return await supabaseInsertEmailLog(row);
+    const inserted = await supabaseInsertEmailLog(row);
+    if (inserted?.id) {
+      await ensureAttachmentsForLog(
+        { ...inserted, resend_received_id: emailId },
+        { force: true }
+      );
+    }
+    return inserted;
   } catch (e) {
     if (e.status === 409 || String(e.message).includes('duplicate')) return { duplicate: true };
     throw e;
@@ -451,6 +614,12 @@ module.exports = {
   findExistingByMessageId,
   findEmailLogByResendId,
   normalizeAppAddresses,
+  extractEmailAddress,
+  isSenderBlocked,
+  storeInboundAttachmentItems,
+  fetchResendAttachmentItems,
+  ensureAttachmentsForLog,
+  attachmentsNeedStorage,
   formatBounceReasonDe,
   handleResendBounceEvent,
   syncOutboundBounces,

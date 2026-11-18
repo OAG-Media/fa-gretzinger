@@ -8304,6 +8304,7 @@ function AppContent() {
   const [hersteller, setHersteller] = useState('');
   const [geraetetyp, setGeraetetyp] = useState('');
   const [seriennummer, setSeriennummer] = useState('');
+  const [seriennummerHint, setSeriennummerHint] = useState(null);
   const [werkstatteingang, setWerkstatteingang] = useState('');
   const [zubehoer, setZubehoer] = useState('');
   const [kvDate, setKvDate] = useState('');
@@ -8416,6 +8417,7 @@ function AppContent() {
     setHersteller('');
     setGeraetetyp('');
     setSeriennummer('');
+    setSeriennummerHint(null);
     setWerkstatteingang('');
     setZubehoer('');
     setKvDate('');
@@ -8891,6 +8893,60 @@ function AppContent() {
 
   // Browser warning for unsaved changes
   useUnsavedChangesWarning(hasUnsavedChanges);
+
+  // Seriennummer bereits vorhanden? → Garantie-Hinweis
+  useEffect(() => {
+    const sn = String(seriennummer || '').trim();
+    if (sn.length < 4) {
+      setSeriennummerHint(null);
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        let query = supabase
+          .from('repair_orders')
+          .select('id, seriennummer, werkstatteingang, created_at, kommission')
+          .ilike('seriennummer', sn)
+          .eq('archived', false)
+          .order('werkstatteingang', { ascending: false, nullsFirst: false })
+          .limit(5);
+        if (editingOrderId) query = query.neq('id', editingOrderId);
+        const { data, error } = await query;
+        if (cancelled) return;
+        if (error) {
+          console.warn('[seriennummer check]', error.message);
+          return;
+        }
+        const hit = (data || []).find(
+          (row) => String(row.seriennummer || '').trim().toLowerCase() === sn.toLowerCase()
+        );
+        if (!hit) {
+          setSeriennummerHint(null);
+          return;
+        }
+        const eingangRaw = hit.werkstatteingang || hit.created_at;
+        const eingangDate = eingangRaw ? new Date(eingangRaw) : null;
+        const eingangLabel = eingangDate && !Number.isNaN(eingangDate.getTime())
+          ? eingangDate.toLocaleDateString('de-DE')
+          : 'unbekannt';
+        const sixMonthsMs = 182 * 24 * 60 * 60 * 1000;
+        const inGarantie = eingangDate && !Number.isNaN(eingangDate.getTime())
+          ? (Date.now() - eingangDate.getTime()) < sixMonthsMs
+          : false;
+        const message = inGarantie
+          ? `Seriennummer vorhanden und noch in der Garantie (${eingangLabel})`
+          : `Seriennummer vorhanden, aber außerhalb Garantie (${eingangLabel})`;
+        setSeriennummerHint({ inGarantie, message, eingangLabel });
+      } catch (e) {
+        if (!cancelled) console.warn('[seriennummer check]', e);
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [seriennummer, editingOrderId]);
 
   // Save Repair Order handler
   const handleSaveRepairOrder = async () => {
@@ -9391,12 +9447,12 @@ function AppContent() {
   let porto = countryObj ? countryObj.porto : 0;
   let arbeitszeit = countryObj ? countryObj.arbeitszeit : 0;
 
-  // Apply IDO/HDO pricing for Germany only
+  // Apply IDO/HDO pricing for Germany only (IDO=26, HDO=22)
   if (country === 'DE') {
     if (idoHdo === 'IDO') {
-      arbeitszeit = 22.0;
-    } else if (idoHdo === 'HDO') {
       arbeitszeit = 26.0;
+    } else if (idoHdo === 'HDO') {
+      arbeitszeit = 22.0;
     } else if (idoHdo === 'SCHWIERIG') {
       arbeitszeit = 32.0;
     }
@@ -10019,10 +10075,15 @@ function AppContent() {
                     style={getInputStyleWithValidation(seriennummer, 13, {
                       width: '100%',
                       padding: '8px 12px',
-                      border: '1px solid #e1e5e9',
+                      border: seriennummerHint
+                        ? (seriennummerHint.inGarantie ? '2px solid #ea580c' : '2px solid #ca8a04')
+                        : '1px solid #e1e5e9',
                       borderRadius: '4px',
                       fontSize: '14px',
-                      boxSizing: 'border-box'
+                      boxSizing: 'border-box',
+                      background: seriennummerHint
+                        ? (seriennummerHint.inGarantie ? '#fff7ed' : '#fefce8')
+                        : undefined
                     })}
                   />
                   <WarningTriangle 
@@ -10030,6 +10091,22 @@ function AppContent() {
                     message="Maximale Zeicheneingabe erreicht" 
                   />
                 </div>
+                {seriennummerHint && (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      padding: '8px 10px',
+                      borderRadius: 6,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: seriennummerHint.inGarantie ? '#9a3412' : '#854d0e',
+                      background: seriennummerHint.inGarantie ? '#ffedd5' : '#fef9c3',
+                      border: `1px solid ${seriennummerHint.inGarantie ? '#fdba74' : '#fde047'}`
+                    }}
+                  >
+                    {seriennummerHint.message}
+                  </div>
+                )}
               </div>
               
               {/* Werkstatteingang */}
@@ -10560,8 +10637,8 @@ function AppContent() {
                     <input 
                       type="radio" 
                       name="idoHdo" 
-                      checked={idoHdo === 'IDO'} 
-                      onChange={() => handleIdoHdo('IDO')}
+                      checked={idoHdo === 'HDO'} 
+                      onChange={() => handleIdoHdo('HDO')}
                       style={{ margin: 0 }}
                     /> 
                     <span style={{ fontSize: 14 }}>HDO (22,00 €)</span>
@@ -10570,8 +10647,8 @@ function AppContent() {
                     <input 
                       type="radio" 
                       name="idoHdo" 
-                      checked={idoHdo === 'HDO'} 
-                      onChange={() => handleIdoHdo('HDO')}
+                      checked={idoHdo === 'IDO'} 
+                      onChange={() => handleIdoHdo('IDO')}
                       style={{ margin: 0 }}
                     /> 
                     <span style={{ fontSize: 14 }}>IDO (26,00 €)</span>

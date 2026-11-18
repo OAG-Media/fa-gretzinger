@@ -38,15 +38,58 @@ async function signedUrlForPath(path) {
   return data?.signedUrl || null;
 }
 
+function emailApiBase() {
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname;
+    if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:3002';
+  }
+  return '';
+}
+
+async function ensureInboundAttachmentsOnServer(mailId) {
+  const resp = await fetch(`${emailApiBase()}/api/ensure-inbound-attachments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: mailId })
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.error || 'Anhänge nachladen fehlgeschlagen');
+  return data;
+}
+
 /** Resolve PDF blob URL for preview / download / open. */
 export async function resolveAttachmentBlob(mail, att) {
-  if (att?.storage_path) {
-    const url = await signedUrlForPath(att.storage_path);
+  let currentAtt = att;
+
+  if (!currentAtt?.storage_path && mail?.direction === 'inbound' && mail?.id) {
+    const ensured = await ensureInboundAttachmentsOnServer(mail.id);
+    const list = Array.isArray(ensured?.attachments) ? ensured.attachments : [];
+    if (list.length) {
+      const match =
+        list.find((a) => a.filename && currentAtt?.filename && a.filename === currentAtt.filename) ||
+        list.find((a) => a.storage_path) ||
+        list[0];
+      if (match?.storage_path) currentAtt = match;
+      // UI-State aktualisieren, falls Caller die Mail noch hält
+      if (mail && Array.isArray(mail.attachments)) {
+        mail.attachments = list;
+      }
+    }
+  }
+
+  if (currentAtt?.storage_path) {
+    const url = await signedUrlForPath(currentAtt.storage_path);
     if (url) {
       const resp = await fetch(url);
       if (!resp.ok) throw new Error('Anhang konnte nicht geladen werden');
       const blob = await resp.blob();
-      return { blob, filename: att.filename || 'Anhang.pdf', objectUrl: URL.createObjectURL(blob) };
+      const type = currentAtt.content_type || blob.type || 'application/octet-stream';
+      const typed = blob.type ? blob : new Blob([blob], { type });
+      return {
+        blob: typed,
+        filename: currentAtt.filename || att?.filename || 'Anhang.pdf',
+        objectUrl: URL.createObjectURL(typed)
+      };
     }
   }
 

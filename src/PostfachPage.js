@@ -34,6 +34,15 @@ async function syncInboundApi() {
   return data;
 }
 
+function extractEmailAddress(value) {
+  const s = String(value || '').trim();
+  if (!s) return '';
+  const angle = s.match(/<([^>]+@[^>]+)>/);
+  if (angle) return angle[1].trim().toLowerCase();
+  const bare = s.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return bare ? bare[0].toLowerCase() : '';
+}
+
 /** Eine sichtbare Zeile pro Message-ID (Resend + IMAP sonst doppelt). */
 function dedupeByMessageId(mails) {
   const byKey = new Map();
@@ -130,6 +139,24 @@ function ArchiveIcon() {
       <path d="M3 7h18v3H3z" />
       <path d="M5 10v9h14v-9" />
       <path d="M10 14h4" />
+    </svg>
+  );
+}
+
+function SpamIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M5.5 5.5 18.5 18.5" />
+    </svg>
+  );
+}
+
+function BlockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8 12h8" />
     </svg>
   );
 }
@@ -269,7 +296,7 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     [logs, mailboxKey]
   );
   const activeLogs = useMemo(
-    () => mailboxLogs.filter((x) => !x.deleted_at && !x.archived_at),
+    () => mailboxLogs.filter((x) => !x.deleted_at && !x.archived_at && !x.spam_at),
     [mailboxLogs]
   );
   const inbound = useMemo(
@@ -297,11 +324,15 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     [activeLogs]
   );
   const deleted = useMemo(
-    () => dedupeByMessageId(mailboxLogs.filter((x) => !!x.deleted_at)),
+    () => dedupeByMessageId(mailboxLogs.filter((x) => !!x.deleted_at && !x.spam_at)),
+    [mailboxLogs]
+  );
+  const spam = useMemo(
+    () => dedupeByMessageId(mailboxLogs.filter((x) => !!x.spam_at)),
     [mailboxLogs]
   );
   const archived = useMemo(
-    () => dedupeByMessageId(mailboxLogs.filter((x) => !!x.archived_at && !x.deleted_at)),
+    () => dedupeByMessageId(mailboxLogs.filter((x) => !!x.archived_at && !x.deleted_at && !x.spam_at)),
     [mailboxLogs]
   );
   const unreadCount = useMemo(
@@ -314,7 +345,8 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
       : folder === 'outbound' ? outbound
         : folder === 'drafts' ? drafts
           : folder === 'deleted' ? deleted
-            : archived;
+            : folder === 'spam' ? spam
+              : archived;
   const selected = folderMails.find((m) => m.id === selectedId) || null;
   const checkedCount = checkedIds.size;
   const allVisibleChecked =
@@ -384,7 +416,7 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     if (!ok) return;
     const now = new Date().toISOString();
     const mid = mail.message_id && String(mail.message_id).trim();
-    let query = supabase.from('email_logs').update({ deleted_at: now, archived_at: null });
+    let query = supabase.from('email_logs').update({ deleted_at: now, archived_at: null, spam_at: null });
     if (mid) {
       query = query.eq('mailbox_key', mailboxKey).eq('message_id', mid);
     } else {
@@ -398,9 +430,9 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     setLogs((prev) =>
       prev.map((x) => {
         if (mid && x.message_id === mid && detectMailboxKey(x) === mailboxKey) {
-          return { ...x, deleted_at: now, archived_at: null };
+          return { ...x, deleted_at: now, archived_at: null, spam_at: null };
         }
-        if (!mid && x.id === mail.id) return { ...x, deleted_at: now, archived_at: null };
+        if (!mid && x.id === mail.id) return { ...x, deleted_at: now, archived_at: null, spam_at: null };
         return x;
       })
     );
@@ -412,6 +444,109 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     });
   };
 
+  const markAsSpam = async (mail, e) => {
+    e?.stopPropagation?.();
+    if (!mail) return;
+    const ok = await notice.confirm('Diese E-Mail als Spam markieren?', 'Spam');
+    if (!ok) return;
+    const now = new Date().toISOString();
+    const mid = mail.message_id && String(mail.message_id).trim();
+    let query = supabase.from('email_logs').update({ spam_at: now, deleted_at: null, archived_at: null });
+    if (mid) {
+      query = query.eq('mailbox_key', mailboxKey).eq('message_id', mid);
+    } else {
+      query = query.eq('id', mail.id);
+    }
+    const { error } = await query;
+    if (error) {
+      await notice.alert(error.message, 'Fehler');
+      return;
+    }
+    setLogs((prev) =>
+      prev.map((x) => {
+        if (mid && x.message_id === mid && detectMailboxKey(x) === mailboxKey) {
+          return { ...x, spam_at: now, deleted_at: null, archived_at: null };
+        }
+        if (!mid && x.id === mail.id) return { ...x, spam_at: now, deleted_at: null, archived_at: null };
+        return x;
+      })
+    );
+    if (selectedId === mail.id) setSelectedId(null);
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(mail.id);
+      return next;
+    });
+    try {
+      window.dispatchEvent(new CustomEvent('fa-email-unread-changed'));
+    } catch (_) { /* ignore */ }
+  };
+
+  const blockSender = async (mail, e) => {
+    e?.stopPropagation?.();
+    if (!mail) return;
+    const addr = extractEmailAddress(mail.from_address);
+    if (!addr) {
+      await notice.alert('Keine Absender-Adresse gefunden.', 'Blockieren');
+      return;
+    }
+    const ok = await notice.confirm(
+      `${addr} blockieren?\n\nZukünftige Mails von dieser Adresse landen automatisch im Spam.`,
+      'Absender blockieren'
+    );
+    if (!ok) return;
+    const { error: blockErr } = await supabase
+      .from('email_blocked_senders')
+      .upsert(
+        { mailbox_key: mailboxKey, email_address: addr },
+        { onConflict: 'mailbox_key,email_address' }
+      );
+    if (blockErr) {
+      await notice.alert(blockErr.message, 'Fehler');
+      return;
+    }
+    const now = new Date().toISOString();
+    const mid = mail.message_id && String(mail.message_id).trim();
+    let query = supabase.from('email_logs').update({ spam_at: now, deleted_at: null, archived_at: null });
+    if (mid) {
+      query = query.eq('mailbox_key', mailboxKey).eq('message_id', mid);
+    } else {
+      query = query.eq('id', mail.id);
+    }
+    const { error } = await query;
+    if (error) {
+      await notice.alert(error.message, 'Fehler');
+      return;
+    }
+    // Bestehende Mails desselben Absenders im Postfach ebenfalls als Spam markieren
+    await supabase
+      .from('email_logs')
+      .update({ spam_at: now, deleted_at: null, archived_at: null })
+      .eq('mailbox_key', mailboxKey)
+      .ilike('from_address', `%${addr}%`)
+      .is('spam_at', null);
+
+    setLogs((prev) =>
+      prev.map((x) => {
+        if (detectMailboxKey(x) !== mailboxKey) return x;
+        const from = String(x.from_address || '').toLowerCase();
+        if (from.includes(addr) || (mid && x.message_id === mid) || x.id === mail.id) {
+          return { ...x, spam_at: x.spam_at || now, deleted_at: null, archived_at: null };
+        }
+        return x;
+      })
+    );
+    if (selectedId === mail.id) setSelectedId(null);
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(mail.id);
+      return next;
+    });
+    try {
+      window.dispatchEvent(new CustomEvent('fa-email-unread-changed'));
+    } catch (_) { /* ignore */ }
+  };
+
   const softArchive = async (mail, e) => {
     e?.stopPropagation?.();
     if (!mail) return;
@@ -420,13 +555,13 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     const now = new Date().toISOString();
     const { error } = await supabase
       .from('email_logs')
-      .update({ archived_at: now, deleted_at: null })
+      .update({ archived_at: now, deleted_at: null, spam_at: null })
       .eq('id', mail.id);
     if (error) {
       await notice.alert(error.message, 'Fehler');
       return;
     }
-    setLogs((prev) => prev.map((x) => (x.id === mail.id ? { ...x, archived_at: now, deleted_at: null } : x)));
+    setLogs((prev) => prev.map((x) => (x.id === mail.id ? { ...x, archived_at: now, deleted_at: null, spam_at: null } : x)));
     if (selectedId === mail.id) setSelectedId(null);
     setCheckedIds((prev) => {
       const next = new Set(prev);
@@ -446,7 +581,7 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     const now = new Date().toISOString();
     const { error } = await supabase
       .from('email_logs')
-      .update({ deleted_at: now, archived_at: null })
+      .update({ deleted_at: now, archived_at: null, spam_at: null })
       .in('id', ids);
     if (error) {
       await notice.alert(error.message, 'Fehler');
@@ -454,10 +589,38 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     }
     const idSet = new Set(ids);
     setLogs((prev) =>
-      prev.map((x) => (idSet.has(x.id) ? { ...x, deleted_at: now, archived_at: null } : x))
+      prev.map((x) => (idSet.has(x.id) ? { ...x, deleted_at: now, archived_at: null, spam_at: null } : x))
     );
     if (selectedId && idSet.has(selectedId)) setSelectedId(null);
     clearChecked();
+  };
+
+  const bulkMarkSpam = async () => {
+    const ids = [...checkedIds];
+    if (ids.length === 0) return;
+    const ok = await notice.confirm(
+      `${ids.length} E-Mail(s) als Spam markieren?`,
+      'Spam'
+    );
+    if (!ok) return;
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from('email_logs')
+      .update({ spam_at: now, deleted_at: null, archived_at: null })
+      .in('id', ids);
+    if (error) {
+      await notice.alert(error.message, 'Fehler');
+      return;
+    }
+    const idSet = new Set(ids);
+    setLogs((prev) =>
+      prev.map((x) => (idSet.has(x.id) ? { ...x, spam_at: now, deleted_at: null, archived_at: null } : x))
+    );
+    if (selectedId && idSet.has(selectedId)) setSelectedId(null);
+    clearChecked();
+    try {
+      window.dispatchEvent(new CustomEvent('fa-email-unread-changed'));
+    } catch (_) { /* ignore */ }
   };
 
   const bulkSoftArchive = async () => {
@@ -471,7 +634,7 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     const now = new Date().toISOString();
     const { error } = await supabase
       .from('email_logs')
-      .update({ archived_at: now, deleted_at: null })
+      .update({ archived_at: now, deleted_at: null, spam_at: null })
       .in('id', ids);
     if (error) {
       await notice.alert(error.message, 'Fehler');
@@ -479,7 +642,7 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     }
     const idSet = new Set(ids);
     setLogs((prev) =>
-      prev.map((x) => (idSet.has(x.id) ? { ...x, archived_at: now, deleted_at: null } : x))
+      prev.map((x) => (idSet.has(x.id) ? { ...x, archived_at: now, deleted_at: null, spam_at: null } : x))
     );
     if (selectedId && idSet.has(selectedId)) setSelectedId(null);
     clearChecked();
@@ -488,14 +651,17 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
   const bulkRestore = async () => {
     const ids = [...checkedIds];
     if (ids.length === 0) return;
+    const fromSpam = folder === 'spam';
     const ok = await notice.confirm(
-      `${ids.length} E-Mail(s) wiederherstellen?`,
+      fromSpam
+        ? `${ids.length} E-Mail(s) aus Spam wiederherstellen?`
+        : `${ids.length} E-Mail(s) wiederherstellen?`,
       'Wiederherstellen'
     );
     if (!ok) return;
     const { error } = await supabase
       .from('email_logs')
-      .update({ deleted_at: null, archived_at: null })
+      .update({ deleted_at: null, archived_at: null, spam_at: null })
       .in('id', ids);
     if (error) {
       await notice.alert(error.message, 'Fehler');
@@ -503,10 +669,13 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     }
     const idSet = new Set(ids);
     setLogs((prev) =>
-      prev.map((x) => (idSet.has(x.id) ? { ...x, deleted_at: null, archived_at: null } : x))
+      prev.map((x) => (idSet.has(x.id) ? { ...x, deleted_at: null, archived_at: null, spam_at: null } : x))
     );
     if (selectedId && idSet.has(selectedId)) setSelectedId(null);
     clearChecked();
+    try {
+      window.dispatchEvent(new CustomEvent('fa-email-unread-changed'));
+    } catch (_) { /* ignore */ }
   };
 
   const bulkMarkRead = async () => {
@@ -592,16 +761,41 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
   const restoreMail = async (mail, e) => {
     e?.stopPropagation?.();
     if (!mail) return;
+    const wasSpam = !!mail.spam_at;
+    const addr = extractEmailAddress(mail.from_address);
     const { error } = await supabase
       .from('email_logs')
-      .update({ deleted_at: null, archived_at: null })
+      .update({ deleted_at: null, archived_at: null, spam_at: null })
       .eq('id', mail.id);
     if (error) {
       await notice.alert(error.message, 'Fehler');
       return;
     }
-    setLogs((prev) => prev.map((x) => (x.id === mail.id ? { ...x, deleted_at: null, archived_at: null } : x)));
+    setLogs((prev) => prev.map((x) => (x.id === mail.id ? { ...x, deleted_at: null, archived_at: null, spam_at: null } : x)));
     if (selectedId === mail.id) setSelectedId(null);
+    if (wasSpam && addr) {
+      const { data: blockedRows } = await supabase
+        .from('email_blocked_senders')
+        .select('id')
+        .eq('mailbox_key', mailboxKey)
+        .eq('email_address', addr)
+        .limit(1);
+      if (blockedRows?.length) {
+        const alsoUnblock = await notice.confirm(
+          `Mail wiederhergestellt.\n\nAuch ${addr} von der Sperrliste nehmen?`
+        );
+        if (alsoUnblock) {
+          await supabase
+            .from('email_blocked_senders')
+            .delete()
+            .eq('mailbox_key', mailboxKey)
+            .eq('email_address', addr);
+        }
+      }
+    }
+    try {
+      window.dispatchEvent(new CustomEvent('fa-email-unread-changed'));
+    } catch (_) { /* ignore */ }
   };
 
   const closePreview = () => {
@@ -621,12 +815,18 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
     try {
       const resolved = await resolveAttachmentBlob(mail, att);
       previewUrlRef.current = resolved.objectUrl;
+      if (Array.isArray(mail?.attachments) && mail.id) {
+        setLogs((prev) =>
+          prev.map((x) => (x.id === mail.id ? { ...x, attachments: mail.attachments } : x))
+        );
+      }
       setPreviewAtt({
         mail,
         att,
         blob: resolved.blob,
         objectUrl: resolved.objectUrl,
-        filename: resolved.filename
+        filename: resolved.filename,
+        contentType: resolved.blob?.type || att?.content_type || ''
       });
     } catch (err) {
       setPreviewError(err.message || 'Vorschau fehlgeschlagen');
@@ -826,6 +1026,14 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
             Gelöscht
             <span className="pf-count">{deleted.length}</span>
           </button>
+          <button
+            type="button"
+            className={`pf-folder${folder === 'spam' ? ' active' : ''}`}
+            onClick={() => { setFolder('spam'); setSelectedId(null); clearChecked(); }}
+          >
+            Spam
+            <span className="pf-count">{spam.length}</span>
+          </button>
           {compact && (
             <>
               <SyncButton onClick={handleSync} disabled={syncing} syncing={syncing} compact />
@@ -852,7 +1060,7 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
               </label>
               {checkedCount > 0 && (
                 <div className="pf-bulk-actions">
-                  {(folder === 'deleted' || folder === 'archived') ? (
+                  {(folder === 'deleted' || folder === 'archived' || folder === 'spam') ? (
                     <button type="button" className="pf-bulk-btn" onClick={bulkRestore} title="Wiederherstellen" aria-label="Wiederherstellen">
                       <RestoreIcon />
                     </button>
@@ -886,6 +1094,11 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
                           <ArchiveIcon />
                         </button>
                       )}
+                      {folder === 'inbound' && (
+                        <button type="button" className="pf-bulk-btn pf-bulk-danger" onClick={bulkMarkSpam} title="Als Spam" aria-label="Als Spam">
+                          <SpamIcon />
+                        </button>
+                      )}
                       <button type="button" className="pf-bulk-btn pf-bulk-danger" onClick={bulkSoftDelete} title="Löschen" aria-label="Löschen">
                         <TrashIcon />
                       </button>
@@ -910,7 +1123,9 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
                     ? 'Keine Entwürfe.'
                     : folder === 'archived'
                       ? 'Noch keine archivierten Mails.'
-                      : 'Papierkorb ist leer.'}
+                      : folder === 'spam'
+                        ? 'Kein Spam.'
+                        : 'Papierkorb ist leer.'}
             </p>
           ) : (
             folderMails.map((mail) => {
@@ -972,7 +1187,7 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
                     </div>
                   </div>
                   <div className="pf-mail-actions">
-                    {(folder === 'deleted' || folder === 'archived') ? (
+                    {(folder === 'deleted' || folder === 'archived' || folder === 'spam') ? (
                       <button
                         type="button"
                         className="pf-mail-act"
@@ -983,6 +1198,16 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
                       </button>
                     ) : (
                       <>
+                        {folder === 'inbound' && (
+                          <button
+                            type="button"
+                            className="pf-mail-act"
+                            title="Als Spam"
+                            onClick={(e) => markAsSpam(mail, e)}
+                          >
+                            <SpamIcon />
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="pf-mail-act"
@@ -1037,12 +1262,24 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
                         </button>
                       </>
                     )}
-                    {(folder === 'deleted' || folder === 'archived') ? (
+                    {(folder === 'deleted' || folder === 'archived' || folder === 'spam') ? (
                       <button type="button" className="pf-icon-btn" title="Wiederherstellen" onClick={(e) => restoreMail(selected, e)}>
                         <span>Wiederherstellen</span>
                       </button>
                     ) : (
                       <>
+                        {folder === 'inbound' && (
+                          <>
+                            <button type="button" className="pf-icon-btn" title="Als Spam" onClick={(e) => markAsSpam(selected, e)}>
+                              <SpamIcon />
+                              <span>Spam</span>
+                            </button>
+                            <button type="button" className="pf-icon-btn" title="Absender blockieren" onClick={(e) => blockSender(selected, e)}>
+                              <BlockIcon />
+                              <span>Blockieren</span>
+                            </button>
+                          </>
+                        )}
                         <button type="button" className="pf-icon-btn" title="Löschen" onClick={(e) => softDelete(selected, e)}>
                           <TrashIcon />
                         </button>
@@ -1140,7 +1377,13 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
               {previewLoading && <p className="pf-empty">Lade Vorschau…</p>}
               {!previewLoading && previewError && <p className="pf-empty">{previewError}</p>}
               {!previewLoading && !previewError && previewAtt.objectUrl && (
-                <iframe title="PDF-Vorschau" src={previewAtt.objectUrl} className="pf-preview-frame" />
+                /pdf/i.test(previewAtt.contentType || previewAtt.filename || '') ? (
+                  <iframe title="PDF-Vorschau" src={previewAtt.objectUrl} className="pf-preview-frame" />
+                ) : (
+                  <p className="pf-empty">
+                    Vorschau für diesen Dateityp nicht möglich — bitte „Herunterladen“ oder „PDF öffnen“ nutzen.
+                  </p>
+                )
               )}
             </div>
           </div>

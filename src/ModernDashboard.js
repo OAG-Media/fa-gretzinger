@@ -1144,11 +1144,12 @@ export function ModernShell({ onLogout, navigate, role = 'mitarbeiter', children
       try {
         const { data, error } = await supabase
           .from('email_logs')
-          .select('id, mailbox_key, from_address, to_address, email_type, direction, read_at, deleted_at, archived_at, message_id')
+          .select('id, mailbox_key, from_address, to_address, email_type, direction, read_at, deleted_at, archived_at, spam_at, message_id')
           .eq('direction', 'inbound')
           .is('read_at', null)
           .is('deleted_at', null)
           .is('archived_at', null)
+          .is('spam_at', null)
           .limit(500);
         if (error) throw error;
         const counts = { kv: 0, info: 0 };

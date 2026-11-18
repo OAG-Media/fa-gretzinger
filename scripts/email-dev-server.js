@@ -223,6 +223,33 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && req.url === '/api/ensure-inbound-attachments') {
+    let raw = '';
+    req.on('data', (chunk) => {
+      raw += chunk;
+      if (raw.length > 1_000_000) req.destroy();
+    });
+    req.on('end', async () => {
+      try {
+        const handler = require('../api/ensure-inbound-attachments');
+        const body = JSON.parse(raw || '{}');
+        const fakeReq = { method: 'POST', body };
+        const fakeRes = {
+          statusCode: 200,
+          headers: {},
+          setHeader(k, v) { this.headers[k] = v; },
+          status(code) { this.statusCode = code; return this; },
+          json(payload) { sendJson(res, this.statusCode || 200, payload); },
+          end() { res.end(); }
+        };
+        await handler(fakeReq, fakeRes);
+      } catch (e) {
+        sendJson(res, 500, { error: e.message || 'Anhänge nachladen fehlgeschlagen' });
+      }
+    });
+    return;
+  }
+
   if (req.method === 'POST' && req.url === '/api/resend-inbound') {
     let raw = '';
     req.on('data', (chunk) => {
@@ -251,6 +278,6 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`[email-dev] http://localhost:${PORT}`);
-  console.log(`[email-dev] POST /api/send-email | /api/sync-inbound | /api/resend-inbound | /api/resend-events`);
+  console.log(`[email-dev] POST /api/send-email | /api/sync-inbound | /api/ensure-inbound-attachments | /api/resend-inbound | /api/resend-events`);
   console.log(`[email-dev] From: ${DEFAULT_FROM} | Reply-To: ${DEFAULT_REPLY_TO}`);
 });

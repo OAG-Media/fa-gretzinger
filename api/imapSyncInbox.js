@@ -9,9 +9,11 @@ const { ImapFlow } = require('imapflow');
 const { simpleParser } = require('mailparser');
 const {
   supabaseInsertEmailLog,
-  SUPABASE_URL,
+  supabasePatchEmailLog,
   findExistingByMessageId,
-  normalizeAppAddresses
+  normalizeAppAddresses,
+  isSenderBlocked,
+  storeInboundAttachmentItems
 } = require('./emailServerUtils');
 
 const DEFAULT_HOST = 'imap.hostinger.com';
@@ -139,15 +141,27 @@ async function syncOneMailbox(mailboxKey, { limit = 40, days = 14 } = {}) {
               ? `<pre style="white-space:pre-wrap;font-family:inherit">${escapeHtml(parsed.text)}</pre>`
               : '<p><em>Kein Inhalt</em></p>');
 
-          const attachments = (parsed.attachments || []).map((a) => ({
-            filename: a.filename || 'Anhang',
-            content_type: a.contentType || 'application/octet-stream',
-            size: a.size || null
-          }));
+          const attachmentItems = (parsed.attachments || [])
+            .filter((a) => {
+              if (!a?.content) return false;
+              const disp = String(a.contentDisposition || '').toLowerCase();
+              const isInline = disp.includes('inline');
+              const isSmallImage = /^image\//i.test(a.contentType || '') && (a.size || Buffer.byteLength(a.content) || 0) < 40_000;
+              // Signatur-Bilder überspringen, echte Anhänge behalten
+              if (isInline && isSmallImage) return false;
+              return true;
+            })
+            .map((a) => ({
+              filename: a.filename || 'Anhang',
+              contentType: a.contentType || 'application/octet-stream',
+              content: a.content,
+              size: a.size || null
+            }));
 
           const createdAt = parsed.date || msg.envelope?.date || new Date();
+          const blocked = await isSenderBlocked(mailboxKey, fromJoined);
 
-          await supabaseInsertEmailLog({
+          const inserted = await supabaseInsertEmailLog({
             direction: 'inbound',
             email_type: 'inbound',
             mailbox_key: mailboxKey,
@@ -159,14 +173,22 @@ async function syncOneMailbox(mailboxKey, { limit = 40, days = 14 } = {}) {
             subject,
             body_html: html,
             body_text: parsed.text || null,
-            attachments,
+            attachments: [],
             resend_id: null,
             resend_received_id: null,
             message_id: syntheticId,
             status: 'received',
             is_test: false,
+            spam_at: blocked ? new Date().toISOString() : null,
             created_at: new Date(createdAt).toISOString()
           });
+
+          if (inserted?.id && attachmentItems.length) {
+            const stored = await storeInboundAttachmentItems(inserted.id, attachmentItems);
+            if (stored.length) {
+              await supabasePatchEmailLog(`id=eq.${inserted.id}`, { attachments: stored });
+            }
+          }
           imported += 1;
         } catch (inner) {
           console.warn(`[imap-sync ${mailboxKey}] msg skip:`, inner.message);

@@ -1,7 +1,13 @@
 // Admin-Sync: Resend-Inbound + Hostinger IMAP Inbox → email_logs
 // Env: RESEND_API_KEY, SUPABASE_SERVICE_ROLE_KEY, IMAP_*
 
-const { SUPABASE_URL, importInboundEmail, syncOutboundBounces } = require('./emailServerUtils');
+const {
+  SUPABASE_URL,
+  importInboundEmail,
+  syncOutboundBounces,
+  ensureAttachmentsForLog,
+  attachmentsNeedStorage
+} = require('./emailServerUtils');
 const { syncImapInboxes } = require('./imapSyncInbox');
 
 module.exports = async function handler(req, res) {
@@ -67,10 +73,40 @@ module.exports = async function handler(req, res) {
     const imap = await syncImapInboxes({ limit: 50, days: 21 });
     const bounces = await syncOutboundBounces({ days: 21, limit: 150 });
 
+    // Fehlende Anhänge bei bestehenden Inbound-Mails nachladen (Resend)
+    let attachmentsBackfilled = 0;
+    try {
+      const attResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/email_logs?select=id,attachments,resend_received_id,direction` +
+          `&direction=eq.inbound&resend_received_id=not.is.null` +
+          `&order=created_at.desc&limit=40`,
+        {
+          headers: {
+            apikey: sbKey,
+            Authorization: `Bearer ${sbKey}`
+          }
+        }
+      );
+      const attRows = await attResp.json().catch(() => []);
+      for (const row of Array.isArray(attRows) ? attRows : []) {
+        if (!attachmentsNeedStorage(row.attachments) && Array.isArray(row.attachments) && row.attachments.length) {
+          continue;
+        }
+        // eslint-disable-next-line no-await-in-loop
+        const updated = await ensureAttachmentsForLog(row, { force: true });
+        if (Array.isArray(updated?.attachments) && updated.attachments.some((a) => a.storage_path)) {
+          attachmentsBackfilled += 1;
+        }
+      }
+    } catch (e) {
+      console.warn('[sync-inbound] attachment backfill:', e.message || e);
+    }
+
     return res.status(200).json({
       ok: true,
       imported: resendImported + (imap.imported || 0),
       skipped: resendSkipped + (imap.skipped || 0),
+      attachmentsBackfilled,
       resend: {
         imported: resendImported,
         skipped: resendSkipped,
