@@ -50,16 +50,27 @@ export function pdfBase64ToObjectUrl(base64) {
 }
 
 /** Upload PDF bytes after email_logs insert; returns meta with storage_path. */
+function storageSafeName(filename) {
+  let raw = String(filename || 'Anhang.pdf')
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue')
+    .replace(/Ä/g, 'Ae').replace(/Ö/g, 'Oe').replace(/Ü/g, 'Ue')
+    .replace(/ß/g, 'ss')
+    .replace(/[\\/]/g, '_');
+  raw = raw.replace(/[^\w.\-!() ]+/g, '_').replace(/_+/g, '_').trim();
+  return raw || 'Anhang.pdf';
+}
+
 export async function storeEmailPdfAttachment({ logId, filename, pdfBase64, contentType = 'application/pdf' }) {
   if (!logId || !pdfBase64) return null;
-  const safeName = (filename || 'Anhang.pdf').replace(/[\\/]/g, '_');
+  const displayName = String(filename || 'Anhang.pdf').replace(/[\\/]/g, '_');
+  const safeName = storageSafeName(filename);
   const path = `${logId}/${safeName}`;
   const bytes = base64ToUint8Array(pdfBase64);
   const { error } = await supabase.storage
     .from('email-attachments')
     .upload(path, bytes, { contentType, upsert: true });
   if (error) throw error;
-  return { filename: safeName, content_type: contentType, storage_path: path };
+  return { filename: displayName, content_type: contentType, storage_path: path };
 }
 
 async function signedUrlForPath(path) {

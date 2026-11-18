@@ -89,9 +89,36 @@ async function supabaseInsertEmailLog(row) {
   return Array.isArray(data) ? data[0] : data;
 }
 
-function safeAttachmentFilename(name, index = 0) {
+/** Anzeigename (kann Umlaute haben). */
+function displayAttachmentFilename(name, index = 0) {
   const raw = String(name || `Anhang-${index + 1}`).replace(/[\\/]/g, '_').trim();
   return raw || `Anhang-${index + 1}`;
+}
+
+/**
+ * Storage-Key: nur S3-/Supabase-sichere ASCII-Zeichen.
+ * Umlaute (für, März …) sonst → InvalidKey 400.
+ */
+function storageAttachmentFilename(name, index = 0) {
+  let raw = String(name || `Anhang-${index + 1}`);
+  raw = raw
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue')
+    .replace(/Ä/g, 'Ae').replace(/Ö/g, 'Oe').replace(/Ü/g, 'Ue')
+    .replace(/ß/g, 'ss');
+  raw = raw.replace(/[\\/]/g, '_');
+  // Nur Zeichen die Supabase Storage erlaubt (\w ASCII + wenige Sonderzeichen)
+  raw = raw.replace(/[^\w.\-!() ]+/g, '_').replace(/_+/g, '_').replace(/[ ]+/g, ' ').trim();
+  if (!raw || raw === '.' || raw === '..') raw = `Anhang-${index + 1}`;
+  // Extension erhalten falls weggestorben
+  if (!/\.[A-Za-z0-9]{2,8}$/.test(raw)) {
+    const origExt = String(name || '').match(/(\.[A-Za-z0-9]{2,8})$/);
+    if (origExt) raw += origExt[1];
+  }
+  return raw.slice(0, 180);
+}
+
+function safeAttachmentFilename(name, index = 0) {
+  return storageAttachmentFilename(name, index);
 }
 
 /**
@@ -133,7 +160,8 @@ function attachmentsNeedStorage(atts) {
 async function uploadBytesToEmailAttachments(logId, filename, bytes, contentType, uniqueSuffix = '') {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY nicht konfiguriert');
-  let safeName = safeAttachmentFilename(filename);
+  const displayName = displayAttachmentFilename(filename);
+  let safeName = storageAttachmentFilename(filename);
   if (uniqueSuffix) {
     const dot = safeName.lastIndexOf('.');
     safeName = dot > 0
@@ -141,8 +169,10 @@ async function uploadBytesToEmailAttachments(logId, filename, bytes, contentType
       : `${safeName}_${uniqueSuffix}`;
   }
   const path = `${logId}/${safeName}`;
+  // Pfadsegmente einzeln encoden (Leerzeichen etc.), Slash nicht encoden
+  const encodedPath = path.split('/').map((p) => encodeURIComponent(p)).join('/');
   const resp = await fetch(
-    `${SUPABASE_URL}/storage/v1/object/email-attachments/${encodeURIComponent(logId)}/${encodeURIComponent(safeName)}`,
+    `${SUPABASE_URL}/storage/v1/object/email-attachments/${encodedPath}`,
     {
       method: 'POST',
       headers: {
@@ -159,7 +189,7 @@ async function uploadBytesToEmailAttachments(logId, filename, bytes, contentType
     throw new Error(`Storage-Upload fehlgeschlagen (${resp.status}): ${errText || safeName}`);
   }
   return {
-    filename: safeAttachmentFilename(filename),
+    filename: displayName,
     content_type: contentType || 'application/octet-stream',
     size: bytes?.byteLength || bytes?.length || null,
     storage_path: path
