@@ -13,7 +13,8 @@ const {
   findExistingByMessageId,
   normalizeAppAddresses,
   isSenderBlocked,
-  storeInboundAttachmentItems
+  storeInboundAttachmentItems,
+  isInlineOrSignatureAttachment
 } = require('./emailServerUtils');
 
 const DEFAULT_HOST = 'imap.hostinger.com';
@@ -142,21 +143,19 @@ async function syncOneMailbox(mailboxKey, { limit = 40, days = 14 } = {}) {
               : '<p><em>Kein Inhalt</em></p>');
 
           const attachmentItems = (parsed.attachments || [])
-            .filter((a) => {
-              if (!a?.content) return false;
-              const disp = String(a.contentDisposition || '').toLowerCase();
-              const isInline = disp.includes('inline');
-              const isSmallImage = /^image\//i.test(a.contentType || '') && (a.size || Buffer.byteLength(a.content) || 0) < 40_000;
-              // Signatur-Bilder überspringen, echte Anhänge behalten
-              if (isInline && isSmallImage) return false;
-              return true;
-            })
+            .filter((a) => a?.content)
             .map((a) => ({
               filename: a.filename || 'Anhang',
               contentType: a.contentType || 'application/octet-stream',
+              content_type: a.contentType || 'application/octet-stream',
+              contentDisposition: a.contentDisposition || null,
+              content_disposition: a.contentDisposition || null,
+              contentId: a.cid || a.contentId || null,
+              content_id: a.cid || a.contentId || null,
               content: a.content,
-              size: a.size || null
-            }));
+              size: a.size || Buffer.byteLength(a.content) || 0
+            }))
+            .filter((a) => !isInlineOrSignatureAttachment(a));
 
           const createdAt = parsed.date || msg.envelope?.date || new Date();
           const blocked = await isSenderBlocked(mailboxKey, fromJoined);

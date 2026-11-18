@@ -94,9 +94,36 @@ function safeAttachmentFilename(name, index = 0) {
   return raw || `Anhang-${index + 1}`;
 }
 
+/**
+ * Signatur-/Inline-Bilder (Outlook image001.png …) vs. echte Anhänge.
+ * Echte hochgeladene PDFs/Bilder bleiben sichtbar.
+ */
+function isInlineOrSignatureAttachment(att = {}) {
+  const filename = String(att.filename || att.name || '').trim();
+  const contentType = String(att.content_type || att.contentType || '').toLowerCase();
+  const disposition = String(att.content_disposition || att.contentDisposition || '').toLowerCase();
+  const contentId = String(att.content_id || att.contentId || att.cid || '').trim();
+  const size = Number(att.size) || 0;
+  const isImage = contentType.startsWith('image/') || /\.(png|jpe?g|gif|bmp|webp)$/i.test(filename);
+
+  if (disposition.includes('inline')) return true;
+  // Outlook/Word Signatur-Muster
+  if (isImage && /^image\d{2,4}\./i.test(filename)) return true;
+  if (isImage && /^~wrd/i.test(filename)) return true;
+  if (isImage && contentId && size > 0 && size < 50_000) return true;
+  // Winmail / winmail.dat oft unbrauchbar — trotzdem behalten wenn nicht image
+  return false;
+}
+
 function attachmentsNeedStorage(atts) {
-  if (!Array.isArray(atts) || atts.length === 0) return true;
-  return atts.some((a) => !a?.storage_path);
+  const real = (Array.isArray(atts) ? atts : []).filter((a) => !isInlineOrSignatureAttachment(a));
+  if (real.length === 0) {
+    // Nur Signatur-Bilder oder gar nichts → nichts nachladen nötig,
+    // außer die Liste ist komplett leer (könnte echte Anhänge noch fehlen)
+    if (!Array.isArray(atts) || atts.length === 0) return true;
+    return false;
+  }
+  return real.some((a) => !a?.storage_path);
 }
 
 async function uploadBytesToEmailAttachments(logId, filename, bytes, contentType) {
@@ -129,26 +156,30 @@ async function uploadBytesToEmailAttachments(logId, filename, bytes, contentType
   };
 }
 
-/** items: [{ filename, contentType, content: Buffer|Uint8Array|ArrayBuffer }] */
+/** items: [{ filename, contentType, content, contentDisposition?, contentId?, size? }] */
 async function storeInboundAttachmentItems(logId, items = []) {
   const stored = [];
   for (let i = 0; i < items.length; i += 1) {
     const item = items[i];
     if (!item?.content) continue;
+    if (isInlineOrSignatureAttachment(item)) continue;
     const buf = Buffer.isBuffer(item.content)
       ? item.content
       : Buffer.from(item.content);
     if (!buf.length) continue;
     try {
       // eslint-disable-next-line no-await-in-loop
-      stored.push(
-        await uploadBytesToEmailAttachments(
-          logId,
-          item.filename || `Anhang-${i + 1}`,
-          buf,
-          item.contentType || item.content_type || 'application/octet-stream'
-        )
+      const meta = await uploadBytesToEmailAttachments(
+        logId,
+        item.filename || `Anhang-${i + 1}`,
+        buf,
+        item.contentType || item.content_type || 'application/octet-stream'
       );
+      stored.push({
+        ...meta,
+        content_disposition: item.contentDisposition || item.content_disposition || 'attachment',
+        content_id: item.contentId || item.content_id || null
+      });
     } catch (e) {
       console.warn('[inbound-att upload]', e.message || e);
       stored.push({
@@ -182,6 +213,17 @@ async function fetchResendAttachmentItems(emailId) {
   const items = [];
   for (const att of list) {
     if (!att?.download_url) continue;
+    const meta = {
+      filename: att.filename || 'Anhang',
+      contentType: att.content_type || 'application/octet-stream',
+      content_type: att.content_type || 'application/octet-stream',
+      contentDisposition: att.content_disposition || null,
+      content_disposition: att.content_disposition || null,
+      contentId: att.content_id || null,
+      content_id: att.content_id || null,
+      size: att.size || 0
+    };
+    if (isInlineOrSignatureAttachment(meta)) continue;
     try {
       // eslint-disable-next-line no-await-in-loop
       const resp = await fetch(att.download_url);
@@ -189,8 +231,7 @@ async function fetchResendAttachmentItems(emailId) {
       // eslint-disable-next-line no-await-in-loop
       const ab = await resp.arrayBuffer();
       items.push({
-        filename: att.filename || 'Anhang',
-        contentType: att.content_type || 'application/octet-stream',
+        ...meta,
         content: Buffer.from(ab),
         size: att.size || ab.byteLength
       });
@@ -620,6 +661,7 @@ module.exports = {
   fetchResendAttachmentItems,
   ensureAttachmentsForLog,
   attachmentsNeedStorage,
+  isInlineOrSignatureAttachment,
   formatBounceReasonDe,
   handleResendBounceEvent,
   syncOutboundBounces,

@@ -2,6 +2,34 @@ import { supabase } from './supabaseClient';
 import { buildKvPdfAttachment } from './kvEmailUtils';
 import { buildInvoicePdfAttachment } from './invoiceEmailUtils';
 
+/** Signatur-/Inline-Bilder ausblenden (Outlook image001.png etc.). */
+export function isInlineOrSignatureAttachment(att = {}) {
+  const filename = String(att.filename || att.name || '').trim();
+  const contentType = String(att.content_type || att.contentType || '').toLowerCase();
+  const disposition = String(att.content_disposition || att.contentDisposition || '').toLowerCase();
+  const contentId = String(att.content_id || att.contentId || att.cid || '').trim();
+  const size = Number(att.size) || 0;
+  const isImage = contentType.startsWith('image/') || /\.(png|jpe?g|gif|bmp|webp)$/i.test(filename);
+
+  if (disposition.includes('inline')) return true;
+  if (isImage && /^image\d{2,4}\./i.test(filename)) return true;
+  if (isImage && /^~wrd/i.test(filename)) return true;
+  if (isImage && contentId && size > 0 && size < 50_000) return true;
+  return false;
+}
+
+export function isImageAttachment(att = {}) {
+  const filename = String(att.filename || '').toLowerCase();
+  const contentType = String(att.content_type || att.contentType || '').toLowerCase();
+  return contentType.startsWith('image/') || /\.(png|jpe?g|gif|bmp|webp)$/i.test(filename);
+}
+
+export function isPdfAttachment(att = {}) {
+  const filename = String(att.filename || '').toLowerCase();
+  const contentType = String(att.content_type || att.contentType || '').toLowerCase();
+  return contentType.includes('pdf') || filename.endsWith('.pdf');
+}
+
 function base64ToUint8Array(base64) {
   const clean = String(base64 || '').replace(/^data:application\/pdf;base64,/, '');
   const bin = atob(clean);

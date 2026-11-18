@@ -5,7 +5,14 @@ import { getMailbox, canAccessMailbox, EMAIL_TYPE_LABELS, detectMailboxKey } fro
 import ComposeEmailModal from './ComposeEmailModal';
 import { parseAddressList } from './emailRecipients';
 import { useNotice } from './AppNotice';
-import { resolveAttachmentBlob, downloadBlob, openBlob } from './emailAttachmentUtils';
+import {
+  resolveAttachmentBlob,
+  downloadBlob,
+  openBlob,
+  isInlineOrSignatureAttachment,
+  isImageAttachment,
+  isPdfAttachment
+} from './emailAttachmentUtils';
 import { GearIcon } from './icons';
 
 function emailApiBase() {
@@ -928,7 +935,10 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
 
   const attachmentListFor = (mail) => {
     if (!mail) return [];
-    if (Array.isArray(mail.attachments) && mail.attachments.length > 0) return mail.attachments;
+    if (Array.isArray(mail.attachments) && mail.attachments.length > 0) {
+      // Nur echte Anhänge — Signatur-/Inline-Bilder ausblenden
+      return mail.attachments.filter((a) => !isInlineOrSignatureAttachment(a));
+    }
     // ältere Logs vor Meta-Speicherung: KV/Rechnung hatten immer PDF
     if (mail.direction === 'outbound' && mail.email_type === 'kv') {
       return [{ filename: mail.subject ? `${mail.subject}.pdf` : 'Kostenvoranschlag.pdf' }];
@@ -1364,11 +1374,11 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
                   type="button"
                   className="pf-icon-btn"
                   disabled={!previewAtt.blob || previewLoading}
-                  title="PDF öffnen"
+                  title="Öffnen"
                   onClick={() => previewAtt.blob && openBlob(previewAtt.blob)}
                 >
                   <OpenFolderIcon />
-                  <span>PDF öffnen</span>
+                  <span>Öffnen</span>
                 </button>
                 <button type="button" className="pf-icon-btn" onClick={closePreview} title="Schließen">×</button>
               </div>
@@ -1377,11 +1387,17 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
               {previewLoading && <p className="pf-empty">Lade Vorschau…</p>}
               {!previewLoading && previewError && <p className="pf-empty">{previewError}</p>}
               {!previewLoading && !previewError && previewAtt.objectUrl && (
-                /pdf/i.test(previewAtt.contentType || previewAtt.filename || '') ? (
+                isPdfAttachment({ filename: previewAtt.filename, content_type: previewAtt.contentType }) ? (
                   <iframe title="PDF-Vorschau" src={previewAtt.objectUrl} className="pf-preview-frame" />
+                ) : isImageAttachment({ filename: previewAtt.filename, content_type: previewAtt.contentType }) ? (
+                  <img
+                    src={previewAtt.objectUrl}
+                    alt={previewAtt.filename || 'Bildanhang'}
+                    className="pf-preview-image"
+                  />
                 ) : (
                   <p className="pf-empty">
-                    Vorschau für diesen Dateityp nicht möglich — bitte „Herunterladen“ oder „PDF öffnen“ nutzen.
+                    Vorschau für diesen Dateityp nicht möglich — bitte „Herunterladen“ oder „Öffnen“ nutzen.
                   </p>
                 )
               )}
@@ -1492,6 +1508,7 @@ export function PostfachPanel({ navigate, mailboxKey = 'info', compact = false, 
         .pf-preview-actions { display: flex; gap: 6px; flex-shrink: 0; }
         .pf-preview-body { flex: 1; background: #f8fafc; min-height: 0; }
         .pf-preview-frame { width: 100%; height: 100%; border: none; background: #fff; }
+        .pf-preview-image { display: block; max-width: 100%; max-height: 100%; margin: 0 auto; object-fit: contain; background: #fff; }
         @media (max-width: 960px) {
           .pf-layout { grid-template-columns: 1fr; }
           .pf-resizer { display: none; }
