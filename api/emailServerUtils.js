@@ -105,31 +105,41 @@ function isInlineOrSignatureAttachment(att = {}) {
   const contentId = String(att.content_id || att.contentId || att.cid || '').trim();
   const size = Number(att.size) || 0;
   const isImage = contentType.startsWith('image/') || /\.(png|jpe?g|gif|bmp|webp)$/i.test(filename);
+  const baseName = filename.toLowerCase();
 
+  // MIME sagt explizit: im Fließtext / Signatur eingebettet
   if (disposition.includes('inline')) return true;
-  // Outlook/Word Signatur-Muster
-  if (isImage && /^image\d{2,4}\./i.test(filename)) return true;
+  // Outlook/Word: image001.png, image.png, ~WRD0000.jpg
+  if (isImage && /^image(\d{2,4})?\.(png|jpe?g|gif|bmp|webp)$/i.test(filename)) return true;
   if (isImage && /^~wrd/i.test(filename)) return true;
-  if (isImage && contentId && size > 0 && size < 50_000) return true;
-  // Winmail / winmail.dat oft unbrauchbar — trotzdem behalten wenn nicht image
+  if (isImage && contentId) return true;
+  // Generische Mini-Bilder ohne echten Dateinamen (Signatur-Icons/Logo)
+  if (isImage && size > 0 && size < 80_000 && (baseName === 'image.png' || baseName === 'image.jpg' || baseName === 'image.jpeg' || baseName === 'untitled.png')) {
+    return true;
+  }
   return false;
 }
 
 function attachmentsNeedStorage(atts) {
-  const real = (Array.isArray(atts) ? atts : []).filter((a) => !isInlineOrSignatureAttachment(a));
-  if (real.length === 0) {
-    // Nur Signatur-Bilder oder gar nichts → nichts nachladen nötig,
-    // außer die Liste ist komplett leer (könnte echte Anhänge noch fehlen)
-    if (!Array.isArray(atts) || atts.length === 0) return true;
-    return false;
-  }
-  return real.some((a) => !a?.storage_path);
+  const list = Array.isArray(atts) ? atts : [];
+  const real = list.filter((a) => !isInlineOrSignatureAttachment(a));
+  // Echte Anhänge ohne Datei im Storage → nachladen
+  if (real.some((a) => !a?.storage_path)) return true;
+  // Noch gar keine Meta → Sync/Ensure soll versuchen
+  if (list.length === 0) return true;
+  return false;
 }
 
-async function uploadBytesToEmailAttachments(logId, filename, bytes, contentType) {
+async function uploadBytesToEmailAttachments(logId, filename, bytes, contentType, uniqueSuffix = '') {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY nicht konfiguriert');
-  const safeName = safeAttachmentFilename(filename);
+  let safeName = safeAttachmentFilename(filename);
+  if (uniqueSuffix) {
+    const dot = safeName.lastIndexOf('.');
+    safeName = dot > 0
+      ? `${safeName.slice(0, dot)}_${uniqueSuffix}${safeName.slice(dot)}`
+      : `${safeName}_${uniqueSuffix}`;
+  }
   const path = `${logId}/${safeName}`;
   const resp = await fetch(
     `${SUPABASE_URL}/storage/v1/object/email-attachments/${encodeURIComponent(logId)}/${encodeURIComponent(safeName)}`,
@@ -149,7 +159,7 @@ async function uploadBytesToEmailAttachments(logId, filename, bytes, contentType
     throw new Error(`Storage-Upload fehlgeschlagen (${resp.status}): ${errText || safeName}`);
   }
   return {
-    filename: safeName,
+    filename: safeAttachmentFilename(filename),
     content_type: contentType || 'application/octet-stream',
     size: bytes?.byteLength || bytes?.length || null,
     storage_path: path
@@ -173,7 +183,8 @@ async function storeInboundAttachmentItems(logId, items = []) {
         logId,
         item.filename || `Anhang-${i + 1}`,
         buf,
-        item.contentType || item.content_type || 'application/octet-stream'
+        item.contentType || item.content_type || 'application/octet-stream',
+        String(i + 1)
       );
       stored.push({
         ...meta,

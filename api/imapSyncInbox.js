@@ -227,7 +227,121 @@ async function syncImapInboxes(options = {}) {
   return { ok: true, imported, skipped, results };
 }
 
+/**
+ * Fehlende Anhang-Dateien für eine bestehende Log-Zeile per IMAP nachladen
+ * (wenn nur Metadaten vorhanden, z. B. alte Imports / kein Resend).
+ */
+async function fetchImapAttachmentItemsForLog(log) {
+  const mailboxKey = log?.mailbox_key === 'kv' ? 'kv' : 'info';
+  const auth = mailboxAuth(mailboxKey);
+  if (!auth.pass) throw new Error('IMAP-Passwort fehlt');
+
+  let messageId = String(log.message_id || '').trim();
+  if (messageId.startsWith('imap:')) {
+    throw new Error('Keine echte Message-ID für IMAP-Nachladen');
+  }
+  if (!messageId) throw new Error('message_id fehlt');
+
+  // IMAP HEADER.FIELDS sucht oft ohne spitze Klammern besser mit beiden Varianten
+  const candidates = [messageId];
+  if (messageId.startsWith('<') && messageId.endsWith('>')) {
+    candidates.push(messageId.slice(1, -1));
+  } else {
+    candidates.push(`<${messageId}>`);
+  }
+
+  const client = new ImapFlow({
+    host: process.env.IMAP_HOST || DEFAULT_HOST,
+    port: Number(process.env.IMAP_PORT || DEFAULT_PORT),
+    secure: true,
+    auth: { user: auth.user, pass: auth.pass },
+    logger: false,
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000
+  });
+
+  try {
+    await client.connect();
+    const lock = await client.getMailboxLock('INBOX');
+    try {
+      let uids = [];
+      for (const mid of candidates) {
+        // eslint-disable-next-line no-await-in-loop
+        let found = await client.search({ header: ['Message-ID', mid] }, { uid: true }).catch(() => null);
+        if (!Array.isArray(found) || !found.length) {
+          // eslint-disable-next-line no-await-in-loop
+          found = await client.search({ header: { 'message-id': mid } }, { uid: true }).catch(() => null);
+        }
+        if (Array.isArray(found) && found.length) {
+          uids = found;
+          break;
+        }
+      }
+      if (!uids.length) {
+        // Fallback: letzte ~80 Mails scannen (Message-ID im Envelope)
+        const since = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+        let recent = await client.search({ since }, { uid: true });
+        if (!Array.isArray(recent)) recent = [];
+        if (recent.length > 80) recent = recent.slice(-80);
+        for await (const msg of client.fetch(recent, { uid: true, envelope: true })) {
+          const envId = String(msg.envelope?.messageId || '').trim();
+          if (candidates.includes(envId)) {
+            uids = [msg.uid];
+            break;
+          }
+        }
+      }
+      if (!uids.length) throw new Error('Mail im IMAP-Postfach nicht gefunden');
+
+      let source = null;
+      for await (const msg of client.fetch(uids.slice(-1), { uid: true, source: true })) {
+        source = msg.source;
+      }
+      if (!source) throw new Error('IMAP-Quelle leer');
+
+      const parsed = await simpleParser(source);
+      return (parsed.attachments || [])
+        .filter((a) => a?.content)
+        .map((a) => ({
+          filename: a.filename || 'Anhang',
+          contentType: a.contentType || 'application/octet-stream',
+          content_type: a.contentType || 'application/octet-stream',
+          contentDisposition: a.contentDisposition || null,
+          content_disposition: a.contentDisposition || null,
+          contentId: a.cid || a.contentId || null,
+          content_id: a.cid || a.contentId || null,
+          content: a.content,
+          size: a.size || Buffer.byteLength(a.content) || 0
+        }))
+        .filter((a) => !isInlineOrSignatureAttachment(a));
+    } finally {
+      lock.release();
+    }
+  } finally {
+    try {
+      await client.logout();
+    } catch (_) {
+      try { client.close(); } catch (__) { /* ignore */ }
+    }
+  }
+}
+
+async function ensureImapAttachmentsForLog(log) {
+  if (!log?.id) return log;
+  const items = await fetchImapAttachmentItemsForLog(log);
+  if (!items.length) {
+    // Keine echten Anhänge → Signatur-Meta entfernen
+    await supabasePatchEmailLog(`id=eq.${log.id}`, { attachments: [] });
+    return { ...log, attachments: [] };
+  }
+  const stored = await storeInboundAttachmentItems(log.id, items);
+  await supabasePatchEmailLog(`id=eq.${log.id}`, { attachments: stored });
+  return { ...log, attachments: stored };
+}
+
 module.exports = {
   syncImapInboxes,
-  syncOneMailbox
+  syncOneMailbox,
+  fetchImapAttachmentItemsForLog,
+  ensureImapAttachmentsForLog
 };

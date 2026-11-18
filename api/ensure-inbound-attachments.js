@@ -1,11 +1,17 @@
-// Lädt fehlende Inbound-Anhänge aus Resend nach und speichert sie in Storage.
+// Lädt fehlende Inbound-Anhänge nach (Resend und/oder IMAP) und speichert sie in Storage.
 // Body: { id: email_logs.id }
 
 const {
   SUPABASE_URL,
   ensureAttachmentsForLog,
-  attachmentsNeedStorage
+  attachmentsNeedStorage,
+  isInlineOrSignatureAttachment
 } = require('./emailServerUtils');
+const { ensureImapAttachmentsForLog } = require('./imapSyncInbox');
+
+function realAttachments(list) {
+  return (Array.isArray(list) ? list : []).filter((a) => !isInlineOrSignatureAttachment(a));
+}
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -35,23 +41,61 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true, attachments: log.attachments || [], skipped: 'not_inbound' });
     }
 
-    if (!attachmentsNeedStorage(log.attachments) && Array.isArray(log.attachments) && log.attachments.length) {
-      return res.status(200).json({ ok: true, attachments: log.attachments, skipped: 'already_stored' });
+    // Nur Signatur-Bilder in Meta → für UI leeren (bleiben im HTML-Body)
+    const real = realAttachments(log.attachments);
+    if (Array.isArray(log.attachments) && log.attachments.length && real.length === 0) {
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/email_logs?id=eq.${encodeURIComponent(id)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            apikey: key,
+            Authorization: `Bearer ${key}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ attachments: [] })
+        }
+      );
+      return res.status(200).json({ ok: true, attachments: [], cleaned: 'signature_only' });
     }
 
-    if (!log.resend_received_id) {
-      return res.status(200).json({
-        ok: false,
-        attachments: log.attachments || [],
-        error: 'Kein Resend-Empfang für Nachladen (nur Metadaten vorhanden)'
-      });
+    if (!attachmentsNeedStorage(log.attachments) && real.length > 0 && real.every((a) => a.storage_path)) {
+      return res.status(200).json({ ok: true, attachments: real, skipped: 'already_stored' });
     }
 
-    const updated = await ensureAttachmentsForLog(log, { force: true });
+    let updated = log;
+    let source = null;
+
+    if (log.resend_received_id) {
+      updated = await ensureAttachmentsForLog(log, { force: true });
+      source = 'resend';
+    }
+
+    const afterResend = realAttachments(updated?.attachments);
+    const stillMissing = afterResend.length === 0 || afterResend.some((a) => !a.storage_path);
+
+    if (stillMissing) {
+      try {
+        updated = await ensureImapAttachmentsForLog(log);
+        source = source ? `${source}+imap` : 'imap';
+      } catch (imapErr) {
+        console.warn('[ensure-inbound-attachments] imap:', imapErr.message || imapErr);
+        if (!afterResend.some((a) => a.storage_path)) {
+          return res.status(200).json({
+            ok: false,
+            attachments: realAttachments(updated?.attachments || log.attachments),
+            error: imapErr.message || 'Anhang konnte weder über Resend noch IMAP nachgeladen werden'
+          });
+        }
+      }
+    }
+
+    const finalList = realAttachments(updated?.attachments || []);
     return res.status(200).json({
-      ok: true,
-      attachments: updated?.attachments || [],
-      count: Array.isArray(updated?.attachments) ? updated.attachments.length : 0
+      ok: finalList.some((a) => a.storage_path),
+      attachments: finalList,
+      count: finalList.length,
+      source
     });
   } catch (e) {
     console.error('[ensure-inbound-attachments]', e);

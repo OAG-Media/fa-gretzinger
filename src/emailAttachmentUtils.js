@@ -10,11 +10,15 @@ export function isInlineOrSignatureAttachment(att = {}) {
   const contentId = String(att.content_id || att.contentId || att.cid || '').trim();
   const size = Number(att.size) || 0;
   const isImage = contentType.startsWith('image/') || /\.(png|jpe?g|gif|bmp|webp)$/i.test(filename);
+  const baseName = filename.toLowerCase();
 
   if (disposition.includes('inline')) return true;
-  if (isImage && /^image\d{2,4}\./i.test(filename)) return true;
+  if (isImage && /^image(\d{2,4})?\.(png|jpe?g|gif|bmp|webp)$/i.test(filename)) return true;
   if (isImage && /^~wrd/i.test(filename)) return true;
-  if (isImage && contentId && size > 0 && size < 50_000) return true;
+  if (isImage && contentId) return true;
+  if (isImage && size > 0 && size < 80_000 && (baseName === 'image.png' || baseName === 'image.jpg' || baseName === 'image.jpeg' || baseName === 'untitled.png')) {
+    return true;
+  }
   return false;
 }
 
@@ -92,16 +96,15 @@ export async function resolveAttachmentBlob(mail, att) {
   if (!currentAtt?.storage_path && mail?.direction === 'inbound' && mail?.id) {
     const ensured = await ensureInboundAttachmentsOnServer(mail.id);
     const list = Array.isArray(ensured?.attachments) ? ensured.attachments : [];
+    if (mail) mail.attachments = list;
     if (list.length) {
       const match =
-        list.find((a) => a.filename && currentAtt?.filename && a.filename === currentAtt.filename) ||
+        list.find((a) => a.storage_path && a.filename && currentAtt?.filename && a.filename === currentAtt.filename) ||
         list.find((a) => a.storage_path) ||
-        list[0];
+        null;
       if (match?.storage_path) currentAtt = match;
-      // UI-State aktualisieren, falls Caller die Mail noch hält
-      if (mail && Array.isArray(mail.attachments)) {
-        mail.attachments = list;
-      }
+    } else if (ensured?.error) {
+      throw new Error(ensured.error);
     }
   }
 
